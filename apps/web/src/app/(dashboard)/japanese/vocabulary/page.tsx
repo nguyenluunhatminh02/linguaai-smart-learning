@@ -1,0 +1,474 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import { BookMarked, Plus, Search, X, BookOpen, GraduationCap, Sparkles, Layers, ChevronLeft, Check, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
+
+export interface JaVocabWord {
+  id: number;
+  word: string;
+  reading: string;
+  romaji: string;
+  pos: string;
+  en: string;
+  vi: string;
+  example: string;
+  topic: string;
+}
+
+export interface JaVocabPack {
+  id: string;
+  level: string;
+  title: string;
+  titleVi: string;
+  description: string;
+  color: string;
+  words: JaVocabWord[];
+}
+
+function cmsToJaVocabPack(lesson: Record<string, unknown>): JaVocabPack {
+  const c = (lesson.content ?? {}) as Record<string, unknown>;
+  return {
+    id: (lesson.slug as string) || (lesson.id as string),
+    level: lesson.level as string,
+    title: lesson.title as string,
+    titleVi: (lesson.titleVi ?? lesson.title_vi) as string,
+    description: (lesson.description as string) ?? '',
+    color: (c.color as string) ?? '',
+    words: (c.words as JaVocabWord[]) ?? [],
+  };
+}
+
+interface Word {
+  id: string;
+  word: string;
+  meaning: string;
+  example?: string;
+  status: 'new' | 'learning' | 'known';
+  createdAt: string;
+}
+
+// Single source of truth for status, used both when loading cards and after a review.
+// FSRS sets repetitions=1 for a first "Easy" review and only grows the interval
+// over subsequent successful reviews, so repetitions alone cannot mean "known".
+function statusFromProgress(progress?: { repetitionCount?: number; intervalDays?: number } | null): Word['status'] {
+  const repetitions = progress?.repetitionCount ?? 0;
+  const intervalDays = progress?.intervalDays ?? 0;
+  if (repetitions >= 3 && intervalDays >= 7) return 'known';
+  if (repetitions > 0) return 'learning';
+  return 'new';
+}
+
+export default function JapaneseVocabularyPage() {
+  const [activeTab, setActiveTab] = useState<'my-words' | 'packs'>('my-words');
+  const [jaVocabPacks, setJaVocabPacks] = useState<JaVocabPack[]>([]);
+  const [packsLoading, setPacksLoading] = useState(false);
+  const [words, setWords] = useState<Word[]>([]);
+  const [deckId, setDeckId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [filter, setFilter] = useState<'all' | 'new' | 'learning' | 'known'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newWord, setNewWord] = useState('');
+  const [newMeaning, setNewMeaning] = useState('');
+  const [newExample, setNewExample] = useState('');
+  const [selectedPack, setSelectedPack] = useState<JaVocabPack | null>(null);
+
+  const loadVocabDeckAndCards = async () => {
+    setLoading(true);
+    try {
+      const decksRes = await apiClient.get('/decks/my');
+      const decks = Array.isArray(decksRes.data) ? decksRes.data : [];
+      
+      const vocabDeck = decks.find(
+        (d: any) =>
+          d.language === 'japanese' ||
+          d.title === 'Từ vựng tiếng Nhật của tôi' ||
+          d.title === 'Từ vựng tiếng Nhật' ||
+          d.title === 'My Japanese Vocabulary'
+      );
+
+      if (vocabDeck) {
+        setDeckId(vocabDeck.id);
+        const cardsRes = await apiClient.get(`/decks/${vocabDeck.id}/cards`);
+        const cardsData = Array.isArray(cardsRes.data) ? cardsRes.data : [];
+        
+        const mappedWords: Word[] = cardsData.map((c: any) => ({
+          id: c.id,
+          word: c.frontText || c.frontText || c.front_text || c.front || '',
+          meaning: c.backText || c.backText || c.back_text || c.back || '',
+          example: c.exampleSentence || c.example_sentence || undefined,
+          status: statusFromProgress(c.progress),
+          createdAt: c.createdAt || c.created_at || new Date().toISOString(),
+        }));
+        setWords(mappedWords);
+      } else {
+        setWords([]);
+      }
+    } catch (err) {
+      console.error('Failed to load Japanese vocabulary deck:', err);
+      toast.error('Không thể tải danh sách từ vựng tiếng Nhật của bạn.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'my-words') {
+      loadVocabDeckAndCards();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'packs' || jaVocabPacks.length > 0) return;
+    setPacksLoading(true);
+    fetch('/api/cms/lessons?type=vocabulary&language=japanese&published=true&limit=200')
+      .then(r => r.json())
+      .then(json => {
+        const items: Record<string, unknown>[] = json.data ?? json ?? [];
+        setJaVocabPacks(items.map(cmsToJaVocabPack));
+      })
+      .catch(() => {})
+      .finally(() => setPacksLoading(false));
+  }, [activeTab, jaVocabPacks.length]);
+
+  const getOrCreateDeckId = async (): Promise<string> => {
+    if (deckId) return deckId;
+    
+    const res = await apiClient.post('/decks', {
+      title: 'Từ vựng tiếng Nhật của tôi',
+      description: 'Danh sách từ vựng tiếng Nhật cá nhân của tôi',
+      language: 'japanese',
+      isPublic: false,
+    });
+    
+    const newDeckId = res.data.id;
+    setDeckId(newDeckId);
+    return newDeckId;
+  };
+
+  const addFromPack = async (w: JaVocabWord, pack: JaVocabPack) => {
+    if (words.some(x => x.word.toLowerCase() === w.word.toLowerCase())) return;
+    try {
+      const activeDeckId = await getOrCreateDeckId();
+      
+      const newCardRes = await apiClient.post(`/decks/${activeDeckId}/cards`, {
+        frontText: w.word,
+        backText: `${w.en} / ${w.vi}`,
+        exampleSentence: w.example || undefined,
+        ipaPronunciation: w.reading || undefined,
+      });
+
+      const newCard = newCardRes.data;
+      
+      const word: Word = {
+        id: newCard.id,
+        word: newCard.front_text || newCard.front || w.word,
+        meaning: newCard.back_text || newCard.back || `${w.en} / ${w.vi}`,
+        example: newCard.example_sentence || undefined,
+        status: 'new',
+        createdAt: newCard.created_at || new Date().toISOString(),
+      };
+      
+      setWords(prev => [word, ...prev]);
+      toast.success(`Đã thêm từ "${w.word}" vào bộ sưu tập.`);
+    } catch (err) {
+      console.error('Failed to add word from pack:', err);
+      toast.error('Không thể thêm từ vựng từ gói.');
+    }
+  };
+
+  const knownCount = words.filter(w => w.status === 'known').length;
+  const learningCount = words.filter(w => w.status === 'learning').length;
+  const newCount = words.filter(w => w.status === 'new').length;
+  const filteredWords = words.filter(w => {
+    if (filter !== 'all' && w.status !== filter) return false;
+    if (searchQuery && !w.word.toLowerCase().includes(searchQuery.toLowerCase()) && !w.meaning.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const addWord = async () => {
+    if (!newWord.trim() || !newMeaning.trim()) return;
+    try {
+      const activeDeckId = await getOrCreateDeckId();
+      
+      const newCardRes = await apiClient.post(`/decks/${activeDeckId}/cards`, {
+        frontText: newWord.trim(),
+        backText: newMeaning.trim(),
+        exampleSentence: newExample.trim() || undefined,
+      });
+
+      const newCard = newCardRes.data;
+      
+      const word: Word = {
+        id: newCard.id,
+        word: newCard.front_text || newCard.front || newWord.trim(),
+        meaning: newCard.back_text || newCard.back || newMeaning.trim(),
+        example: newCard.example_sentence || undefined,
+        status: 'new',
+        createdAt: newCard.created_at || new Date().toISOString(),
+      };
+      
+      setWords(prev => [word, ...prev]);
+      setNewWord('');
+      setNewMeaning('');
+      setNewExample('');
+      setShowAddForm(false);
+      toast.success('Đã thêm từ vựng mới thành công!');
+    } catch (err) {
+      console.error('Failed to add word:', err);
+      toast.error('Không thể thêm từ vựng.');
+    }
+  };
+
+  const updateStatus = async (id: string, status: Word['status']) => {
+    try {
+      const grade = status === 'learning' ? 2 : 4; // 2 = Hard, 4 = Easy
+      await apiClient.post('/srs/review', {
+        cardId: id,
+        grade,
+        operationId: crypto.randomUUID(),
+      });
+
+      // The SRS grade only schedules a review; it cannot instantly mark a card
+      // "known". Re-read progress so the UI reflects what the server persisted.
+      let nextStatus: Word['status'] = 'new';
+      try {
+        const cardsRes = await apiClient.get(`/decks/${deckId}/cards`);
+        const cardsData = Array.isArray(cardsRes.data) ? cardsRes.data : [];
+        const updated = cardsData.find((c: any) => c.id === id);
+        if (updated) nextStatus = statusFromProgress(updated.progress);
+        setWords(prev => prev.map(w => w.id === id ? { ...w, status: nextStatus } : w));
+      } catch (refreshErr) {
+        // The review succeeded; fall back to a full reload rather than showing
+        // a status that the server will not reproduce after a page reload.
+        console.error('Failed to refresh card progress:', refreshErr);
+        await loadVocabDeckAndCards();
+      }
+
+      if (status === 'known' && nextStatus !== 'known') {
+        toast.info('Từ đã được ôn tập; trạng thái "Đã thuộc" sẽ đạt sau khi ôn tập đủ 3 lần và cách nhau ít nhất 7 ngày.');
+      } else {
+        toast.success(status === 'learning' ? 'Đã đánh dấu đang học.' : 'Đã đánh dấu đã thuộc.');
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      toast.error('Không thể cập nhật trạng thái ôn tập.');
+    }
+  };
+
+  const statusColors = { new: 'bg-blue-500', learning: 'bg-amber-500', known: 'bg-emerald-500' };
+
+  // ─── Pack detail ───
+  if (selectedPack) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" size="sm" onClick={() => setSelectedPack(null)} className="gap-1">
+          <ChevronLeft className="h-4 w-4" /> Quay lại
+        </Button>
+        <div>
+          <h2 className="text-xl font-bold">{selectedPack.title}</h2>
+          <p className="text-sm text-muted-foreground">{selectedPack.titleVi} — {selectedPack.description}</p>
+          <Badge className="mt-2" variant="secondary">{selectedPack.level}</Badge>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {selectedPack.words.map((w) => {
+            const added = words.some(x => x.word.toLowerCase() === w.word.toLowerCase());
+            return (
+              <Card key={w.id} className="overflow-hidden">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-base">{w.word}</p>
+                      <p className="text-xs text-primary/80">{w.reading}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{w.romaji}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">{w.pos}</Badge>
+                      <Button
+                        size="sm"
+                        variant={added ? 'ghost' : 'outline'}
+                        className="h-7 w-7 p-0"
+                        onClick={() => addFromPack(w, selectedPack)}
+                        disabled={added}
+                      >
+                        {added ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Plus className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm"><span className="text-muted-foreground">EN:</span> {w.en}</p>
+                    <p className="text-sm"><span className="text-muted-foreground">VI:</span> {w.vi}</p>
+                  </div>
+                  {w.topic && <Badge variant="secondary" className="text-[10px]">{w.topic}</Badge>}
+                  <p className="text-xs text-muted-foreground italic">{w.example}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10">
+          <BookMarked className="h-5 w-5 text-rose-500" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Từ vựng tiếng Nhật</h1>
+          <p className="text-sm text-muted-foreground">日本語語彙 — Quản lý từ vựng JLPT N5–N1</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2">
+        <Button variant={activeTab === 'my-words' ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab('my-words')} className="gap-1.5">
+          <BookOpen className="h-4 w-4" /> Từ của tôi <Badge variant="secondary" className="ml-1 text-[10px]">{words.length}</Badge>
+        </Button>
+        <Button variant={activeTab === 'packs' ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab('packs')} className="gap-1.5">
+          <Layers className="h-4 w-4" /> Gói từ vựng <Badge variant="secondary" className="ml-1 text-[10px]">{jaVocabPacks.length}</Badge>
+        </Button>
+      </div>
+
+      {/* ─── My Words Tab ─── */}
+      {activeTab === 'my-words' && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: 'Tổng', value: words.length, icon: BookMarked, color: 'text-primary' },
+              { label: 'Mới', value: newCount, icon: Sparkles, color: 'text-blue-500' },
+              { label: 'Đang học', value: learningCount, icon: GraduationCap, color: 'text-amber-500' },
+              { label: 'Đã thuộc', value: knownCount, icon: Check, color: 'text-emerald-500' },
+            ].map((s) => (
+              <Card key={s.label}>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <s.icon className={cn('h-5 w-5', s.color)} />
+                  <div>
+                    <p className="text-2xl font-bold">{s.value}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {words.length > 0 && (
+            <Progress value={words.length > 0 ? (knownCount / words.length) * 100 : 0} variant="gradient" />
+          )}
+
+          {showAddForm ? (
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <Input placeholder="Từ tiếng Nhật (例: こんにちは)" value={newWord} onChange={(e) => setNewWord(e.target.value)} />
+                <Input placeholder="Nghĩa (hello / xin chào)" value={newMeaning} onChange={(e) => setNewMeaning(e.target.value)} />
+                <Input placeholder="Ví dụ (tùy chọn)" value={newExample} onChange={(e) => setNewExample(e.target.value)} />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={addWord} disabled={!newWord.trim() || !newMeaning.trim()}>Thêm</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>Hủy</Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Button variant="outline" className="gap-1.5" onClick={() => setShowAddForm(true)}>
+              <Plus className="h-4 w-4" /> Thêm từ mới
+            </Button>
+          )}
+
+          {words.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-50">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input className="pl-9" placeholder="Tìm từ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              </div>
+              {(['all', 'new', 'learning', 'known'] as const).map((f) => (
+                <Button key={f} variant={filter === f ? 'default' : 'outline'} size="sm" onClick={() => setFilter(f)}>
+                  {f === 'all' ? 'Tất cả' : f === 'new' ? 'Mới' : f === 'learning' ? 'Đang học' : 'Đã thuộc'}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12 animate-fade-in">
+              <Loader2 className="h-8 w-8 animate-spin text-rose-500" />
+            </div>
+          ) : words.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+                <BookMarked className="h-10 w-10 text-muted-foreground/50" />
+                <p className="font-medium">Chưa có từ nào</p>
+                <p className="text-sm text-muted-foreground">Thêm từ hoặc chọn từ gói từ vựng JLPT</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {filteredWords.map((w) => (
+                <Card key={w.id}>
+                  <CardContent className="flex items-center gap-3 p-3">
+                    <div className={cn('h-2 w-2 rounded-full', statusColors[w.status])} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{w.word}</p>
+                      <p className="text-xs text-muted-foreground truncate">{w.meaning}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      {w.status !== 'learning' && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => updateStatus(w.id, 'learning')}>Đang học</Button>
+                      )}
+                      {w.status !== 'known' && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => updateStatus(w.id, 'known')}>Đã thuộc</Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── Packs Tab ─── */}
+      {activeTab === 'packs' && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {packsLoading && (
+            <div className="col-span-full flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {!packsLoading && jaVocabPacks.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center py-12 text-center gap-3">
+              <Layers className="h-10 w-10 text-muted-foreground/40" />
+              <p className="text-muted-foreground">Chưa có gói từ vựng nào</p>
+            </div>
+          )}
+          {!packsLoading && jaVocabPacks.map((pack) => (
+            <Card key={pack.id} className="overflow-hidden cursor-pointer transition-all hover:shadow-md hover:border-primary/30" onClick={() => setSelectedPack(pack)}>
+              <div className={cn('h-2 w-full bg-linear-to-r', pack.color)} />
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="secondary">{pack.level}</Badge>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{pack.words.length}</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{pack.title}</p>
+                  <p className="text-xs text-muted-foreground">{pack.titleVi}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">{pack.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

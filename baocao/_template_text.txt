@@ -1,0 +1,2618 @@
+ 
+TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN 
+KHOA HỆ THỐNG THÔNG TIN 
+ 
+ 
+PHÁT TRIỂN ỨNG DỤNG WEB 
+ĐỀ TÀI: 
+XÂY DỰNG WEBSITE BÁN MỸ PHẨM 
+ 
+GVHD: Mai Xuân Hùng 
+Nhóm sinh viên thực hiện: 
+ 
+
+2 
+ 
+NHẬN XÉT CỦA GIÁO VIÊN HƯỚNG DẪN 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ ................................................................................................................................... 
+ 
+ 
+……., ngày……...tháng……năm 2023 
+ 
+Người nhận xét  
+ 
+(Ký tên và ghi rõ họ tên) 
+ 
+ 
+
+3 
+ 
+MỤC LỤC 
+ 
+MỤC LỤC 
+3 
+DANH MỤC BẢNG .............................................................................................. 8 
+DANH MỤC HÌNH ............................................................................................. 10 
+LỜI CẢM ƠN 15 
+ABSTRACT 16 
+ĐỀ CƯƠNG CHI TIẾT ...................................................................................... 18 
+CHƯƠNG 1. TỔNG QUAN ĐỀ TÀI .............................................................. 22 
+1.1. 
+Nhu cầu thực tế của đề tài ...................................................................... 22 
+1.2. 
+Khảo sát hiện trạng ................................................................................. 23 
+1.3. 
+Phát biểu bài toán ................................................................................... 24 
+CHƯƠNG 2. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG ............................. 25 
+2.1. 
+Xác định và mô hình hóa yêu cầu phần mềm ........................................ 25 
+2.1.1. Danh sách Actor ................................................................................ 25 
+2.1.2. Danh sách Use-case .......................................................................... 25 
+2.2. 
+Sơ đồ Use-cases ..................................................................................... 27 
+2.2.1. Sơ đồ Use-case tổng quát .................................................................. 27 
+2.2.2. Sơ đồ Use-case chi tiết của Quản trị viên ......................................... 28 
+2.2.3. Sơ đồ Use-case chi tiết của Khách hàng ........................................... 29 
+2.3. 
+Sơ đồ Activity ......................................................................................... 30 
+
+4 
+ 
+2.3.1. Đăng nhập ......................................................................................... 31 
+2.3.2. Đăng xuất .......................................................................................... 32 
+2.3.3. Đăng ký ............................................................................................. 32 
+2.3.4. Quản lý khách hàng .......................................................................... 33 
+2.3.5. Quản lý sản phẩm ............................................................................. 36 
+2.3.6. Quản lý loại sản phẩm ...................................................................... 41 
+2.3.7. Quản lý đơn hàng .............................................................................. 47 
+2.3.8. Xem thống kê .................................................................................... 50 
+2.3.9. Quản lý giỏ hàng ............................................................................... 51 
+2.3.10. Theo dõi đơn hàng .......................................................................... 55 
+2.3.11. Chỉnh sửa thông tin cá nhân ............................................................ 56 
+2.3.12. Quản lý địa chỉ ................................................................................ 57 
+2.3.13. Quản lý sản phẩm yêu thích ............................................................ 60 
+2.3.14. Đánh giá .......................................................................................... 62 
+2.4. 
+Sơ đồ Sequence ...................................................................................... 63 
+2.4.1. Đăng nhập ......................................................................................... 63 
+2.4.2. Đăng xuất .......................................................................................... 65 
+2.4.3. Đăng ký ............................................................................................. 67 
+2.4.4. Quản lý khách hàng .......................................................................... 67 
+2.4.5. Quản lý sản phẩm ............................................................................. 70 
+2.4.6. Quản lý loại sản phẩm ...................................................................... 74 
+
+5 
+ 
+2.4.7. Quản lý đơn hàng .............................................................................. 77 
+2.4.8. Xem thống kê .................................................................................... 81 
+2.4.9. Quản lý giỏ hàng ............................................................................... 82 
+2.4.10. Quản lý địa chỉ ................................................................................ 86 
+2.4.11. Chỉnh sửa thông tin cá nhân ............................................................ 90 
+2.4.12. Theo dõi đơn hàng .......................................................................... 91 
+2.4.13. Quản lý sản phẩm yêu thích ............................................................ 92 
+2.4.14. Đánh giá .......................................................................................... 95 
+2.5. 
+Thiết kế cơ sở dữ liệu ............................................................................. 96 
+2.5.1. Bảng TAIKHOAN ............................................................................ 96 
+2.5.2. Bảng PASSWORD_RESET_TOKENS ............................................ 97 
+2.5.3. Bảng CARTS .................................................................................... 98 
+2.5.4. Bảng ORDERS ................................................................................. 98 
+2.5.5. Bảng ORDER_DETAILS ............................................................... 100 
+2.5.6. Bảng ADDRESS ............................................................................. 101 
+2.5.7. Bảng PRODUCTS .......................................................................... 101 
+2.5.8. Bảng CATEGORIES ....................................................................... 103 
+2.5.9. Bảng FAVORITES .......................................................................... 103 
+2.5.10. Bảng BRANDS ............................................................................. 104 
+2.5.11. Bảng REVIEWS ........................................................................... 104 
+CHƯƠNG 3. MÔ TẢ GIAO DIỆN ............................................................... 106 
+
+6 
+ 
+3.1. 
+Giao diện người dùng ........................................................................... 106 
+3.1.1. Trang chủ ........................................................................................ 106 
+3.1.2. Trang đăng nhập ............................................................................. 109 
+3.1.3. Đăng nhập với google ..................................................................... 110 
+3.1.4. Quên mật khẩu ................................................................................ 111 
+3.1.5. Trang đăng ký ................................................................................. 113 
+3.1.6. Trang sản phẩm ............................................................................... 114 
+3.1.7. Thanh tìm kiếm sản phẩm ............................................................... 115 
+3.1.8. Trang chi tiết sản phẩm ................................................................... 116 
+3.1.9. Đánh giá sản phẩm .......................................................................... 118 
+3.1.10. Trang sản phẩm yêu thích ............................................................. 119 
+3.1.11. Giỏ hàng ........................................................................................ 120 
+3.1.12. Trang thanh toán ........................................................................... 122 
+3.1.13. Thông tin khách hàng ................................................................... 124 
+3.2. 
+Giao diện quản trị viên ......................................................................... 134 
+3.2.1. Quản lý Loại sản phẩm ................................................................... 134 
+3.2.2. Quản lý Sản phẩm ........................................................................... 138 
+3.2.3. Quản lý Đơn hàng ........................................................................... 142 
+3.2.4. Quản lý tài khoản ............................................................................ 144 
+3.2.5. Thống kê doanh thu ........................................................................ 147 
+CHƯƠNG 4. KẾT QUẢ DỰ ÁN ................................................................... 148 
+
+7 
+ 
+4.1. 
+Giới thiệu sản phẩm ............................................................................. 148 
+4.2. 
+Môi trường triển khai ........................................................................... 148 
+4.3. 
+Kết luận kết quả ................................................................................... 149 
+CHƯƠNG 5. KẾT LUẬN .............................................................................. 150 
+5.1. 
+Bảng phân chia công việc .................................................................... 150 
+5.2. 
+Ưu điểm và nhược điểm ....................................................................... 151 
+5.3. 
+Hướng phát triển .................................................................................. 152 
+5.3.1. Về hệ thống ..................................................................................... 152 
+5.3.2. Về con người ................................................................................... 152 
+ 
+ 
+ 
+
+8 
+ 
+DANH MỤC BẢNG 
+Bảng 2.1.1 Danh sách Actor .................................................................................. 25 
+Bảng 2.1.2 Danh sách Use-case ............................................................................ 25 
+Bảng 2.5.1 Bảng TAIKHOAN .............................................................................. 96 
+Bảng 2.5.2 Bảng PASSWORD_RESET_TOKENS .............................................. 97 
+Bảng 2.5.3 Bảng CARTS ...................................................................................... 98 
+Bảng 2.5.4 Bảng ORDERS ................................................................................... 98 
+Bảng 2.5.5 Bảng ORDER_DETAILS ................................................................. 100 
+Bảng 2.5.6 Bảng ADDRESS ............................................................................... 101 
+Bảng 2.5.7 Bảng PRODUCTS ............................................................................ 101 
+Bảng 2.5.8 Bảng CATEGORIES ........................................................................ 103 
+Bảng 2.5.9 Bảng FAVORITES ............................................................................ 103 
+Bảng 2.5.10 Bảng BRANDS ............................................................................... 104 
+Bảng 2.5.11 Bảng REVIEWS ............................................................................. 104 
+Bảng 3.1.1 Mô tả màn hình giao diện trang chủ thông tin khách hàng ............... 124 
+Bảng 3.1.2 Mô tả màn hình giao diện chỉnh sửa thông tin khách hàng .............. 126 
+Bảng 3.1.3 Mô tả màn hình giao diện sổ địa chỉ ................................................. 128 
+Bảng 3.1.4 Mô tả màn hình giao diện thêm địa chỉ ............................................ 130 
+Bảng 3.2.1 Mô tả màn hình giao diện quản lý loại sản phẩm ............................. 134 
+Bảng 3.2.2 Mô tả màn hình giao diện chỉnh sửa loại sản phẩm .......................... 135 
+Bảng 3.2.3 Mô tả màn hình giao diện thêm mới loại sản phẩm .......................... 136 
+
+9 
+ 
+Bảng 3.2.4 Mô tả màn hình giao diện quản lý sản phẩm .................................... 138 
+Bảng 3.2.5 Mô tả màn hình giao diện chỉnh sửa sản phẩm ................................. 140 
+Bảng 3.2.6 Mô tả màn hình giao diện quản lý đơn hàng .................................... 142 
+Bảng 3.2.7 Mô tả màn hình giao diện quản lý tài khoản ..................................... 144 
+Bảng 3.2.8 Mô tả màn hình giao diện thống kê doanh thu ................................. 147 
+Bảng 5.1.1 Bảng đánh giá công việc ................................................................... 150 
+ 
+ 
+
+10 
+ 
+DANH MỤC HÌNH 
+Hình 2.2.1 Sơ đồ Use-case tổng quát .................................................................... 28 
+Hình 2.2.2 Sơ đồ Use-case chi tiết của Quản trị viên ........................................... 29 
+Hình 2.2.3 Sơ đồ Use-case chi tiết của Khách hàng ............................................. 30 
+Hình 2.3.1 Sơ đồ hoạt động của Use-case Đăng nhập .......................................... 31 
+Hình 2.3.2 Sơ đồ hoạt động của Use-case Đăng xuất ........................................... 32 
+Hình 2.3.3 Sơ đồ hoạt động của Use-case Đăng ký .............................................. 33 
+Hình 2.3.4 Sơ đồ hoạt động của Use-case Tra cứu thông tin khách hàng ............. 34 
+Hình 2.3.5 8 Sơ đồ hoạt động của Use-case Xuất file khách hàng ....................... 35 
+Hình 2.3.6 Sơ đồ hoạt động của Use-case Sắp xếp khách hàng ............................ 36 
+Hình 2.3.7 Sơ đồ hoạt động của Use-case Thêm sản phẩm .................................. 37 
+Hình 2.3.8 Sơ đồ hoạt động của Use-case Cập nhật sản phẩm ............................. 38 
+Hình 2.3.9 Sơ đồ hoạt động của Use-case Sắp xếp sản phẩm ............................... 39 
+Hình 2.3.10 Sơ đồ hoạt động của Use-case Tra cứu sản phẩm ............................. 40 
+Hình 2.3.11 Sơ đồ hoạt động của Use-case Tra cứu sản phẩm ............................. 41 
+Hình 2.3.12 Sơ đồ hoạt động của Use-case Thêm loại sản phẩm ......................... 42 
+Hình 2.3.13 Sơ đồ hoạt động của Use-case Cập nhật loại sản phẩm .................... 43 
+Hình 2.3.14 Sơ đồ hoạt động của Use-case Sắp xếp loại sản phẩm ...................... 44 
+Hình 2.3.15 Sơ đồ hoạt động của Use-case Tra cứu loại sản phẩm ...................... 45 
+Hình 2.3.16 Sơ đồ hoạt động của Use-case Xuất file loại sản phẩm .................... 46 
+Hình 2.3.17 Sơ đồ hoạt động của Use-case Tra cứu đơn hàng ............................. 47 
+
+11 
+ 
+Hình 2.3.18 Sơ đồ hoạt động của Use-case Cập nhật đơn hàng ........................... 48 
+Hình 2.3.19 Sơ đồ hoạt động của Use-case Xuất file đơn hàng ............................ 49 
+Hình 2.3.20 Sơ đồ hoạt động của Use-case Sắp xếp đơn hàng ............................. 50 
+Hình 2.3.21 Sơ đồ hoạt động của Use-case Xem thống kê ................................... 51 
+Hình 2.3.22 Sơ đồ hoạt động của Use-case Chọn sản phẩm ................................. 52 
+Hình 2.3.23 Sơ đồ hoạt động của Use-case Tra cứu sản phẩm ............................. 53 
+Hình 2.3.24 Sơ đồ hoạt động của Use-case Xóa sản phẩm khỏi giỏ hàng ............ 54 
+Hình 2.3.25 Sơ đồ hoạt động của Use-case Đặt hàng ........................................... 55 
+Hình 2.3.26 Sơ đồ hoạt động của Use-case Theo dõi đơn hàng ........................... 56 
+Hình 2.3.27 Sơ đồ hoạt động của Use-case Chỉnh sửa thông tin cá nhân ............. 57 
+Hình 2.3.28 Sơ đồ hoạt động của Use-case Thêm địa chỉ ..................................... 58 
+Hình 2.3.29 Sơ đồ hoạt động của Use-case Cập nhật địa chỉ ................................ 59 
+Hình 2.3.30 Sơ đồ hoạt động của Use-case Xóa địa chỉ ....................................... 60 
+Hình 2.3.31 Sơ đồ hoạt động của Use-case Thêm sản phẩm yêu thích ................ 61 
+Hình 2.3.32 Sơ đồ hoạt động của Use-case Xóa sản phẩm yêu thích ................... 62 
+Hình 2.3.33 Sơ đồ hoạt động của Use-case Đánh giá ........................................... 63 
+Hình 2.4.1 Sơ đồ tuần tự của Use-case Đăng nhập (Actor Quản trị viên) ............ 64 
+Hình 2.4.2 Sơ đồ tuần tự của Use-case Đăng nhập (Actor Khách hàng) .............. 65 
+Hình 2.4.3 Sơ đồ tuần tự của Use-case Đăng xuất (Actor Quản trị viên) ............. 66 
+Hình 2.4.4 Sơ đồ tuần tự của Use-case Đăng xuất (Actor Khách hàng) ............... 66 
+Hình 2.4.5 Sơ đồ tuần tự của Use-case Đăng ký ................................................... 67 
+
+12 
+ 
+Hình 2.4.6 Sơ đồ tuần tự của Use-case Quản lý khách hàng ................................ 68 
+Hình 2.4.7 Sơ đồ tuần tự của Use-case Tra cứu thông tin khách hàng ................. 69 
+Hình 2.4.8 Sơ đồ tuần tự của Use-case Xuất file khách hàng ............................... 70 
+Hình 2.4.9 Sơ đồ tuần tự của Use-case Quản lý sản phẩm ................................... 71 
+Hình 2.4.10 Sơ đồ tuần tự của Use-case Thêm sản phẩm ..................................... 72 
+Hình 2.4.11 Sơ đồ tuần tự của Use-case Cập nhật sản phẩm ................................ 73 
+Hình 2.4.12 Sơ đồ tuần tự của Use-case Tra cứu sản phẩm .................................. 74 
+Hình 2.4.13 Sơ đồ tuần tự của Use-case Xuất file danh sách sản phẩm ............... 74 
+Hình 2.4.14 Sơ đồ tuần tự của Use-case Quản lý loại sản phẩm .......................... 75 
+Hình 2.4.15 Sơ đồ tuần tự của Use-case Thêm loại sản phẩm .............................. 76 
+Hình 2.4.16 Sơ đồ tuần tự của Use-case Cập nhật loại sản phẩm ......................... 77 
+Hình 2.4.17 Sơ đồ tuần tự của Use-case Quản lý đơn hàng .................................. 78 
+Hình 2.4.18 Sơ đồ tuần tự của Use-case Tra cứu đơn hàng .................................. 79 
+Hình 2.4.19 Sơ đồ tuần tự của Use-case Cập nhật đơn hàng ................................ 80 
+Hình 2.4.20 Sơ đồ tuần tự của Use-case Xuất đơn hàng ....................................... 81 
+Hình 2.4.21 Sơ đồ tuần tự của Use-case Xem thống kê ........................................ 82 
+Hình 2.4.22 Sơ đồ tuần tự của Use-case Quản lý giỏ hàng ................................... 83 
+Hình 2.4.23 Sơ đồ tuần tự của Use-case Chọn sản phẩm ..................................... 84 
+Hình 2.4.24 Sơ đồ tuần tự của Use-case Tra cứu sản phẩm .................................. 85 
+Hình 2.4.25 Sơ đồ tuần tự của Use-case Đặt hàng ................................................ 86 
+Hình 2.4.26 Sơ đồ tuần tự của Use-case Quản lý địa chỉ ...................................... 87 
+
+13 
+ 
+Hình 2.4.27 Sơ đồ tuần tự của Use-case Thêm địa chỉ ......................................... 88 
+Hình 2.4.28 Sơ đồ tuần tự của Use-case Xóa địa chỉ ............................................ 89 
+Hình 2.4.29 Sơ đồ tuần tự của Use-case Cập nhật địa chỉ .................................... 90 
+Hình 2.4.30 Sơ đồ tuần tự của Use-case Chỉnh sửa thông tin cá nhân ................. 91 
+Hình 2.4.31 Sơ đồ tuần tự của Use-case Theo dõi đơn hàng ................................ 92 
+Hình 2.4.32 Sơ đồ tuần tự của Use-case Quản lý sản phẩm yêu thích .................. 93 
+Hình 2.4.33 Sơ đồ tuần tự của Use-case Thêm sản phẩm yêu thích ..................... 94 
+Hình 2.4.34 Sơ đồ tuần tự của Use-case Xóa sản phẩm yêu thích ........................ 95 
+Hình 2.4.35 Sơ đồ tuần tự của Use-case Đánh giá ................................................ 96 
+Hình 3.1.1 Màn hình giao diện trang chủ(1) ....................................................... 106 
+Hình 3.1.2 Màn hình giao diện trang chủ(2) ....................................................... 108 
+Hình 3.1.3 Màn hình giao diện đăng nhập .......................................................... 109 
+Hình 3.1.4 Màn hình giao diện đăng nhập với google ........................................ 110 
+Hình 3.1.5 Màn hình giao diện quên mật khẩu ................................................... 111 
+Hình 3.1.6 Màn hình giao diện quên mật khẩu – gửi mã pin .............................. 112 
+Hình 3.1.7 Màn hình giao diện đăng ký .............................................................. 113 
+Hình 3.1.8 Màn hình giao diện trang sản phẩm .................................................. 114 
+Hình 3.1.9 Màn hình giao diện thanh tìm kiếm sản phẩm .................................. 115 
+Hình 3.1.10 Màn hình giao diện trang chi tiết sản phẩm .................................... 116 
+Hình 3.1.11 Màn hình giao diện đánh giá sản phẩm ........................................... 118 
+Hình 3.1.12 Màn hình giao diện trang sản phẩm yêu thích ................................ 119 
+
+14 
+ 
+Hình 3.1.13 Màn hình giao diện giỏ hàng ........................................................... 120 
+Hình 3.1.14 Màn hình giao diện trang thanh toán ............................................... 122 
+Hình 3.1.15 Màn hình giao diện trang chủ thông tin khách hàng ....................... 124 
+Hình 3.1.16 Màn hình giao diện chỉnh sửa thông tin khách hàng ....................... 126 
+Hình 3.1.17 Màn hình giao diện sổ địa chỉ ......................................................... 128 
+Hình 3.1.18 Màn hình giao diện thêm địa chỉ ..................................................... 130 
+Hình 3.2.1 Màn hình giao diện quản lý loại sản phẩm ....................................... 134 
+Hình 3.2.2 Màn hình giao diện chỉnh sửa loại sản phẩm .................................... 135 
+Hình 3.2.3 Màn hình giao diện thêm mới loại sản phẩm .................................... 136 
+Hình 3.2.4 Màn hình giao diện quản lý sản phẩm .............................................. 138 
+Hình 3.2.5 Màn hình giao diện chỉnh sửa sản phẩm ........................................... 140 
+Hình 3.2.6 Màn hình giao diện quản lý đơn hàng ............................................... 142 
+Hình 3.2.7 Màn hình giao diện quản lý tài khoản ............................................... 144 
+Hình 3.2.8 Màn hình giao diện thống kê doanh thu ............................................ 147 
+ 
+
+15 
+ 
+LỜI CẢM ƠN 
+Trên thực tế không có sự thành công nào mà không gắn liền với những sự hỗ trợ, 
+giúp đỡ dù ít hay nhiều, dù trực tiếp hay gián tiếp của người khác. Trong suốt học kỳ này 
+khi bắt đầu làm đồ án môn Hoạch định nguồn lực doanh nghiệp, nhóm em đã nhận được 
+rất nhiều sự quan tâm, giúp đỡ của quý thầy cô, các anh chị khóa trên và bạn bè trong và 
+ngoài lớp. 
+Với lòng biết ơn sâu sắc nhất, em xin chân thành cảm ơn thầy Mai Xuân Hùng đã 
+tận tâm hướng dẫn chúng em qua từng buổi học trên lớp, giải đáp kịp thời các thắc mắc 
+của chúng em. Nếu không có những lời hướng dẫn của thầy thì em nghĩ bài báo cáo của 
+nhóm rất khó để hoàn thành được. 
+Phần mềm được thực hiện trong vòng hai tháng do vậy không tránh khỏi những 
+thiếu sót là điều chắc chắn, nhóm em rất mong nhận được những ý kiến đóng góp quý 
+báu của thầy để cho ứng dụng cũng như kiến thức của nhóm em được hoàn thiện. 
+Sau cùng, kính chúc thầy thật dồi dào sức khỏe, niềm tin để tiếp tục thực hiện sứ 
+mệnh cao đẹp của mình là truyền đạt kiến thức cho thế hệ mai sau.   
+
+16 
+ 
+ABSTRACT 
+The cosmetics industry is increasingly diverse and expanding, with thousands of 
+different products and a complex supply chain. The decision to build a cosmetics e-
+commerce website stems from the recognition of the industry's rapid growth and the 
+increasing demand for online shopping experiences. By creating an e-commerce 
+platform, our team aims to address the evolving consumer behavior and provide a 
+seamless, user-friendly interface for customers to explore and purchase a wide range of 
+cosmetic products. The report delves into the objectives, scope, and target audience of 
+the project, emphasizing the development of a fully functional e-commerce platform for 
+cosmetics and beauty products. The report outlines the development of an e-commerce 
+website for cosmetics, covering project overview, software analysis and design, interface 
+description, project management, outcomes, and conclusions.  
+The main features of a cosmetics store management website can be divided into two 
+categories: customer-facing features and back-end features.  
+Customer-facing features are designed to provide a convenient and enjoyable shopping 
+experience for customers. These features include: 
+Shopping: Customers can browse and purchase products from the website. 
+Online payment: Customers can pay for their purchases using a variety of methods, such 
+as credit cards, debit cards, and PayPal. 
+Product reviews: Customers can leave reviews of products they have purchased. 
+Order tracking: Customers can track the status of their orders. 
+Back-end features are designed to help store owners manage their business. These 
+features include: 
+
+17 
+ 
+Product management: Store owners can add, edit, and delete products from the website. 
+They can also manage product information, such as prices, descriptions, and images. 
+Category management: Store owners can create and manage categories for products. 
+This helps customers find the products they are looking for. 
+Customer management: Store owners can add, edit, and delete customers from the 
+website. They can also manage customer information, such as contact information and 
+purchase history. 
+Order management: Store owners can create, view, and edit orders. They can also track 
+the status of orders and manage returns. 
+Reporting: Store owners can generate reports on sales, inventory, and other aspects of 
+their business. This information can be used to make informed decisions about their 
+business. 
+Overall, the report provides a detailed account of the project's objectives, methodologies, 
+and outcomes, showcasing the team's dedication and expertise in building the cosmetics 
+business website. 
+
+18 
+ 
+ĐỀ CƯƠNG CHI TIẾT 
+TÊN ĐỀ TÀI: XÂY DỰNG WEBSITE BÁN MỸ PHẨM 
+TÊN ĐỀ TÀI (TIẾNG ANH): Developing a Cosmetics E-commerce Website 
+Cán bộ hướng dẫn: ThS. Mai Xuân Hùng 
+Thời gian thực hiện: Từ ngày 1/10/2023 đến ngày 22/12/2023 
+Sinh viên thực hiện: 
+- Trần Ngọc Tố Như (MSSV: 21520385) – Trưởng nhóm 
+- Trần Thanh Huy (MSSV: 21522170) – Thành viên 
+- Lê Thùy Dương (MSSV: 21520203) – Thành viên 
+- Mai Trần Khương Duy (MSSV: 21521998) – Thành viên 
+Short Description:  
+The cosmetics industry is increasingly diverse and expanding, with thousands of 
+different products and a complex supply chain. Cosmetics products generate a large 
+amount of data that needs to be managed and monitored. The decision to build a 
+cosmetics e-commerce website stems from the recognition of the industry's rapid 
+growth and the increasing demand for online shopping experiences. As consumers 
+increasingly turn to online platforms for their cosmetic purchases, the need to establish 
+a strong digital presence becomes paramount. By creating an e-commerce platform, 
+our team aims to address the evolving consumer behavior and provide a seamless, user-
+friendly interface for customers to explore and purchase a wide range of cosmetic 
+products. The report delves into the objectives, scope, and target audience of the 
+project, emphasizing the development of a fully functional e-commerce platform for 
+
+19 
+ 
+cosmetics and beauty products. The report outlines the development of an e-commerce 
+website for cosmetics, covering project overview, software analysis and design, 
+interface description, project management, outcomes, and conclusions. Overall, the 
+report provides a detailed account of the project's objectives, methodologies, and 
+outcomes, showcasing the team's dedication and expertise in building the cosmetics 
+business website. 
+ 
+Technologies/Models/Tools/Languages: 
+Công nghệ sử dụng: PHP Laravel Framework, ReactJS Framework 
+Cloud: Cloudinary 
+Công cụ thực hiện: Visual Studio Code 
+Quản lý mã nguồn: Github 
+ 
+Tóm tắt nội dung đề tài 
+Lý do chọn đề tài:  
+          Xây dựng một trang web kinh doanh mỹ phẩm có nhiều lợi ích hấp dẫn. 
+Đầu tiên, ngành công nghiệp mỹ phẩm đang phát triển mạnh mẽ và mang lại tiềm năng 
+kinh doanh lớn. Trang web kinh doanh mỹ phẩm cũng hưởng lợi từ sự tăng trưởng 
+mạnh mẽ của thương mại điện tử, giúp bạn tiếp cận khách hàng tiềm năng trên toàn 
+quốc và toàn cầu. Bên cạnh đó, xây dựng một trang web chuyên nghiệp và hấp dẫn 
+giúp bạn xây dựng và tăng cường thương hiệu của mình, cung cấp thông tin về sản 
+phẩm và tạo trải nghiệm mua hàng tốt cho khách hàng. Trang web cũng mang lại khả 
+năng tương tác và tùy chỉnh, cho phép bạn tương tác trực tiếp với khách hàng và tùy 
+chỉnh trang web để phù hợp với phong cách của bạn. Việc xây dựng một trang web 
+kinh doanh mỹ phẩm cũng giúp bạn tiết kiệm chi phí và quản lý dễ dàng, so với việc 
+
+20 
+ 
+mở cửa hàng vật lý. Cuối cùng, việc chọn đề tài xây dựng trang web kinh doanh mỹ 
+phẩm nên dựa trên sự quan tâm, kiến thức và kỹ năng cá nhân của chúng ta. 
+Mục tiêu: 
+Phạm vi: 
+Phạm vi nguồn dữ liệu: ………..  
+Phạm vi nghiên cứu: ……………  
+Phạm vi thời gian: ……………. …………….. 
+Đối tượng sử dụng: 
+Phương pháp thực hiện: 
+Phương pháp làm việc: …………. 
+Phương pháp nghiên cứu: …………… 
+Kết quả mong đợi: 
+
+21 
+ 
+Kế hoạch làm việc: 
+ Thời gian thực hiện từ ngày …………. đến ngày ………………… 
+ Nhóm chia thành ……….. giai đoạn cụ thể: (phần sau là ví dụ tham khảo) 
+Giai đoạn 1: Xây dựng máy chủ. 
+Giai đoạn này gồm 2 sprint: 
+Thời gian: 19/09/2022 – 16/10/2022 
+Sprint 1: Phân tích nghiệp vụ và xây dựng database dựa trên nghiệp vụ đó 
+Sprint 2: Tìm hiểu và xây dựng server dựa trên kiến trúc và datase đã định hình, 
+dựa trên requirement để hình thành nên khung xương của dự án 
+Sprint 
+Thời 
+gian 
+Công việc 
+Sprint 
+1 
+  
+  
+Sprint 
+2 
+  
+  
+ 
+
+22 
+ 
+CHƯƠNG 1. 
+TỔNG QUAN ĐỀ TÀI 
+1.1. Nhu cầu thực tế của đề tài  
+Trong bối cảnh cuộc sống hiện đại, nhu cầu sử dụng mỹ phẩm không chỉ là vấn đề 
+của phái nữ mà còn mở rộng đến đàn ông. Theo thống kê đến năm 2022, 27% người 
+trang điểm hàng ngày và 64% người chăm sóc da hàng ngày, bao gồm cả nam và nữ. 
+Điều này chứng minh sự gia tăng đáng kể trong việc chú ý và quan tâm đến việc duy trì 
+và nâng cao chất lượng da. Hơn thế nữa, nhu cầu chăm sóc làm đẹp không chỉ tập trung 
+vào việc trang điểm mặt mà còn mở rộng ra các sản phẩm chăm sóc da toàn thân. Điều 
+này làm tăng sự đa dạng của thị trường mỹ phẩm, từ kem chống nắng, kem dưỡng da, 
+mặt nạ, đến các sản phẩm chăm sóc toàn thân. Xu hướng chăm sóc da không chỉ là nhu 
+cầu về vẻ ngoại hình mà còn là yếu tố quan trọng của sức khỏe và tự tin. 
+Xét về mặt yêu cầu của khách hàng đối với các sản phẩm trên, chất lượng sản phẩm, 
+tính an toàn và thành phần tự nhiên là những yếu tố hàng đầu khi lựa chọn mỹ phẩm. 
+Nhận thức về ảnh hưởng của mỹ phẩm đến da và sức khỏe đang thúc đẩy nhu cầu về các 
+sản phẩm có nguồn gốc tự nhiên và không gây hại cho da. Đây là những điểm mạnh mà 
+cửa hàng Haru có thể khai thác để tạo điểm khác biệt trên thị trường. 
+Cùng với sự phát triển của công nghệ thông tin, các cửa hàng trên mọi lĩnh vực đều 
+phải thay đổi để thích nghi và phát triển. Và sự thay đổi mạnh mẽ nhất là dựa vào sự lớn 
+mạnh của internet. Ngày nay muốn phát triển và tiếp cận khách hàng, cách tốt nhất và 
+đơn giản nhất đó chính là tạo ra một trang web của mình, từ đó quảng bá và buôn bán 
+các sản phẩm của mình trên chính website đó. Đồng thời các website hiện nay hầu như 
+đều cung cấp các tính năng hỗ trợ quản lý dành cho người bán. Chính vì thế một trang 
+web riêng cho cửa hàng của bản thân là không thể thiếu. Và Haru cũng không ngoại lệ, 
+cũng đang tiến hành xây dựng một trang web để phục vụ cho việc kinh doanh của cửa 
+hàng. 
+
+23 
+ 
+ 
+1.2. Khảo sát hiện trạng 
+Trước khi bắt tay vào việc xây dựng trang web bán mỹ phẩm, nhóm đã tiến hành 
+một cuộc khảo sát cặn kẽ về thị trường mỹ phẩm và các đối thủ cạnh tranh. Các trang 
+thương mại điện tử và website bán lẻ đang chiếm lĩnh mảng này, với đa dạng sản phẩm 
+và dịch vụ. Việc tìm hiểu về giao diện, chức năng và đánh giá của người dùng trên các 
+trang web nổi tiếng sẽ giúp Haru xác định được những yếu tố quan trọng để tối ưu hóa 
+trang web của mình. Qua quá trình tìm hiểu, nhóm đã tổng kết ra được một vài lỗi thường 
+gặp ở các trang web để rút kinh nghiệm cho bản thân mình như sau:  
+• 
+Giao diện nhìn không thu hút khách hàng. 
+• 
+Không cung cấp nhiều sản phẩm từ các thương hiệu khác nhau. 
+• 
+Website còn đơn giản, chưa có nhiều chức năng đặc sắc. 
+• 
+Màu sắc giao diện khó nhìn, gây rối mắt. 
+• 
+Trang web đều để thông tin là Tiếng Anh nên có 1 số người không thể nào 
+hiểu được về sản phẩm. 
+Song song với đó cũng tìm ra và ghi nhận để học hỏi các ưu điểm của chúng như:  
+• 
+Trang web đơn giản rất dễ nhìn, có đánh giá lượt yêu thích đối với từng 
+sản phẩm. 
+• 
+Có thể tra cứu trạng thái đơn hàng. 
+• 
+Hiển thị số sản phẩm đã bán trên trang sản phẩm. 
+• 
+Có thể kiểm tra thông tin sản phẩm trực quan một cách đơn giản. 
+• 
+Có đầy đủ các tính năng quản lý cho người bán hàng. 
+ 
+
+24 
+ 
+1.3. Phát biểu bài toán 
+Với những thông tin thu thập được từ khảo sát và đánh giá thị trường cùng sự nhận 
+thức được tình cấp thiết và nhu cầu của khách hàng khi nhìn vào thực tế, bài toán được 
+đặt ra cho nhóm là làm thế nào Haru có thể xây dựng một trang web bán mỹ phẩm hiệu 
+quả, thu hút khách hàng và tạo ra trải nghiệm mua sắm trực tuyến tốt nhất. Mục tiêu là 
+tạo ra một hệ thống hoàn chỉnh, từ việc quản lý sản phẩm, quảng bá đến giao dịch mua 
+bán, giúp khách hàng tiết kiệm thời gian và mang lại sự thuận tiện cao nhất cho cả người 
+mua và người bán. 
+
+25 
+ 
+PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG 
+2.1. Xác định và mô hình hóa yêu cầu phần mềm 
+2.1.1. 
+Danh sách Actor 
+Bảng 2.1.1 Danh sách Actor 
+STT 
+Tên Actor 
+Ý nghĩa/Ghi chú 
+1 
+Quản trị viên Quản lý của cửa hàng, được quyền truy cập vào toàn bộ tính năng 
+của hệ thống. 
+2 
+Khách hàng 
+Khách hàng của cửa hàng. 
+2.1.2. 
+Danh sách Use-case 
+Bảng 2.1.2 Danh sách Use-case 
+Quyền 
+hệ 
+thống 
+STT 
+Tên Use case 
+Ý nghĩa/Ghi chú 
+Quản 
+lý 
+1 
+Đăng nhập 
+Đăng nhập vào hệ thống. 
+2 
+Quản lý khách hàng 
+Tra cứu thông tin/Sắp xếp/Xuất file khách 
+hàng. 
+3 
+Quản lý sản phẩm 
+Thêm/ Cập nhật/Tra cứu/Sắp xếp sản phẩm. 
+
+26 
+ 
+Xuất file danh sách sản phẩm 
+4 
+Quản lý loại sản 
+phẩm 
+Thêm/ Cập nhật/Tra cứu/Sắp xếp loại sản 
+phẩm. 
+Xuất file loại sản phẩm 
+5 
+Quản lý đơn hàng 
+Tra cứu/Cập nhật/Sắp xếp/Xuất file đơn hàng. 
+6 
+Xem thống kê 
+Xem thống kê doanh thu. 
+7 
+Đăng xuất 
+Đăng xuất khỏi hệ thống. 
+Khách 
+hàng 
+1 
+Đăng nhập 
+Đăng nhập vào hệ thống. 
+2 
+Đăng ký 
+Đăng ký tài khoản. 
+3 
+Đăng xuất 
+Đăng xuất khỏi hệ thống. 
+4 
+Quản lý giỏ hàng 
+Chọn/Tra cứu/Điều chỉnh số lượng sản phẩm. 
+Đặt hàng. 
+Xóa sản phẩm khỏi giỏ. 
+5 
+Quản lý địa chỉ 
+Thêm/Xóa/Cập nhật địa chỉ. 
+6 
+Theo dõi đơn hàng 
+Theo dõi tình trạng đơn hàng. 
+
+27 
+ 
+7 
+Chỉnh sửa thông tin 
+cá nhân 
+Chỉnh sửa thông tin cá nhân. 
+8 
+Đánh giá 
+Viết đánh giá cho sản phẩm đã mua. 
+9 
+Quản lý sản phẩm 
+yêu thích 
+Thêm/Xóa sản phẩm yêu thích. 
+2.2. Sơ đồ Use-cases 
+2.2.1. 
+Sơ đồ Use-case tổng quát 
+Mọi actor đều phải đăng nhập để truy cập và sử dụng các tính năng của hệ thống. 
+Nếu chưa có tài khoản thì phải đăng ký. 
+Mọi actor đều có quyền đăng xuất. 
+
+28 
+ 
+ 
+Hình 2.2.1.1 Sơ đồ Use-case tổng quát 
+2.2.2. 
+Sơ đồ Use-case chi tiết của Quản trị viên 
+
+29 
+ 
+ 
+Hình 2.2.2.1 Sơ đồ Use-case chi tiết của Quản trị viên 
+2.2.3. 
+Sơ đồ Use-case chi tiết của Khách hàng 
+
+30 
+ 
+ 
+Hình 2.2.3.1 Sơ đồ Use-case chi tiết của Khách hàng 
+2.3. Sơ đồ Activity 
+
+31 
+ 
+2.3.1. 
+Đăng nhập 
+ 
+Hình 2.3.1.1 Sơ đồ hoạt động của Use-case Đăng nhập 
+ 
+
+32 
+ 
+2.3.2. 
+Đăng xuất 
+ 
+Hình 2.3.2.1 Sơ đồ hoạt động của Use-case Đăng xuất 
+2.3.3. 
+Đăng ký 
+
+33 
+ 
+ 
+Hình 2.3.3.1 Sơ đồ hoạt động của Use-case Đăng ký 
+2.3.4. 
+Quản lý khách hàng 
+2.3.4.1. 
+Tra cứu thông tin khách hàng 
+
+34 
+ 
+ 
+Hình 2.3.4.1 Sơ đồ hoạt động của Use-case Tra cứu thông tin khách hàng 
+2.3.4.2. 
+Xuất file khách hàng 
+
+35 
+ 
+ 
+Hình 2.3.4.2 8 Sơ đồ hoạt động của Use-case Xuất file khách hàng 
+2.3.4.3. 
+Sắp xếp khách hàng 
+
+36 
+ 
+ 
+Hình 2.3.4.3 Sơ đồ hoạt động của Use-case Sắp xếp khách hàng 
+2.3.5. 
+Quản lý sản phẩm 
+2.3.5.1. 
+Thêm sản phẩm 
+
+37 
+ 
+ 
+Hình 2.3.5.1 Sơ đồ hoạt động của Use-case Thêm sản phẩm 
+2.3.5.2. 
+Cập nhật sản phẩm 
+
+38 
+ 
+ 
+Hình 2.3.5.2 Sơ đồ hoạt động của Use-case Cập nhật sản phẩm 
+2.3.5.3. 
+Sắp xếp sản phẩm 
+
+39 
+ 
+ 
+Hình 2.3.5.3 Sơ đồ hoạt động của Use-case Sắp xếp sản phẩm 
+2.3.5.4. 
+Tra cứu sản phẩm 
+
+40 
+ 
+ 
+Hình 2.3.5.4 Sơ đồ hoạt động của Use-case Tra cứu sản phẩm 
+2.3.5.5. 
+Xuất file danh sách sản phẩm 
+
+41 
+ 
+ 
+Hình 2.3.5.5 Sơ đồ hoạt động của Use-case Tra cứu sản phẩm 
+2.3.6. 
+Quản lý loại sản phẩm 
+2.3.6.1. 
+Thêm loại sản phẩm 
+
+42 
+ 
+ 
+Hình 2.3.6.1 Sơ đồ hoạt động của Use-case Thêm loại sản phẩm 
+2.3.6.2. 
+Cập nhật loại sản phẩm 
+
+43 
+ 
+ 
+Hình 2.3.6.2 Sơ đồ hoạt động của Use-case Cập nhật loại sản phẩm 
+2.3.6.3. 
+Sắp xếp loại sản phẩm 
+
+44 
+ 
+ 
+Hình 2.3.6.3 Sơ đồ hoạt động của Use-case Sắp xếp loại sản phẩm 
+2.3.6.4. 
+Tra cứu loại sản phẩm 
+
+45 
+ 
+ 
+Hình 2.3.6.4 Sơ đồ hoạt động của Use-case Tra cứu loại sản phẩm 
+2.3.6.5. 
+Xuất file loại sản phảm 
+
+46 
+ 
+ 
+Hình 2.3.6.5 Sơ đồ hoạt động của Use-case Xuất file loại sản phẩm 
+ 
+
+47 
+ 
+2.3.7. 
+Quản lý đơn hàng 
+2.3.7.1. 
+Tra cứu đơn hàng 
+ 
+Hình 2.3.7.1 Sơ đồ hoạt động của Use-case Tra cứu đơn hàng 
+2.3.7.2. 
+Cập nhật đơn hàng 
+
+48 
+ 
+ 
+Hình 2.3.7.2 Sơ đồ hoạt động của Use-case Cập nhật đơn hàng 
+2.3.7.3. 
+Xuất file đơn hàng 
+
+49 
+ 
+ 
+Hình 2.3.7.3 Sơ đồ hoạt động của Use-case Xuất file đơn hàng 
+2.3.7.4. 
+Sắp xếp đơn hàng 
+
+50 
+ 
+ 
+Hình 2.3.7.4 Sơ đồ hoạt động của Use-case Sắp xếp đơn hàng 
+2.3.8. 
+Xem thống kê 
+
+51 
+ 
+ 
+Hình 2.3.8.1 Sơ đồ hoạt động của Use-case Xem thống kê 
+2.3.9. 
+Quản lý giỏ hàng 
+2.3.9.1. 
+Chọn sản phẩm 
+
+52 
+ 
+ 
+Hình 2.3.9.1 Sơ đồ hoạt động của Use-case Chọn sản phẩm 
+2.3.9.2. 
+Tra cứu sản phẩm 
+
+53 
+ 
+ 
+Hình 2.3.9.2 Sơ đồ hoạt động của Use-case Tra cứu sản phẩm 
+2.3.9.3. 
+Xóa sản phẩm khỏi giỏ hàng 
+
+54 
+ 
+ 
+Hình 2.3.9.3 Sơ đồ hoạt động của Use-case Xóa sản phẩm khỏi giỏ hàng 
+2.3.9.4. 
+Đặt hàng 
+
+55 
+ 
+ 
+Hình 2.3.9.4 Sơ đồ hoạt động của Use-case Đặt hàng 
+2.3.10. Theo dõi đơn hàng 
+
+56 
+ 
+ 
+Hình 2.3.10.1 Sơ đồ hoạt động của Use-case Theo dõi đơn hàng 
+2.3.11. Chỉnh sửa thông tin cá nhân 
+
+57 
+ 
+ 
+Hình 2.3.11.1 Sơ đồ hoạt động của Use-case Chỉnh sửa thông tin cá nhân 
+2.3.12. Quản lý địa chỉ 
+2.3.12.1. 
+Thêm địa chỉ 
+
+58 
+ 
+ 
+Hình 2.3.12.1 Sơ đồ hoạt động của Use-case Thêm địa chỉ 
+2.3.12.2. 
+Cập nhật địa chỉ 
+
+59 
+ 
+ 
+Hình 2.3.12.2 Sơ đồ hoạt động của Use-case Cập nhật địa chỉ 
+2.3.12.3. 
+Xóa địa chỉ 
+
+60 
+ 
+ 
+Hình 2.3.12.3 Sơ đồ hoạt động của Use-case Xóa địa chỉ 
+2.3.13. Quản lý sản phẩm yêu thích 
+2.3.13.1. 
+Thêm sản phẩm yêu thích 
+
+61 
+ 
+ 
+Hình 2.3.13.1 Sơ đồ hoạt động của Use-case Thêm sản phẩm yêu thích 
+2.3.13.2. 
+Xóa sản phẩm yêu thích 
+
+62 
+ 
+ 
+Hình 2.3.13.2 Sơ đồ hoạt động của Use-case Xóa sản phẩm yêu thích 
+2.3.14. Đánh giá 
+
+63 
+ 
+ 
+Hình 2.3.14.1 Sơ đồ hoạt động của Use-case Đánh giá 
+2.4. Sơ đồ Sequence 
+2.4.1. 
+Đăng nhập 
+
+64 
+ 
+Hình 2.4.1.1 Sơ đồ tuần tự của Use-case Đăng nhập (Actor Quản trị viên) 
+
+65 
+ 
+Hình 2.4.1.2 Sơ đồ tuần tự của Use-case Đăng nhập (Actor Khách hàng) 
+2.4.2. 
+Đăng xuất 
+
+66 
+ 
+ 
+Hình 2.4.2.1 Sơ đồ tuần tự của Use-case Đăng xuất (Actor Quản trị viên) 
+ 
+Hình 2.4.2.2 Sơ đồ tuần tự của Use-case Đăng xuất (Actor Khách hàng) 
+
+67 
+ 
+2.4.3. 
+Đăng ký 
+ 
+Hình 2.4.3.1 Sơ đồ tuần tự của Use-case Đăng ký 
+2.4.4. 
+Quản lý khách hàng 
+
+68 
+ 
+ 
+Hình 2.4.4.1 Sơ đồ tuần tự của Use-case Quản lý khách hàng 
+2.4.4.1. 
+Tra cứu thông tin khách hàng 
+
+69 
+ 
+Hình 2.4.4.2 Sơ đồ tuần tự của Use-case Tra cứu thông tin khách hàng 
+2.4.4.2. 
+Xuất file khách hàng 
+
+70 
+ 
+ 
+Hình 2.4.4.3 Sơ đồ tuần tự của Use-case Xuất file khách hàng 
+2.4.5. 
+Quản lý sản phẩm 
+
+71 
+ 
+ 
+Hình 2.4.5.1 Sơ đồ tuần tự của Use-case Quản lý sản phẩm 
+2.4.5.1. 
+Thêm sản phẩm 
+
+72 
+ 
+ 
+Hình 2.4.5.2 Sơ đồ tuần tự của Use-case Thêm sản phẩm 
+2.4.5.2. 
+Cập nhật sản phẩm 
+
+73 
+ 
+ 
+Hình 2.4.5.3 Sơ đồ tuần tự của Use-case Cập nhật sản phẩm 
+2.4.5.3. 
+Tra cứu sản phẩm 
+
+74 
+ 
+ 
+Hình 2.4.5.4 Sơ đồ tuần tự của Use-case Tra cứu sản phẩm 
+2.4.5.4. 
+Xuất file danh sách sản phẩm 
+ 
+Hình 2.4.5.5 Sơ đồ tuần tự của Use-case Xuất file danh sách sản phẩm 
+2.4.6. 
+Quản lý loại sản phẩm 
+
+75 
+ 
+ 
+Hình 2.4.6.1 Sơ đồ tuần tự của Use-case Quản lý loại sản phẩm 
+2.4.6.1. 
+Thêm loại sản phẩm 
+
+76 
+ 
+ 
+Hình 2.4.6.2 Sơ đồ tuần tự của Use-case Thêm loại sản phẩm 
+2.4.6.2. 
+Cập nhật loại sản phẩm 
+
+77 
+ 
+ 
+Hình 2.4.6.3 Sơ đồ tuần tự của Use-case Cập nhật loại sản phẩm 
+2.4.7. 
+Quản lý đơn hàng 
+
+78 
+ 
+ 
+Hình 2.4.7.1 Sơ đồ tuần tự của Use-case Quản lý đơn hàng 
+2.4.7.1. 
+Tra cứu đơn hàng 
+
+79 
+ 
+ 
+Hình 2.4.7.2 Sơ đồ tuần tự của Use-case Tra cứu đơn hàng 
+2.4.7.2. 
+Cập nhật đơn hàng 
+
+80 
+ 
+ 
+Hình 2.4.7.3 Sơ đồ tuần tự của Use-case Cập nhật đơn hàng 
+2.4.7.3. 
+Xuất đơn hàng 
+
+81 
+ 
+ 
+Hình 2.4.7.4 Sơ đồ tuần tự của Use-case Xuất đơn hàng 
+2.4.8. 
+Xem thống kê 
+
+82 
+ 
+ 
+Hình 2.4.8.1 Sơ đồ tuần tự của Use-case Xem thống kê 
+2.4.9. 
+Quản lý giỏ hàng 
+
+83 
+ 
+ 
+Hình 2.4.9.1 Sơ đồ tuần tự của Use-case Quản lý giỏ hàng 
+2.4.9.1. 
+Chọn sản phẩm 
+
+84 
+ 
+ 
+Hình 2.4.9.2 Sơ đồ tuần tự của Use-case Chọn sản phẩm 
+2.4.9.2. 
+Tra cứu sản phẩm 
+
+85 
+ 
+ 
+Hình 2.4.9.3 Sơ đồ tuần tự của Use-case Tra cứu sản phẩm 
+2.4.9.3. 
+Đặt hàng 
+
+86 
+ 
+ 
+Hình 2.4.9.4 Sơ đồ tuần tự của Use-case Đặt hàng 
+2.4.10. Quản lý địa chỉ 
+
+87 
+ 
+ 
+Hình 2.4.10.1 Sơ đồ tuần tự của Use-case Quản lý địa chỉ 
+2.4.10.1. 
+Thêm địa chỉ 
+
+88 
+ 
+ 
+Hình 2.4.10.2 Sơ đồ tuần tự của Use-case Thêm địa chỉ 
+2.4.10.2. 
+Xóa địa chỉ 
+
+89 
+ 
+Hình 2.4.10.3 Sơ đồ tuần tự của Use-case Xóa địa chỉ 
+2.4.10.3. 
+Cập nhật địa chỉ 
+
+90 
+ 
+ 
+Hình 2.4.10.4 Sơ đồ tuần tự của Use-case Cập nhật địa chỉ 
+2.4.11. Chỉnh sửa thông tin cá nhân 
+
+91 
+ 
+Hình 2.4.11.1 Sơ đồ tuần tự của Use-case Chỉnh sửa thông tin cá nhân 
+2.4.12. Theo dõi đơn hàng 
+
+92 
+ 
+ 
+Hình 2.4.12.1 Sơ đồ tuần tự của Use-case Theo dõi đơn hàng 
+2.4.13. Quản lý sản phẩm yêu thích 
+
+93 
+ 
+ 
+Hình 2.4.13.1 Sơ đồ tuần tự của Use-case Quản lý sản phẩm yêu thích 
+2.4.13.1. 
+Thêm sản phẩm yêu thích 
+
+94 
+ 
+ 
+Hình 2.4.13.2 Sơ đồ tuần tự của Use-case Thêm sản phẩm yêu thích 
+2.4.13.2. 
+Xóa sản phẩm yêu thích 
+
+95 
+ 
+ 
+Hình 2.4.13.3 Sơ đồ tuần tự của Use-case Xóa sản phẩm yêu thích 
+2.4.14. Đánh giá 
+
+96 
+ 
+ 
+Hình 2.4.14.1 Sơ đồ tuần tự của Use-case Đánh giá 
+2.5. Thiết kế cơ sở dữ liệu 
+Dựa trên việc xác định yêu cầu và phân tích yêu cầu, ứng dụng bao gồm các bảng sau: 
+2.5.1. 
+Bảng TAIKHOAN 
+Bảng 2.5.1 Bảng TAIKHOAN 
+TAIKHOAN 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+id (Primary) 
+int(11) 
+Khóa chính 
+Mã tài khoản 
+
+97 
+ 
+name 
+varchar(255) 
+Khóa ngoại 
+đến Id của 
+bảng 
+Products 
+Tên tài khoản 
+email 
+varchar(255) 
+Khóa ngoại 
+đến Id của 
+bảng Users 
+Email của tài 
+khoản 
+password 
+varchar(255) 
+ 
+Mật khẩu của tài 
+khoản 
+token 
+varchar(255) 
+ 
+Token xác thực 
+type 
+varchar(255) 
+ 
+Ngày đánh giá 
+2.5.2. 
+Bảng PASSWORD_RESET_TOKENS 
+Bảng 2.5.2 Bảng PASSWORD_RESET_TOKENS 
+PASSWORD_RESET_TOKENS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+email (Primary) 
+varchar(255) 
+Khóa chính 
+Email tài khoản 
+
+98 
+ 
+token 
+varchar(255) 
+Không thể 
+null 
+Mã lấy lại tài khoản 
+created_at 
+timestamp 
+ 
+Thời gian tạo 
+ 
+2.5.3. 
+Bảng CARTS 
+Bảng 2.5.3 Bảng CARTS 
+CARTS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+user_id 
+int(11) 
+Thuộc tính 
+khóa chính 
+Mã tài khoản 
+product_id 
+int(11) 
+Thuộc tính 
+khóa chính 
+Mã sản phẩm 
+quantity 
+int(11) 
+ 
+Số lượng 
+2.5.4. 
+Bảng ORDERS 
+Bảng 2.5.4 Bảng ORDERS 
+ORDERS 
+
+99 
+ 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+Id 
+int(11) 
+Khóa chính 
+Mã đơn hàng 
+user_id 
+int(11) 
+Khóa ngoại 
+đến Id của 
+bảng Users 
+Mã tài khoản của 
+tài khoản đã tạo 
+đơn hàng 
+total_price 
+int(11) 
+ 
+Tổng giá của đơn 
+hàng 
+consignee_name 
+varchar(255) 
+ 
+Tên người nhận 
+hàng 
+address 
+varchar(255) 
+ 
+Địa chỉ nhận hàng 
+created_date 
+date 
+ 
+Ngày tạo đơn hàng 
+delivered_date 
+date 
+ 
+Ngày giao hàng 
+note 
+varchar(255) 
+ 
+Lưu ý về đơn hàng 
+payment_method 
+varchar(255) 
+ 
+Phương thức thanh 
+toán 
+
+100 
+ 
+payment_status 
+varchar(255) 
+ 
+Trạng thái thanh 
+toán 
+order_status 
+varchar(255) 
+ 
+Trạng thái đơn 
+hàng 
+2.5.5. 
+Bảng ORDER_DETAILS 
+Bảng 2.5.5 Bảng ORDER_DETAILS 
+ORDER_DETAILS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+order_id (Primary) 
+int(11) 
+Thuộc tính 
+khóa chính 
+Mã đơn 
+product_id (Primary) 
+int(11) 
+Thuộc tính 
+khóa chính 
+Số lượng 
+quantity 
+int(11) 
+ 
+Đơn giá 
+price 
+int(11) 
+ 
+Mã sản phẩm 
+ 
+
+101 
+ 
+2.5.6. 
+Bảng ADDRESS 
+Bảng 2.5.6 Bảng ADDRESS 
+ADDRESS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+id (Primary) 
+int(11) 
+Khóa chính 
+Mã địa chỉ 
+user_id 
+int(11) 
+Khóa ngoại 
+đến Id của 
+bảng users 
+Mã tài khoản 
+name 
+varchar(255) 
+ 
+Tên người nhận 
+phone 
+varchar(20) 
+ 
+Số điện thoại người 
+nhận 
+address 
+varchar(255) 
+ 
+Địa chỉ người nhận 
+2.5.7. 
+Bảng PRODUCTS 
+Bảng 2.5.7 Bảng PRODUCTS 
+PRODUCTS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+
+102 
+ 
+id (Primary) 
+int(11) 
+Khóa chính 
+Mã sản phẩm 
+category_id 
+int(11) 
+Khóa 
+ngoại 
+đến 
+Id 
+của 
+bảng 
+Categories 
+Mã loại sản phẩm 
+brand_id 
+int(11) 
+Khóa 
+ngoại 
+đến 
+Id 
+của 
+bảng Brands 
+Mã Thương hiệu 
+name 
+varchar(255) 
+ 
+Tên sản phẩm 
+price 
+int(11) 
+ 
+Đơn giá sản phẩm 
+quantity_sold 
+int(11) 
+ 
+Số lượng đã bán 
+inventory_quantity 
+int(11) 
+ 
+Số lượng trong kho 
+status 
+varchar(255) 
+ 
+Tình trạng 
+image 
+varchar(255) 
+ 
+Đường dẫn hình ảnh sản 
+phẩm 
+star 
+int(11) 
+ 
+Số sao được đánh giá 
+
+103 
+ 
+2.5.8. 
+Bảng CATEGORIES 
+Bảng 2.5.8 Bảng CATEGORIES 
+CATEGORIES 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+Id 
+int(11) 
+Khóa chính 
+Mã loại sản phẩm  
+name 
+varchar(255) 
+Không thể 
+null 
+Tên loại sản phẩm 
+status 
+varchar(255) 
+ 
+Tình trạng 
+2.5.9. 
+Bảng FAVORITES 
+Bảng 2.5.9 Bảng FAVORITES 
+FAVORITES 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+user_id  
+int(11) 
+Thuộc tính 
+khóa chính 
+Mã tài khoản 
+product_id 
+int(11) 
+Thuộc tính 
+khóa chính 
+Mã sản phẩm 
+
+104 
+ 
+ 
+2.5.10. Bảng BRANDS 
+Bảng 2.5.10 Bảng BRANDS 
+BRANDS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+id (Primary) 
+int(11) 
+Khóa chính 
+Mã thương hiệu 
+name 
+varchar(255) 
+Không thể 
+Null 
+Tên thương hiệu 
+status 
+varchar(50) 
+Không thể 
+Null 
+Trạng thái thương 
+hiệu 
+description 
+text 
+ 
+Mô tả thương hiệu 
+ 
+2.5.11. Bảng REVIEWS 
+Bảng 2.5.11 Bảng REVIEWS 
+REVIEWS 
+Tên trường 
+Kiểu dữ liệu 
+Ràng buộc 
+Mô tả 
+
+105 
+ 
+id (Primary) 
+int(11) 
+Khóa chính 
+Mã đánh giá 
+product_id 
+int(11) 
+Khóa ngoại 
+đến Id của 
+bảng 
+Products 
+Mã sản phẩm 
+user_id 
+int(11) 
+Khóa ngoại 
+đến Id của 
+bảng Users 
+Mã tài khoản 
+text 
+text 
+ 
+Nội dung đánh giá 
+stars 
+int(11) 
+ 
+Số sao đánh giá 
+date 
+date 
+ 
+Ngày đánh giá 
+ 
+
+106 
+ 
+CHƯƠNG 3. 
+MÔ TẢ GIAO DIỆN 
+3.1. Giao diện người dùng 
+3.1.1. 
+Trang chủ 
+ 
+Hình 3.1.1.1 Màn hình giao diện trang chủ(1) 
+Mô tả giao diện trang chủ 
+STT 
+Tên 
+Chức năng 
+1 
+Thông báo  
+Hiển thị các thông báo về giảm giá, sự kiện khuyến mãi,… 
+2 
+Hộp thư 
+Gửi thư đến cho quản lý cửa hàng 
+3 
+Liện hệ 
+Gọi điện cho quản lý cửa hàng 
+
+107 
+ 
+4 
+Thanh tìm 
+kiếm 
+Tìm kiếm sản phẩm theo từ khóa được nhập vào 
+5 
+Trang chủ 
+Chuyển hướng đến Trang chủ 
+6 
+Mua hàng 
+Chuyển hướng đển trang Mua hàng để bắt đầu mua sản phẩm 
+7 
+Thương hiệu 
+ 
+8 
+Về Haru 
+Chuyển hướng đến trang giới thiệu thông tin của cửa hàng  
+9 
+Liên hệ 
+Trang thông tin liên hệ của của hàng 
+10 
+Yêu thích 
+Hiển thị các sản phẩm đã được thêm vào mục yêu thích 
+11 
+Trang cá nhân 
+Trang lưu thông tin cá nhân của khách hàng: tên, email, địa 
+chỉ,… 
+12 
+Giỏ hàng 
+Xem các sản phẩm đã thêm vào giỏ hàng 
+13 
+Banner 
+Thông báo và hình ảnh minh họa cho các sản phẩm và sự 
+kiện mới 
+ 
+
+108 
+ 
+ 
+Hình 3.1.1.2 Màn hình giao diện trang chủ(2) 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Sản phẩm 
+Hiển thị các thông tin của sản phẩm 
+2 
+Giá gốc 
+Hiển thị giá gốc của sản phẩm 
+3 
+Giá khuyến mãi Hiển thị giá khuyến mãi của sản phẩm 
+
+109 
+ 
+3.1.2. 
+Trang đăng nhập 
+ 
+Hình 3.1.2.1 Màn hình giao diện đăng nhập 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Tên tài khoản hoặc địa 
+chỉ email 
+Nhập tên đăng nhập hoặc emaill để đăng nhập  
+2 
+Mật khẩu 
+Nhập mật khẩu để đăng nhập vào tài khoản 
+3 
+Quên mật khẩu 
+Thực hiện các bước để tạo mật khẩu mới cho tài 
+khoản sau các bước xác thực 
+
+110 
+ 
+4 
+Đăng ký 
+Chuyển hướng đến trang đăng ký nếu chưa có mật 
+khẩu 
+5 
+Tiếp tục 
+Xác nhận đăng nhập bằng các thông tin đã nhập 
+6 
+Sign in as Google 
+Account 
+Tiến hành đăng nhập bằng các tài khoản Google đã 
+lưu trên thiết bị 
+3.1.3. 
+Đăng nhập với google 
+ 
+Hình 3.1.3.1 Màn hình giao diện đăng nhập với google 
+ 
+STT 
+Tên 
+Chức năng 
+
+111 
+ 
+1 
+Tài khoản Google  
+Các tài khoản Google đã được lưu 
+2 
+Use another 
+account 
+Đăng nhập bằng một tài khoản Google khác 
+3 
+Language 
+Chọn ngôn ngữ 
+3.1.4. 
+Quên mật khẩu 
+ 
+Hình 3.1.4.1 Màn hình giao diện quên mật khẩu 
+ 
+STT 
+Tên 
+Chức năng 
+
+112 
+ 
+1 
+Địa chỉ email Nhập địa chỉ email dùng để đăng ký tài khoản để tiến 
+hành lấy lại mật khẩu 
+2 
+Xác nhận 
+Xác nhận email vừa nhập để tiến hàng lấy lại mật khẩu 
+3 
+Footer 
+Chứa các phần Liên hệ, Giới thiệu, Tài khoỏa – các chức 
+năng chính, cùng những thông tin cần thiết về cửa hàng 
+và trang web  
+ 
+Hình 3.1.4.2 Màn hình giao diện quên mật khẩu – gửi mã pin 
+ 
+STT 
+Tên 
+Chức năng 
+
+113 
+ 
+1 
+Mã pin Nhập mã pin được gửi qua email để tiến hành lấy lại mật 
+khẩu 
+ 
+3.1.5. 
+Trang đăng ký 
+ 
+Hình 3.1.5.1 Màn hình giao diện đăng ký 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Địa chỉ email 
+Nhập địa chỉ email để đăng ký tài khoản 
+2 
+Mật khẩu 
+Tạo mật khẩu cho tài khoản 
+
+114 
+ 
+3 
+Xác nhận mật khẩu Xác nhận lại mật khẩu 
+4 
+Đăng nhập 
+Chuyển hướng đến trang đăng nhập nếu đã có tài khoản 
+5 
+Đăng ký  
+Xác nhận đăng ký tài khoản 
+ 
+3.1.6. 
+Trang sản phẩm 
+ 
+Hình 3.1.6.1 Màn hình giao diện trang sản phẩm 
+ 
+STT Tên  
+Chức năng 
+
+115 
+ 
+1 
+Giá bán 
+Chọn khoảng giá của sản phẩm 
+2 
+Đánh 
+giá 
+Chọn hiển thị những sản phẩm có đánh giá theo yêu cầu 
+3 
+Sản 
+phẩm 
+Hiển thị thông tin sản phẩm 
+3.1.7. 
+Thanh tìm kiếm sản phẩm 
+ 
+Hình 3.1.7.1 Màn hình giao diện thanh tìm kiếm sản phẩm 
+ 
+STT Tên  
+Chức năng 
+
+116 
+ 
+1 
+Thanh tìm kiếm 
+Nhập từ khóa để tìm kiếm sản phẩm 
+2 
+Nội dung tìm 
+kiến 
+Hiển thị từ khóa đã nhập để tìm kiếm 
+3.1.8. 
+Trang chi tiết sản phẩm 
+ 
+Hình 3.1.8.1 Màn hình giao diện trang chi tiết sản phẩm 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Hình ảnh sản phẩm 
+Hiển thị hình ảnh sản phẩm đã chọn 
+
+117 
+ 
+2 
+Tên sản phẩm 
+Hiển thị tên đầy đủ của sản phẩm 
+3 
+Giá tiền 
+Giá tiền khuyến mãi và giá tiền gốc của sản phẩm 
+4 
+Hình thức thanh 
+toán 
+Hiển thị các hình thức thanh toán khả dụng của sản 
+phẩm 
+5 
+Hotline 
+Số điện thoại đường dây nóng 
+6 
+Số lượng 
+Chọn số lượng sản phẩm cần mua 
+7 
+Thêm vào giỏ hàng 
+Thêm sản phẩm và giỏ hàng 
+
+118 
+ 
+3.1.9. 
+Đánh giá sản phẩm 
+ 
+Hình 3.1.9.1 Màn hình giao diện đánh giá sản phẩm 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Chi tiết sản phẩm 
+Hiển thị các thông tin đầy đủ của sản phẩm 
+2 
+Hướng dẫn sử dụng Hướng dẫn sử dụng của sản phẩm 
+3 
+Review của khách 
+hàng 
+Đánh giá của khách hàng thông qua sao và bình luận 
+4 
+Sản phẩm liên quan Các sản phẩm liên quan đến sản phẩm này 
+
+119 
+ 
+5 
+Đánh giá của khách 
+hàng 
+Trung bình số sao của sản phẩm do khách hàng đánh giá 
+6 
+Biểu đồ số sao 
+Tổng quan số sao mà khách hàng đã đánh giá cho sản 
+phẩm 
+7 
+Nhập đánh giá 
+Nhập thêm đánh giá sản phẩm bằng văn bản và sao 
+8 
+Đánh giá của khách 
+hàng 
+Những đánh giá cũ về sao và bình luận và thời gian đánh 
+giá của khách hàng 
+3.1.10. Trang sản phẩm yêu thích 
+ 
+Hình 3.1.10.1 Màn hình giao diện trang sản phẩm yêu thích 
+ 
+
+120 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Sản phẩm yêu 
+thích 
+Hiển thị thông tin của các sản phẩm đã được đưa vào phần 
+yêu thích 
+2 
+Xóa sản phẩm 
+yêu thích 
+Xóa sản phẩm khỏi mục sản phẩm yêu thích 
+ 
+3.1.11. Giỏ hàng 
+ 
+Hình 3.1.11.1 Màn hình giao diện giỏ hàng 
+ 
+
+121 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Sản phẩm trong giỏ hàng Hiển thị các sản phẩm đã được thêm và giỏ hàng 
+2 
+Checkbox chọn sản phẩm Tích chọn sản phẩm để tính tổng tiền và chọn mua 
+3 
+Số lượng  
+Thiết lập số lượng sản phẩm cần mua 
+4 
+Xóa sản phẩm 
+Xóa sản phẩm ra khỏi giỏ hàng 
+5 
+Xóa giỏ hàng 
+Làm trống giỏ hàng 
+6 
+Tổng tiền 
+Tổng tiền các sản phẩm được chọn mua 
+7 
+Đi đến thanh toán 
+Tiến hành thanh toán các sản phẩm chọn mua 
+
+122 
+ 
+3.1.12. Trang thanh toán 
+ 
+Hình 3.1.12.1 Màn hình giao diện trang thanh toán 
+ 
+STT 
+Tên 
+Chức năng 
+1 
+Sản phẩm 
+Hiển thị thông tin sản phẩm được mua  
+2 
+Email 
+Email người nhận hàng 
+3 
+Mật khẩu 
+Nhập mật khẩu người dùng 
+4 
+Địa chỉ 
+Nhập địa chỉ cụ thể nhận hàng 
+
+123 
+ 
+STT 
+Tên 
+Chức năng 
+5 
+Tỉnh/thành phố, quận/huyện, 
+phường/xã 
+Nhập các thông tin về địa chỉ nhận hàng 
+6 
+Phương thức thanh toán 
+Chọn phương thức thanh toán: VNPay, 
+Momo, COD 
+7 
+Đặt hàng 
+Xác nhận đặt mua sản phẩm 
+ 
+
+124 
+ 
+3.1.13. Thông tin khách hàng 
+3.1.13.1. 
+Trang chủ thông tin khách hàng 
+ 
+Hình 3.1.13.1 Màn hình giao diện trang chủ thông tin khách hàng 
+Bảng 3.1.1 Mô tả màn hình giao diện trang chủ thông tin khách hàng 
+STT 
+Tên 
+Chức năng 
+1 
+User ID 
+Mã định danh của khách hàng 
+2 
+Email 
+Email khách hàng đã đăng ký 
+3 
+Tên người dùng 
+Tên người dùng đã đăng ký 
+
+125 
+ 
+STT 
+Tên 
+Chức năng 
+4 
+Edit Profile 
+Sửa thông tin cá nhận 
+5 
+Logout 
+Đăng xuất khỏi tài khoản hiện tại 
+6 
+Sổ địa chỉ 
+Các địa chỉ đã lưu của khách hàng 
+7 
+Đơn hàng chờ 
+duyệt 
+Các đơn hàng chờ duyệt của khách hàng 
+8 
+Đơn hàng đang 
+giao 
+Các đơn hàng đang giao của khách hàng 
+9 
+Đơn hàng đã giao 
+Các đơn hàng đã giao của khách hàng 
+ 
+
+126 
+ 
+3.1.13.2. 
+Chỉnh sửa thông tin khách hàng 
+ 
+Hình 3.1.13.2 Màn hình giao diện chỉnh sửa thông tin khách hàng 
+Bảng 3.1.2 Mô tả màn hình giao diện chỉnh sửa thông tin khách hàng 
+STT 
+Tên 
+Chức năng 
+1 
+Tên người dùng 
+Nhập lại tên người dùng mới 
+2 
+Nhập mật khẩu cũ Nhập mật khẩu cũ để xác nhận 
+3 
+Nhập mật khẩu 
+mới 
+Nhập mật khẩu mới muốn đặt 
+
+127 
+ 
+STT 
+Tên 
+Chức năng 
+4 
+Xác nhận mật 
+khẩu 
+Nhập lại một lần nữa mật khẩu mới để xác nhận 
+5 
+Lưu 
+Xác nhận lưu những thay đổi 
+6 
+Trở về 
+Hủy việc sửa thông tin cá nhân 
+ 
+
+128 
+ 
+3.1.13.3. 
+Sổ địa chỉ  
+ 
+Hình 3.1.13.3 Màn hình giao diện sổ địa chỉ 
+Bảng 3.1.3 Mô tả màn hình giao diện sổ địa chỉ 
+STT 
+Tên 
+Chức năng 
+1 
+Họ tên 
+Nhập lại họ tên muốn đổi 
+2 
+SĐT 
+Nhập lại số điện thoại muốn đổi 
+3 
+Địa chỉ 
+Nhập lại địa chỉ cụ thể nhận hàng 
+
+129 
+ 
+STT 
+Tên 
+Chức năng 
+4 
+Tỉnh/thành phố, 
+quận/huyện, 
+phường/xã 
+Nhập lại các thông tin về địa chỉ nhận hàng 
+5 
+Lưu 
+Xác nhận việc thay đổi sổ địa chỉ 
+6 
+Hủy  
+Hủy việc sửa sổ địa chỉ 
+7 
+Cập nhật  
+Tiến hành sửa sổ địa chỉ 
+8 
+Xóa 
+Xóa một địa chỉ trong sổ địa chỉ 
+9 
+Thêm địa chỉ mới 
+Thêm một địa chỉ mới trong sổ địa chỉ 
+
+130 
+ 
+3.1.13.4. 
+Sổ địa chỉ - Thêm địa chỉ 
+ 
+Hình 3.1.13.4 Màn hình giao diện thêm địa chỉ 
+Bảng 3.1.4 Mô tả màn hình giao diện thêm địa chỉ 
+STT 
+Tên 
+Chức năng 
+1 
+Họ tên 
+Nhập họ tên người nhận 
+2 
+SĐT 
+Nhập số điện thoại người nhận 
+3 
+Địa chỉ 
+Nhập địa chỉ cụ thể nhận hàng 
+4 
+Tỉnh/thành phố, quận/huyện, 
+phường/xã 
+Nhập các thông tin về địa chỉ nhận 
+hàng 
+
+131 
+ 
+5 
+Lưu 
+Xác nhận việc thêm địa chỉ trong sổ địa 
+chỉ 
+6 
+Hủy  
+Hủy việc thêm địa chỉ trong sổ địa chỉ 
+ 
+3.1.13.5. 
+Đơn hàng chờ duyệt 
+ 
+Hình 3.1.13.5 Màn hình giao diện đơn hàng chờ duyệt 
+Bảng 3.1.13.5. Mô tả màn hình giao diện đơn hàng chờ duyệt 
+STT 
+Tên 
+Chức năng 
+1 
+Hủy đơn 
+Hủy việc đặt đơn hàng 
+
+132 
+ 
+3.1.13.6. 
+Đơn hàng đã giao 
+ 
+Hình 3.1.13.6 Đơn hàng đã giao 
+Bảng 3.1.13.6 Mô tả đơn hàng đã giao 
+STT 
+Tên 
+Chức năng 
+1 
+Đánh giá 
+Đánh giá đơn hàng 
+ 
+
+133 
+ 
+3.1.13.7. 
+Đánh giá đơn hàng đã giao 
+ 
+Hình 3.1.13.7 Đánh giá đơn hàng 
+Bảng 3.1.13.7 Mô tả đánh giá đơn hàng 
+STT 
+Tên 
+Chức năng 
+1 
+Input nhập đánh giá 
+Nhập đánh giá  
+2 
+Rate sao 
+Rate sao cho sản phẩm 
+3 
+Gửi đánh giá 
+Xác nhận đánh giá đơn hàng 
+ 
+
+134 
+ 
+3.2. Giao diện quản trị viên 
+3.2.1. 
+Quản lý Loại sản phẩm 
+3.2.1.1. 
+Giao diện chính 
+ 
+Hình 3.2.1.1 Màn hình giao diện quản lý loại sản phẩm 
+Bảng 3.2.1 Mô tả màn hình giao diện quản lý loại sản phẩm 
+STT 
+Tên 
+Chức năng 
+1 
+Thêm mới 
+Thêm mới một loại sản phẩm 
+2 
+Xuất file excel 
+Xuất tất cả loại sản phẩm ra một file excel 
+3 
+Thanh tìm 
+kiếm 
+Tìm kiếm loại sản phẩm theo từ khóa được nhập vào 
+
+135 
+ 
+4 
+Bảng loại sản 
+phẩm 
+Chứa tất cả thông tin của các loại sản phẩm, về id, tên loại sản 
+phẩm, mô tả và tình trạng kinh doanh 
+ 
+3.2.1.2. 
+Chỉnh sửa loại sản phẩm 
+ 
+Hình 3.2.1.2 Màn hình giao diện chỉnh sửa loại sản phẩm 
+Bảng 3.2.2 Mô tả màn hình giao diện chỉnh sửa loại sản phẩm 
+STT 
+Tên 
+Chức năng 
+1 
+Tên loại sản phẩm 
+Sửa tên loại sản phẩm 
+2 
+Tình trạng kinh doanh Chọn lại tình trạng kinh doanh của loại sản phẩm đó 
+3 
+Mô tả 
+Sửa lại mô tả của loại sản phẩm 
+
+136 
+ 
+5 
+Lưu 
+Xác nhận sửa loại sản phẩm 
+6 
+Hủy 
+Hủy bỏ việc sửa loại sản phẩm 
+ 
+3.2.1.3. 
+Thêm mới loại sản phẩm 
+ 
+Hình 3.2.1.3 Màn hình giao diện thêm mới loại sản phẩm 
+Bảng 3.2.3 Mô tả màn hình giao diện thêm mới loại sản phẩm 
+STT 
+Tên 
+Chức năng 
+1 
+Tên loại sản phẩm 
+Nhập tên loại sản phẩm muốn thêm 
+2 
+Tình trạng kinh 
+doanh 
+Chọn tình trạng kinh doanh của loại sản phẩm đó 
+
+137 
+ 
+3 
+Mô tả 
+Mô tả của loại sản phẩm 
+5 
+Thêm 
+Xác nhận thêm loại sản phẩm mới 
+6 
+Hủy 
+Hủy bỏ việc thêm loại sản phẩm mới 
+ 
+
+138 
+ 
+3.2.2. 
+Quản lý Sản phẩm 
+3.2.2.1. 
+Giao diện chính 
+ 
+Hình 3.2.2.1 Màn hình giao diện quản lý sản phẩm 
+Bảng 3.2.4 Mô tả màn hình giao diện quản lý sản phẩm 
+STT 
+Tên 
+Chức năng 
+1 
+ID 
+Mã sản phẩm 
+2 
+Hình ảnh 
+Hiện thị hình ảnh sản phẩm 
+3 
+Tên sản phẩm 
+Hiện thị tên sản phẩm 
+
+139 
+ 
+STT 
+Tên 
+Chức năng 
+4 
+Tên loại sản phẩm Hiện thị tên loại sản phẩm 
+5 
+Tên thương hiệu 
+Hiện thị tên thương hiệu 
+6 
+Đơn giá 
+Giá tiền của một sản phẩm 
+7 
+Số lượng đã bán 
+Hiện thị số lượng sản phẩm đã bán 
+8 
+Số lượng tồn kho 
+Hiện thị số lượng sản phẩm tồn kho 
+9 
+Đánh giá 
+Hiện thị đánh giá trung bình của sản phẩm 
+10 
+Action 
+Xóa, sửa sản phẩm 
+11 
+Thêm 
+Thêm sản phẩm mới 
+ 
+
+140 
+ 
+3.2.2.2. 
+Chỉnh sửa sản phẩm 
+ 
+Hình 3.2.2.2 Màn hình giao diện chỉnh sửa sản phẩm 
+Bảng 3.2.5 Mô tả màn hình giao diện chỉnh sửa sản phẩm 
+STT 
+Tên 
+Chức năng 
+1 
+Chọn hình ảnh 
+Chọn hình ảnh sản phẩm 
+2 
+Tên sản phẩm 
+Nhập tên sản phẩm 
+3 
+Tên loại sản phẩm Chọn loại sản phẩm 
+4 
+Tên thương hiệu 
+Chọn tên thương hiệu 
+
+141 
+ 
+STT 
+Tên 
+Chức năng 
+5 
+Đơn giá 
+Nhập giá tiền của một sản phẩm 
+6 
+Số lượng tồn kho 
+Hiện thị số lượng sản phẩm tồn kho 
+7 
+Lưu 
+Xác nhận sửa sản phẩm 
+8 
+Hủy 
+Hủy việc sửa sản phẩm 
+ 
+
+142 
+ 
+3.2.3. 
+Quản lý Đơn hàng  
+ 
+Hình 3.2.3.1 Màn hình giao diện quản lý đơn hàng 
+Bảng 3.2.6 Mô tả màn hình giao diện quản lý đơn hàng 
+STT 
+Tên 
+Chức năng 
+1 
+Thêm mới 
+Thêm mới một đơn hàng 
+2 
+ID  
+Mã đơn hàng 
+3 
+Tên 
+Tên user của đơn hàng 
+4 
+Email 
+Email user của đơn hàng 
+
+143 
+ 
+STT 
+Tên 
+Chức năng 
+5 
+Tình trạng thanh 
+toán 
+Tình trạng thanh toán của đơn hàng 
+6 
+Tình trạng đơn 
+hàng 
+Tình trạng đơn hàng: Đã duyệt, đã giao,… 
+7 
+Tổng tiền 
+Tổng tiền của đơn hàng 
+8 
+Phương thức 
+thanh toán 
+Hiển thị phương thức tính toán của đơn hàng  
+9 
+Action 
+Các thao tác hiển thị, xóa, sửa đơn hàng 
+ 
+
+144 
+ 
+3.2.4. 
+Quản lý tài khoản 
+ 
+Hình 3.2.4.1 Màn hình giao diện quản lý tài khoản 
+Bảng 3.2.7 Mô tả màn hình giao diện quản lý tài khoản 
+STT 
+Tên 
+Chức năng 
+1 
+Dashboard 
+Hiển thị trang Dashboard Quản lý 
+2 
+Tài khoản 
+Trang quản lý tài khoản 
+3 
+Đơn hàng 
+Trang quản lý đơn hàng  
+4 
+Sản phẩm 
+Trang quản lý sản phẩm 
+
+145 
+ 
+5 
+Loại sản phẩm 
+Trang quản lý loại sản phẩm 
+6 
+Khuyến mãi 
+Trang quản lý các khuyến mãi 
+7 
+Doanh thu 
+Trang quản lý doanh thu cửa hàng 
+8 
+Sản phẩm bán 
+chạy 
+Hiển thị các sản phẩm bán chạy 
+9 
+Logout 
+Đăng xuất 
+10 
+Thêm mới 
+Thêm mới một tài khoản 
+11 
+Column 
+Hiển thị theo dang cột 
+12 
+Filter 
+Thêm bộ lọc  
+13 
+Density  
+Hiển thị theo dạng hàng 
+14 
+Export 
+Xuất các user ra file excel 
+15 
+ID 
+Mã định danh của user 
+16 
+Tên 
+Tên đăng nhập của user 
+
+146 
+ 
+17 
+Email  
+Email của user 
+18 
+Loại tài khoản 
+Hiển thị loại tài khoản: user, admin,… 
+19 
+Action 
+Sửa hoặc xóa một user 
+20 
+Chế độ tối/sáng Chuyển đổi giữa 2 giao diện tối và sáng 
+21 
+Thông báo 
+Hiển thị các thông báo 
+22 
+Cài đặt 
+Trang cài đặt quản lý  
+23 
+Trang cá nhân 
+Trang quản lý thông tin tài khoản đang sử dụng 
+ 
+
+147 
+ 
+3.2.5. 
+Thống kê doanh thu  
+ 
+Hình 3.2.5.1 Màn hình giao diện thống kê doanh thu 
+Bảng 3.2.8 Mô tả màn hình giao diện thống kê doanh thu 
+STT 
+Tên 
+Chức năng 
+1 
+Biểu đồ 
+Biểu đồ thể hiện doanh thu theo từng phương thức thanh toán 
+dưới dạng biểu đồ cột 
+2 
+Ký hiệu 
+màu 
+Giải thích ý nghĩa màu sắc ứng với từng loại doanh thu 
+ 
+
+148 
+ 
+CHƯƠNG 4. 
+KẾT QUẢ DỰ ÁN 
+4.1. Giới thiệu sản phẩm 
+Trang web này cung cấp một nền tảng trực tuyến cho khách hàng để tìm hiểu và 
+mua các sản phẩm mỹ phẩm chất lượng cao. Khách hàng sẽ có cơ hội trải nghiệm giao 
+diện người dùng thân thiện, dễ dàng tìm kiếm và đặt hàng chỉ với vài thao tác đơn giản, 
+tạo ra trải nghiệm mua sắm thuận lợi và thoải mái nhất cho khách hàng. Ngoài ra, trang 
+web cũng sẽ hỗ trợ quản lý cửa hàng một cách nhanh chóng, hiệu quả với các tính năng 
+hữu ích cho quá trình quản lý. 
+Các tính năng chính của trang web quản lý cửa hàng mỹ phẩm: 
+Khách hàng: mua sắm, thanh toán online, đánh giá sản phẩm, theo dõi đơn 
+hàng,… 
+Quản lý sản phẩm: Trang web cung cấp các tính năng quản lý sản phẩm như 
+thêm/sửa/xóa sản phẩm, quản lý thông tin sản phẩm, giá cả,... 
+Quản lý loại sản phẩm: Trang web cung cấp các tính năng quản lý loại sản phẩm 
+như thêm/sửa/xóa loại sản phẩm 
+Quản lý khách hàng: Trang web cung cấp các tính năng quản lý thông tin khách 
+hàng, lịch sử mua hàng,... 
+Quản lý đơn hàng: Trang web cung cấp các tính năng quản lý đơn hàng như 
+tạo/xem/sửa đơn hàng, theo dõi tình trạng đơn hàng,... 
+Quản lý báo cáo: Trang web cung cấp các tính năng quản lý báo cáo hóa đơn, 
+thống kê. 
+4.2. Môi trường triển khai 
+Hệ điều hành: Windows 10,11.  
+Cài đặt: Microsoft SQL Server, Visual Studio. 
+
+149 
+ 
+4.3. Kết luận kết quả 
+Từ những kết quả thu được trong quá trình thực hiện đồ án, có thể rút ra một số 
+kết luận sau: 
+Về mặt kỹ thuật: 
+Trang web đã được thiết kế và triển khai thành công trên nền tảng .NET. 
+Trang web đáp ứng đầy đủ các yêu cầu về chức năng và tính năng. 
+Trang web có giao diện thân thiện và dễ sử dụng. 
+Về mặt quản lý: 
+Trang web giúp quản lý cửa hàng một cách hiệu quả. 
+Trang web giúp kiệm thời gian và chi phí cho việc quản lý cửa hàng. 
+Trang web mang lại trải nghiệm thân thiện với người dùng, giúp người dùng dễ 
+dàng thao tác. 
+
+150 
+ 
+CHƯƠNG 5. 
+KẾT LUẬN 
+5.1. Bảng phân chia công việc 
+Bảng 5.1.1 Bảng đánh giá công việc 
+STT 
+MSSV 
+Họ tên 
+Vai trò 
+Công việc 
+% Hoàn 
+thành 
+1 
+21520385 
+Trần Ngọc 
+Tố Như 
+Thành viên 
+Code Back-end 
+Chương 5 
+100% 
+2 
+21520203 
+Lê Thùy 
+Dương 
+Thành viên 
+Code Front-end 
+Chương 2 
+100% 
+3 
+21522170 Trần Thanh 
+Huy 
+Nhóm trưởng 
+Thiết kế và quản 
+lý cơ sở dữ liệu 
+Chương 4 
+Mục 2.5 
+ 
+100% 
+4 
+21521998 
+Mai Trần 
+Khương 
+Duy 
+Thành viên 
+Phân tích thiết kế 
+hệ thống 
+Chương 3 
+100% 
+ 
+
+151 
+ 
+5.2. Ưu điểm và nhược điểm 
+Ưu điểm: 
+Sau quá trình kiểm thử và nghiệm thu đồ án, kết quả đạt được đáp ứng được đa số các 
+yêu cầu ban đầu đặt ra: 
+- Đã đáp ứng được các nhu cầu về chức năng cơ bản của một website thương mại điện tử 
+mà ở đây là website kinh doanh mỹ phẩm. 
+- Đáp ứng được yêu cầu về giao diện: đơn giản, dễ tiếp cận; yêu cầu về trải nghiệm: 
+- Chuyển trang mượt mà, thời gian chờ đợi không quá lâu, đáp ứng tốt trải nghiệm khách 
+hàng khi được dùng thử. 
+- Đáp ứng được nhu cầu tương thức trên nhiều giao diện thiết bị (responsive trên các break 
+point: máy tính, máy tính nhỏ, máy tính bảng, điện thoại). 
+- Áp dụng các công nghệ hỗ trợ ngoài môn học (thanh toán điện tử). 
+- Hoàn thành đúng tiến độ môn học. 
+- Có đủ các quy trình thiết kế và xây dựng một dự án công nghệ thông tin: lên ý tưởng, 
+thảo luận, thiết kế, thực hiện, kiểm thử, nghiệm thu. 
+Nhược điểm: 
+Tuy nhiên, bên cạnh những điểm đã đạt được vẫn còn nhiều giới hạn: 
+- Vẫn còn lỗi giao diện ở một vài trường hợp đặc biệt. 
+- Chưa đồng nhất trong việc sử dụng database và cấu hình API. 
+- Chưa hoàn toàn đáp ứng được yêu cầu của Restful API và các yêu cầu về bảo mật liên 
+quan khi website làm việc với API. 
+ 
+
+152 
+ 
+5.3. Hướng phát triển 
+5.3.1. 
+Về hệ thống 
+Để khắc phục các hạn chế còn tồn tại cũng như nâng cấp phần mềm trong tương 
+lai nhóm chúng em có một số đề xuất như sau 
+- 
+Phần mềm hỗ trợ đa ngôn ngữ. 
+- 
+Phát triển thêm tính năng đặt bàn. 
+- 
+Lưu các thông tin đã xóa để kiểm tra nếu có vấn đề xảy ra. 
+- 
+Tích hợp AI để tiên đoán doanh thu trong tương lai gần vào biểu đồ thống 
+kê. 
+5.3.2. 
+Về con người 
+Nhóm nhận rõ được những khuyết điểm còn tồn đọng trong làm việc nhóm thông 
+qua dự án này, rút ra được các kinh nghiệm và bài học đáng giá. 
+Cải tiến và phát triển them để tăng trải nghiệm của người dung đối với ứng dụng. 
+ 

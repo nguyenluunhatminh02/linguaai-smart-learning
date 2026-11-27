@@ -1,0 +1,60 @@
+node_modules
+dist
+.next
+build
+.turbo
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+coverage
+__pycache__
+*.pyc
+.venv
+apps/ai-service/.venv
+apps/ai-service/.env
+packages/shared/src/generated/
+apps/api/src/generated/
+*.pem
+*.key
+
+# Build artefacts
+*.tsbuildinfo
+
+# IDE / OS
+.vscode/
+.playwright-mcp/
+
+# Local screenshots, ad-hoc tests, and debug scripts not meant for prod
+*.png
+test-*.js
+apps/api/test-*.js
+apps/api/clear-devices.js
+apps/api/clear-sessions.mjs
+apps/api/create-admin.js
+apps/api/fix.js
+apps/api/reset-password.js
+apps/api/seed-roles.js
+apps/api/wstest.js
+apps/api/nul
+
+# Local audit / scratch files
+_audit_*.txt
+_test.txt
+_run_*.bat
+_start_*.bat
+tmp_*.bat
+nul
+apps/web/_audit_*.txt
+.aider*
+
+# Local agent config / scratch and generated artifacts not meant for the repo
+.claude/
+apps/web/playwright-report/
+apps/web/test-results/
+apps/api/uploads/
+apps/web/public/uploads/
+apps/web/public/communication-audio/
+tts/
+*.mjs.log

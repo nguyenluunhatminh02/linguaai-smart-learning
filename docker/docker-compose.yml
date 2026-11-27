@@ -1,0 +1,127 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: linguaai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-linguaai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-linguaai}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U linguaai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - linguaai-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: linguaai-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli -a "$REDIS_PASSWORD" ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - linguaai-net
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: linguaai-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-linguaai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-linguaai}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?MFA_ENCRYPTION_KEY must be set}
+      AI_SERVICE_URL: http://ai:8000
+      AI_SERVICE_API_KEYS: ${AI_SERVICE_API_KEYS:?AI_SERVICE_API_KEYS must be set}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      PASSWORD_HISTORY_LIMIT: ${PASSWORD_HISTORY_LIMIT:-5}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - linguaai-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    container_name: linguaai-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    depends_on:
+      - api
+    networks:
+      - linguaai-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  ai:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ai
+    container_name: linguaai-ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      APP_ENV: production
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY must be set}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      AI_SERVICE_API_KEYS: ${AI_SERVICE_API_KEYS:?AI_SERVICE_API_KEYS must be set}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - linguaai-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  linguaai-net:
+    driver: bridge
