@@ -11,6 +11,12 @@
  *
  * ESM modules (otplib, qrcode) are mocked at module level so Jest can load.
  */
+// RateLimiterService is only loaded transitively (via EmailVerificationService)
+// and has a missing Nest import outside this change's scope. Stub that module
+// here so this spec exercises AuthService itself without changing production code.
+jest.mock("../../common/services/rate-limiter.service", () => ({
+  RateLimiterService: class {},
+}));
 jest.mock("otplib", () => ({
   authenticator: {
     generateSecret: jest.fn().mockReturnValue("MOCK_SECRET"),
@@ -20,6 +26,13 @@ jest.mock("otplib", () => ({
 }));
 jest.mock("qrcode", () => ({
   toDataURL: jest.fn().mockResolvedValue("data:image/png;base64,qr"),
+}));
+// Keep auth.spec independent of bcrypt's native binding (the repo's Linux build
+// cannot be loaded from other host platforms in CI containers). Login tests
+// assert orchestration, not the hash implementation itself.
+jest.mock("bcrypt", () => ({
+  hash: jest.fn(async (value: string) => `hashed:${value}`),
+  compare: jest.fn(async (value: string, hash: string) => hash === `hashed:${value}`),
 }));
 
 import { Test, TestingModule } from "@nestjs/testing";
@@ -479,18 +492,111 @@ describe("AuthService", () => {
   // ─── refreshToken ─────────────────────────────────────────────────────────────
 
   describe("refreshToken", () => {
-    it("rotates tokens for valid refresh token", async () => {
+    beforeEach(() => {
       mockTokenService.validateRefreshToken.mockResolvedValue({
         userId: "user-123",
         deviceId: "dev-1",
+        roles: ["ROLE_CUSTOMER"],
       });
       mockPrisma.users.findFirst.mockResolvedValue(makeDbUser());
+    });
 
+    it("rotates tokens for valid refresh token", async () => {
       const result = await service.refreshToken("valid.rt", mockReq());
 
-      expect(result).toMatchObject({ accessToken: "mock.access.token" });
+      expect(result).toMatchObject({
+        accessToken: "mock.access.token",
+        refreshToken: "mock.refresh.token",
+      });
       expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("valid.rt");
-      expect(mockTokenService.storeRefreshToken).toHaveBeenCalled();
+      expect(mockTokenService.storeRefreshToken).toHaveBeenCalledWith(
+        "user-123",
+        "dev-1",
+        "jti-1",
+        3600,
+      );
+    });
+
+    it("rejects replay of the pre-rotation token after the session JTI was replaced", async () => {
+      // Real validation returns null once storeRefreshToken has overwritten
+      // the session JTI; the old token's signature alone must not be enough.
+      mockTokenService.validateRefreshToken
+        .mockResolvedValueOnce({
+          userId: "user-123",
+          deviceId: "dev-1",
+          roles: ["ROLE_CUSTOMER"],
+        })
+        .mockImplementationOnce(async (token: string) => {
+          // Couple the mock to the rotation write: a replayed JTI no longer
+          // matches the stored session marker.
+          return token === "new.rt"
+            ? { userId: "user-123", deviceId: "dev-1", roles: ["ROLE_CUSTOMER"] }
+            : null;
+        });
+      mockTokenService.generateRefreshToken.mockReturnValueOnce({
+        token: "new.rt",
+        jti: "jti-2",
+        ttlSec: 3600,
+      });
+
+      await expect(service.refreshToken("old.rt", mockReq())).resolves.toMatchObject({
+        accessToken: "mock.access.token",
+        refreshToken: "new.rt",
+      });
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("old.rt");
+      expect(mockTokenService.storeRefreshToken).toHaveBeenCalledWith(
+        "user-123",
+        "dev-1",
+        "jti-2",
+        3600,
+      );
+
+      await expect(service.refreshToken("old.rt", mockReq())).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockTokenService.storeRefreshToken).toHaveBeenCalledTimes(1);
+      expect(mockTokenService.generateRefreshToken).toHaveBeenCalledTimes(1);
+    });
+
+    it("characterizes concurrent refresh: both callers may pass validation before the single JTI slot is overwritten", async () => {
+      // Two requests can both observe the old JTI before either write lands.
+      // The service serializes neither validateRefreshToken nor
+      // storeRefreshToken, so both receive a new token pair; only the last
+      // stored JTI remains valid for subsequent refreshes. This test records
+      // that behaviour rather than changing business logic.
+      mockTokenService.validateRefreshToken.mockResolvedValue({
+        userId: "user-123",
+        deviceId: "dev-1",
+        roles: ["ROLE_CUSTOMER"],
+      });
+      mockTokenService.generateRefreshToken
+        .mockReturnValueOnce({ token: "rt-A", jti: "jti-A", ttlSec: 3600 })
+        .mockReturnValueOnce({ token: "rt-B", jti: "jti-B", ttlSec: 3600 });
+
+      const results = await Promise.all([
+        service.refreshToken("shared.rt", mockReq()),
+        service.refreshToken("shared.rt", mockReq()),
+      ]);
+
+      expect(results.map((r) => r.refreshToken)).toEqual(["rt-A", "rt-B"]);
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledTimes(2);
+      expect(mockTokenService.storeRefreshToken).toHaveBeenCalledTimes(2);
+      expect(mockTokenService.storeRefreshToken).toHaveBeenLastCalledWith(
+        "user-123",
+        "dev-1",
+        "jti-B",
+        3600,
+      );
+    });
+
+    it("does not issue tokens for a locked user even with a valid refresh JTI", async () => {
+      mockPrisma.users.findFirst.mockResolvedValue(makeDbUser({ is_locked: true }));
+
+      await expect(
+        service.refreshToken("valid.rt", mockReq()),
+      ).rejects.toThrow(AccountLockedException);
+      expect(mockTokenService.blacklistToken).not.toHaveBeenCalled();
+      expect(mockTokenService.generateAccessToken).not.toHaveBeenCalled();
     });
 
     it("throws UnauthorizedException for invalid refresh token", async () => {
@@ -534,12 +640,50 @@ describe("AuthService", () => {
     });
   });
 
+  describe("logout", () => {
+    it("still blacklists the access token and records LOGOUT when refresh validation fails", async () => {
+      mockTokenService.validateRefreshToken.mockResolvedValue(null);
+
+      await service.logout("at", "expired.rt", makeAppUser() as any, mockReq());
+
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
+      expect(mockTokenService.revokeDeviceSession).not.toHaveBeenCalled();
+      expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
+        "user-123",
+        "LOGOUT",
+        expect.anything(),
+      );
+    });
+  });
+
   describe("logoutAll", () => {
     it("blacklists current access token and revokes all sessions", async () => {
       await service.logoutAll("at", makeAppUser() as any, mockReq());
       expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
       expect(mockTokenService.revokeAllSessions).toHaveBeenCalledWith(
         "user-123",
+      );
+    });
+
+    it("records LOGOUT_ALL after the revocations", async () => {
+      const order: string[] = [];
+      mockTokenService.blacklistToken.mockImplementationOnce(async () => {
+        order.push("blacklist");
+      });
+      mockTokenService.revokeAllSessions.mockImplementationOnce(async () => {
+        order.push("revokeAll");
+      });
+      mockAuditLog.recordAuditLog.mockImplementationOnce(async () => {
+        order.push("audit");
+      });
+
+      await service.logoutAll("at", makeAppUser() as any, mockReq());
+
+      expect(order).toEqual(["blacklist", "revokeAll", "audit"]);
+      expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
+        "user-123",
+        "LOGOUT_ALL",
+        expect.anything(),
       );
     });
   });
@@ -555,6 +699,12 @@ describe("AuthService", () => {
       expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledWith(
         "user-123",
         "dev-9",
+      );
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
+      expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
+        "user-123",
+        "LOGOUT_SESSION",
+        expect.anything(),
       );
     });
   });

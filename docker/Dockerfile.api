@@ -44,7 +44,10 @@ COPY --from=builder /app/packages/shared/src ./packages/shared/src
 USER appuser
 WORKDIR /app/apps/api
 EXPOSE 3001
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3001/api/health || exit 1
-# Run pending migrations, then boot the server.
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/main.js"]
+# Liveness only. Readiness (/api/health/ready) must be checked by the
+# orchestrator with 200/503 semantics; see docker/README.md.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
+  CMD wget -qO- http://localhost:3001/api/health >/dev/null || exit 1
+# Schema migrations are applied by the one-shot `migrate` compose service,
+# never by each API replica. Seeding is likewise a separate explicit job.
+CMD ["node", "dist/main.js"]

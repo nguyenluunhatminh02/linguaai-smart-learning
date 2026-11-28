@@ -14,30 +14,37 @@
  */
 
 jest.mock('otplib', () => ({
-  generateSecret: jest.fn().mockReturnValue('GENERATED_SECRET'),
-  generateURI: jest.fn().mockReturnValue('otpauth://totp/test'),
-  verify: jest.fn().mockResolvedValue({ valid: true }),
+  generateSecret: jest.fn(),
+  generateURI: jest.fn(),
+  verify: jest.fn(),
 }));
 
 jest.mock('qrcode', () => ({
-  toDataURL: jest.fn().mockResolvedValue('data:image/png;base64,mock-qr'),
+  toDataURL: jest.fn(),
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
+import * as QRCode from 'qrcode';
 
 import { MfaService } from './mfa.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { RedisService } from '../../common/services/redis.service';
-import { generateURI, verify as otpVerify } from 'otplib';
+import { generateSecret, generateURI, verify as otpVerify } from 'otplib';
 
 const mockOtpVerify = otpVerify as unknown as jest.Mock;
 const mockGenerateURI = generateURI as unknown as jest.Mock;
+const mockGenerateSecret = generateSecret as unknown as jest.Mock;
+const mockToDataURL = QRCode.toDataURL as unknown as jest.Mock;
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-mfa-encryption-only';
+
+// MfaService only accepts fully enrolled secrets; fixtures must carry both flags.
+const ACTIVE_SECRET = { enabled: true, verified: true };
+const HALF_CONFIGURED_SECRET = { enabled: false, verified: false };
 
 const makeUser = (over: any = {}) => ({
   id: 'user-123',
@@ -72,6 +79,7 @@ describe('MfaService', () => {
       upsert: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       delete: jest.fn().mockResolvedValue({}),
     },
   };
@@ -82,10 +90,40 @@ describe('MfaService', () => {
 
   const mockRedis = {
     del: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    incr: jest.fn().mockResolvedValue(1),
+    incrWithExpiry: jest.fn().mockResolvedValue(1),
+    expire: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    // Restore implementations wiped by resetAllMocks. Every test sees a
+    // clean Redis (no lockout keys) and default "success" behaviour.
+    mockGenerateSecret.mockReturnValue('GENERATED_SECRET');
+    mockGenerateURI.mockReturnValue('otpauth://totp/test');
+    mockToDataURL.mockResolvedValue('data:image/png;base64,mock-qr');
+    mockOtpVerify.mockResolvedValue({ valid: true });
+    mockConfig.get.mockImplementation((key: string, def?: any) => {
+      if (key === 'JWT_SECRET') return TEST_JWT_SECRET;
+      if (key === 'MFA_ISSUER') return 'TestApp';
+      if (key === 'MFA_ENCRYPTION_KEY') return null;
+      return def;
+    });
+    mockPrisma.users.update.mockResolvedValue({});
+    mockPrisma.mfa_secrets.upsert.mockResolvedValue({});
+    mockPrisma.mfa_secrets.update.mockResolvedValue({});
+    mockPrisma.mfa_secrets.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.mfa_secrets.delete.mockResolvedValue({});
+    mockAuditLog.recordLoginHistory.mockResolvedValue(undefined);
+    mockRedis.del.mockResolvedValue(undefined);
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.set.mockResolvedValue(undefined);
+    mockRedis.incr.mockResolvedValue(1);
+    mockRedis.incrWithExpiry.mockResolvedValue(1);
+    mockRedis.expire.mockResolvedValue(undefined);
+    mockOtpVerify.mockResolvedValue({ valid: true });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MfaService,
@@ -196,6 +234,7 @@ describe('MfaService', () => {
 
     it('returns true on a valid TOTP code', async () => {
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
         secret_encrypted: encryptForTest('SECRET'),
         backup_codes: null,
       });
@@ -207,6 +246,7 @@ describe('MfaService', () => {
       const code = 'abcd1234';
       const hashed = crypto.createHash('sha256').update(code).digest('hex');
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
         secret_encrypted: encryptForTest('SECRET'),
         backup_codes: JSON.stringify([hashed]),
       });
@@ -215,16 +255,16 @@ describe('MfaService', () => {
       const result = await service.verifyCodeOrBackup(makeUser() as any, code);
 
       expect(result).toBe(true);
-      // The used backup code must be removed from storage.
-      expect(mockPrisma.mfa_secrets.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ backup_codes: JSON.stringify([]) }),
-        }),
-      );
+      // A conditional updateMany removes the used code atomically to prevent replay.
+      expect(mockPrisma.mfa_secrets.updateMany).toHaveBeenCalledWith({
+        where: { user_id: 'user-123', backup_codes: JSON.stringify([hashed]) },
+        data: { backup_codes: JSON.stringify([]) },
+      });
     });
 
     it('returns false when both TOTP and backup-code lookup fail', async () => {
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
         secret_encrypted: encryptForTest('SECRET'),
         backup_codes: JSON.stringify(['some-other-hash']),
       });
@@ -260,6 +300,7 @@ describe('MfaService', () => {
       const secret_encrypted = `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
 
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
         secret_encrypted,
         backup_codes: null,
       });
@@ -310,6 +351,318 @@ describe('MfaService', () => {
         backup_codes: JSON.stringify(['a', 'b', 'c']),
       });
       expect(await service.getBackupCodesCount('user-123')).toEqual({ remaining: 3 });
+    });
+  });
+
+  // ─── SEC-04 regression: enrollment integrity ─────────────────────────────
+
+  describe('enrollment integrity (SEC-04)', () => {
+    it('setupMfa stores unconfirmed secrets with enabled=false and verified=false', async () => {
+      await service.setupMfa(makeUser() as any);
+
+      expect(mockPrisma.mfa_secrets.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ enabled: false, verified: false }),
+          update: expect.objectContaining({ enabled: false, verified: false }),
+        }),
+      );
+    });
+
+    it('verifyAndEnableMfa refuses a row already enabled and verified', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        enabled: true,
+        verified: true,
+        secret_encrypted: 'unused',
+      });
+
+      await expect(
+        service.verifyAndEnableMfa({ code: '123456' }, makeUser() as any, mockReq()),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockOtpVerify).not.toHaveBeenCalled();
+    });
+
+    it('verifyAndEnableMfa refuses when the user already has twoFactorEnabled', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...HALF_CONFIGURED_SECRET,
+        secret_encrypted: 'unused',
+      });
+
+      await expect(
+        service.verifyAndEnableMfa(
+          { code: '123456' },
+          makeUser({ twoFactorEnabled: true }) as any,
+          mockReq(),
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ─── SEC-04 regression: half-configured secrets cannot authenticate ──────
+
+  describe('half-configured secret rejection (SEC-04)', () => {
+    const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+    const encryptForTest = (plain: string) => {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
+      const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      return `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
+    };
+
+    it.each([
+      ['not enabled', { enabled: false, verified: true }],
+      ['not verified', { enabled: true, verified: false }],
+      ['neither', HALF_CONFIGURED_SECRET],
+    ])('rejects a TOTP code when the secret is %s', async (_label, flags) => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...flags,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: null,
+      });
+      mockOtpVerify.mockResolvedValue({ valid: true });
+      // validateMfaLogin does not check the user's twoFactorEnabled flag;
+      // the service must fail closed based on the secret row alone.
+      expect(
+        await service.verifyCodeOrBackup(makeUser({ twoFactorEnabled: true }) as any, '123456'),
+      ).toBe(false);
+    });
+
+    it('rejects a backup code when the secret is half-configured', async () => {
+      const code = 'abcd1234';
+      const hashed = crypto.createHash('sha256').update(code).digest('hex');
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...HALF_CONFIGURED_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: JSON.stringify([hashed]),
+      });
+      mockOtpVerify.mockResolvedValue({ valid: false });
+
+      expect(
+        await service.verifyCodeOrBackup(makeUser({ twoFactorEnabled: true }) as any, code),
+      ).toBe(false);
+      expect(mockPrisma.mfa_secrets.update).not.toHaveBeenCalled();
+    });
+
+    it('returns false when ciphertext is corrupt or the encryption key changed', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: 'not-a-valid-ciphertext',
+        backup_codes: null,
+      });
+
+      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(false);
+      expect(mockOtpVerify).not.toHaveBeenCalled();
+      // A failed decrypt must still be recorded as a failed attempt.
+      expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
+        'mfa:fail:verify:user-123',
+        900,
+      );
+    });
+  });
+
+  // ─── SEC-04 regression: recovery-code replay ─────────────────────────────
+
+  describe('backup-code replay protection (SEC-04)', () => {
+    const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+    const encryptForTest = (plain: string) => {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
+      const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      return `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
+    };
+
+    it('a consumed backup code cannot be reused even if the read row is stale', async () => {
+      const code = 'replay-code';
+      const hashed = crypto.createHash('sha256').update(code).digest('hex');
+      const storedCodes = JSON.stringify([hashed, 'other-hash']);
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: storedCodes,
+      });
+      // Conditional update lost the race (another request consumed the code).
+      mockPrisma.mfa_secrets.updateMany.mockResolvedValue({ count: 0 });
+      mockOtpVerify.mockResolvedValue({ valid: false });
+
+      expect(await service.verifyCodeOrBackup(makeUser() as any, code)).toBe(false);
+      expect(mockPrisma.mfa_secrets.updateMany).toHaveBeenCalledWith({
+        where: { user_id: 'user-123', backup_codes: storedCodes },
+        data: { backup_codes: JSON.stringify(['other-hash']) },
+      });
+      expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
+        'mfa:fail:verify:user-123',
+        900,
+      );
+    });
+  });
+
+  // ─── SEC-04 regression: TOTP step replay ─────────────────────────────────
+
+  describe('TOTP step replay protection (SEC-04)', () => {
+    const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+    const encryptForTest = (plain: string) => {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
+      const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      return `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
+    };
+
+    it('rejects a code from the same or an earlier step and records a failure', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: null,
+      });
+      mockOtpVerify.mockResolvedValue({ valid: true, timeStep: 100 });
+      // Only the laststep key takes the previous step value; the rate-limit
+      // key must stay clear so the replay guard is the thing under test.
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(key === 'mfa:laststep:user-123' ? '100' : null),
+      );
+
+      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(false);
+      expect(mockRedis.set).not.toHaveBeenCalled();
+      expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
+        'mfa:fail:verify:user-123',
+        900,
+      );
+    });
+
+    it('accepts a valid code from a newer step', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: null,
+      });
+      mockOtpVerify.mockResolvedValue({ valid: true, timeStep: 101 });
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(key === 'mfa:laststep:user-123' ? '100' : null),
+      );
+
+      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(true);
+      expect(mockRedis.set).toHaveBeenCalledWith('mfa:laststep:user-123', '101', 60);
+    });
+  });
+
+  // ─── SEC-04 regression: rate limiting ────────────────────────────────────
+
+  describe('rate limiting (SEC-04)', () => {
+    it('blocks verification after 5 failed attempts for 15 minutes', async () => {
+      mockRedis.get.mockResolvedValue('5');
+
+      await expect(
+        service.verifyCodeOrBackup(makeUser() as any, '123456'),
+      ).rejects.toMatchObject({ status: 429 });
+      expect(mockPrisma.mfa_secrets.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('records a failed attempt with the lockout TTL after an invalid code', async () => {
+      const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
+      const enc = Buffer.concat([cipher.update('SECRET', 'utf8'), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`,
+        backup_codes: null,
+      });
+      // Valid ciphertext but wrong TOTP code → falls through to recordFailedAttempt.
+      mockOtpVerify.mockResolvedValue({ valid: false });
+
+      expect(await service.verifyCodeOrBackup(makeUser() as any, '000000')).toBe(false);
+      expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
+        'mfa:fail:verify:user-123',
+        900,
+      );
+      expect(mockRedis.expire).toHaveBeenCalledWith(
+        'mfa:fail:verify:user-123',
+        900,
+      );
+    });
+  });
+
+  // ─── SEC-04 regression: recovery-code regeneration ───────────────────────
+
+  describe('regenerateBackupCodes (SEC-04)', () => {
+    const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+    const encryptForTest = (plain: string) => {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
+      const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      return `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
+    };
+
+    it('replaces all previous codes with 10 new hashed codes after valid TOTP', async () => {
+      const oldCode = 'old-code';
+      const oldHash = crypto.createHash('sha256').update(oldCode).digest('hex');
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: JSON.stringify([oldHash]),
+      });
+      mockOtpVerify.mockResolvedValue({ valid: true });
+
+      const result = await service.regenerateBackupCodes('user-123', '123456');
+
+      expect(result.backupCodes).toHaveLength(10);
+      expect(result.backupCodes).not.toContain(oldCode);
+      const stored = JSON.parse(
+        mockPrisma.mfa_secrets.update.mock.calls[0][0].data.backup_codes,
+      );
+      expect(stored).toHaveLength(10);
+      expect(stored).not.toContain(oldHash);
+      result.backupCodes.forEach((code: string) => {
+        expect(stored).toContain(crypto.createHash('sha256').update(code).digest('hex'));
+      });
+    });
+
+    it('refuses regeneration when the secret is half-configured', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...HALF_CONFIGURED_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: null,
+      });
+
+      await expect(
+        service.regenerateBackupCodes('user-123', '123456'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockOtpVerify).not.toHaveBeenCalled();
+    });
+
+    it('refuses regeneration with an invalid TOTP and records a failure', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: encryptForTest('SECRET'),
+        backup_codes: JSON.stringify([]),
+      });
+      mockOtpVerify.mockResolvedValue({ valid: false });
+
+      await expect(
+        service.regenerateBackupCodes('user-123', '000000'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.mfa_secrets.update).not.toHaveBeenCalled();
+      expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
+        'mfa:fail:regenerate:user-123',
+        900,
+      );
+    });
+
+    it('throws BadRequestException instead of crashing when the secret cannot be decrypted', async () => {
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        ...ACTIVE_SECRET,
+        secret_encrypted: 'corrupt',
+        backup_codes: null,
+      });
+
+      await expect(
+        service.regenerateBackupCodes('user-123', '123456'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockOtpVerify).not.toHaveBeenCalled();
+      expect(mockPrisma.mfa_secrets.update).not.toHaveBeenCalled();
     });
   });
 });

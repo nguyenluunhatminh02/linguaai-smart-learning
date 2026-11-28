@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { TokensService } from './tokens.service';
-import { ConsumeTokensDto, PurchaseTokensDto } from './dto/tokens.dto';
+import { ConsumeTokensDto } from './dto/tokens.dto';
 
 @ApiTags('Tokens')
 @ApiBearerAuth()
@@ -23,12 +23,6 @@ export class TokensController {
   async consumeTokens(@Req() req: Request, @Body() dto: ConsumeTokensDto) {
     const idempotencyKey = req.headers['idempotency-key'] as string;
     return this.tokensService.consumeTokens((req as any).user.id, dto.feature, dto.cost, idempotencyKey);
-  }
-
-  @Post('purchase')
-  @ApiOperation({ summary: 'Add tokens (purchase, bonus, etc.)' })
-  async purchaseTokens(@Req() req: Request, @Body() dto: PurchaseTokensDto) {
-    return this.tokensService.addTokens((req as any).user.id, dto.amount, 'purchase');
   }
 
   @Get('history')

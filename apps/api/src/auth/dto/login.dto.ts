@@ -5,11 +5,13 @@ import { Transform } from 'class-transformer';
 export class LoginDto {
   @ApiProperty({ example: 'alice@example.com' })
   @IsEmail()
+  @MaxLength(254)
   email: string;
 
   @ApiProperty({ example: 'P@ssw0rd123' })
   @IsNotEmpty()
   @IsString()
+  @MaxLength(128)
   password: string;
 
   @ApiPropertyOptional({ description: 'Client-generated device UUID' })

@@ -1,8 +1,24 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UseInterceptors,
+  UploadedFile,
+  Body,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  MAX_UPLOAD_BYTES,
+  UPLOAD_MIME_TYPES,
+  VALIDATION_ERROR_MESSAGE,
+  normalizeMimeType,
+  uploadSizeLimitForMimeType,
+} from './file-validation';
 
 @ApiTags('Files')
 @ApiBearerAuth()
@@ -12,7 +28,18 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  // SEC-07/SEC-08: reject oversized or disallowed payloads in the parser,
+  // before Multer buffers them, rather than after the file reaches the service.
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 8 },
+    fileFilter: (_req, file, callback) => {
+      if (!UPLOAD_MIME_TYPES.includes(normalizeMimeType(file.mimetype))) {
+        callback(new BadRequestException(VALIDATION_ERROR_MESSAGE), false);
+        return;
+      }
+      callback(null, true);
+    },
+  }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a file (image or audio) to the server' })
   @ApiBody({
@@ -26,39 +53,20 @@ export class FilesController {
       },
     },
   })
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFile(
+    @CurrentUser('id') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
-    
-    // Validate file type & size (10MB for images, 50MB for audio)
-    const allowedImageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const allowedAudioMimeTypes = [
-      'audio/mpeg',
-      'audio/mp3',
-      'audio/wav',
-      'audio/ogg',
-      'audio/webm',
-      'audio/mp4',
-      'audio/m4a',
-      'audio/x-m4a',
-      'audio/aac',
-      'audio/flac',
-      'audio/x-flac',
-    ];
-    const allowedMimeTypes = [...allowedImageMimeTypes, ...allowedAudioMimeTypes];
-
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Invalid file type. Only standard images and audio are allowed.');
+    // Defence in depth: the service re-validates the signature and derives the
+    // object name and extension server-side from the validated MIME type.
+    if (file.size > uploadSizeLimitForMimeType(file.mimetype)) {
+      throw new BadRequestException(`File size exceeds limit (${MAX_UPLOAD_BYTES / 1024 / 1024}MB).`);
     }
 
-    const isImage = allowedImageMimeTypes.includes(file.mimetype);
-    const maxSize = isImage ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new BadRequestException(`File size exceeds limit (${isImage ? '10MB' : '50MB'}).`);
-    }
-
-    const url = await this.filesService.uploadFile(file);
+    const url = await this.filesService.uploadFile(file, userId);
     return { url };
   }
 

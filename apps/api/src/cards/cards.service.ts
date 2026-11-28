@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -23,8 +24,19 @@ export class CardsService {
     private tokensService: TokensService,
   ) {}
 
-  async create(deckId: string, dto: CreateCardDto) {
-    await this.decksService.findById(deckId);
+  /**
+   * SEC-02: mutations stay behind a service-level ownership check. `userId` is
+   * required for every write so a service call without a caller fails closed.
+   */
+  private async requireDeckOwner(deckId: string, userId?: string) {
+    if (!userId) throw new ForbiddenException();
+    const deck = await this.decksService.findById(deckId, userId);
+    if (deck.creator_id !== userId) throw new ForbiddenException();
+    return deck;
+  }
+
+  async create(deckId: string, dto: CreateCardDto, userId?: string) {
+    await this.requireDeckOwner(deckId, userId);
     // The card write and the denormalised deck count must commit together.
     return this.prisma.$transaction(async (tx) => {
       const card = await tx.cards.create({
@@ -47,6 +59,8 @@ export class CardsService {
   }
 
   async findByDeck(deckId: string, userId?: string) {
+    // A private deck's contents are never public, even via its card list.
+    await this.decksService.findById(deckId, userId);
     if (!userId) {
       return this.prisma.cards.findMany({
         where: { deck_id: deckId, retired_at: null },
@@ -90,14 +104,32 @@ export class CardsService {
     });
   }
 
-  async findById(id: string) {
-    const card = await this.prisma.cards.findUnique({ where: { id } });
+  /** Load a card with the deck metadata needed for the SEC-02 visibility check. */
+  private async findCardWithDeck(id: string, userId?: string) {
+    const card = await this.prisma.cards.findUnique({
+      where: { id },
+      include: { decks: { select: { creator_id: true, is_public: true } } },
+    });
     if (!card) throw new NotFoundException("Card not found");
+    if (!userId || !card.decks.is_public) {
+      if (!userId || card.decks.creator_id !== userId) {
+        throw new NotFoundException("Card not found");
+      }
+    }
     return card;
   }
 
-  async update(id: string, dto: UpdateCardDto) {
-    await this.findById(id);
+  async findById(id: string, userId?: string) {
+    const card = await this.findCardWithDeck(id, userId);
+    // Keep the original public response shape: the relation was fetched only
+    // to enforce visibility.
+    const { decks: _decks, ...publicCard } = card;
+    return publicCard;
+  }
+
+  async update(id: string, dto: UpdateCardDto, userId?: string) {
+    const card = await this.findCardWithDeck(id, userId);
+    if (!userId || card.decks.creator_id !== userId) throw new ForbiddenException();
     return this.prisma.cards.update({
       where: { id },
       data: {
@@ -111,8 +143,9 @@ export class CardsService {
     });
   }
 
-  async remove(id: string) {
-    const card = await this.findById(id);
+  async remove(id: string, userId?: string) {
+    const card = await this.findCardWithDeck(id, userId);
+    if (!userId || card.decks.creator_id !== userId) throw new ForbiddenException();
     // Already retired: do not decrement the count a second time.
     if (card.retired_at) throw new NotFoundException("Card not found");
 
@@ -141,8 +174,8 @@ export class CardsService {
     });
   }
 
-  async bulkCreate(deckId: string, cards: CreateCardDto[]) {
-    await this.decksService.findById(deckId);
+  async bulkCreate(deckId: string, cards: CreateCardDto[], userId?: string) {
+    await this.requireDeckOwner(deckId, userId);
     // Pre-generate ids so we can insert in a single statement (createMany) and
     // still return the exact rows we created (createMany does not return rows).
     const data = cards.map((dto) => ({
@@ -174,7 +207,9 @@ export class CardsService {
     userId?: string,
     idempotencyKey?: string,
   ) {
-    await this.decksService.findById(deckId);
+    // Ownership is checked before the AI call and the token debit: a
+    // non-owner must not be able to spend another user's deck/quota.
+    await this.requireDeckOwner(deckId, userId);
 
     // The controller passes the header when available; otherwise the request
     // context (populated in main.ts) supplies it. Scoped to this user/feature

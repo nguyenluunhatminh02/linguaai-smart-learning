@@ -9,10 +9,16 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
-# NEXT_PUBLIC_* envs must be present at build time so they get inlined into the
-# client bundle. Pass via `docker build --build-arg NEXT_PUBLIC_API_URL=...`.
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
+# NEXT_PUBLIC_* envs are inlined into the client bundle at BUILD time.
+# Require an explicit build arg: a localhost fallback would silently ship a
+# production image that calls the operator's own machine. Runtime env changes
+# cannot rewrite the inlined value; rebuild the web image to change it.
+ARG NEXT_PUBLIC_API_URL
+RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "NEXT_PUBLIC_API_URL build arg is required" >&2; exit 1)
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Server-only route variables are supplied at runtime by compose (never
+# NEXT_PUBLIC_*); no default here, since a wrong host resolves inside this
+# container and hides configuration errors.
 # Standalone output is only emitted in container builds.
 ENV BUILD_STANDALONE=true
 COPY --from=deps /app/node_modules ./node_modules

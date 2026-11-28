@@ -2,13 +2,19 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyJwt } from "@/lib/auth/jwt-verify";
 
-const PUBLIC_PATHS = [
+const PUBLIC_PATHS = new Set([
   "/login",
   "/register",
   "/verify-email",
   "/forgot-password",
   "/reset-password",
-];
+]);
+
+function isPublicPath(pathname: string): boolean {
+  // Exact match only: prefixes would exempt unintended routes such as
+  // /login/... or /reset-password/admin from authentication.
+  return PUBLIC_PATHS.has(pathname.replace(/\/+$/, "") || "/");
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,13 +26,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const disableAuth = process.env.NEXT_PUBLIC_DISABLE_AUTH === "true";
+  // NEXT_PUBLIC_DISABLE_AUTH is a build-time public variable and can be set by
+  // anyone building the client bundle. Honour it only in non-production.
+  const disableAuth =
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_DISABLE_AUTH === "true";
   if (disableAuth) {
-    console.warn("⚠️ SECURITY WARNING: Authentication is disabled globally via NEXT_PUBLIC_DISABLE_AUTH.");
+    console.warn("SECURITY WARNING: Authentication is disabled via NEXT_PUBLIC_DISABLE_AUTH.");
     return NextResponse.next();
   }
 
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const isPublic = isPublicPath(pathname);
 
   // Only the httpOnly refresh cookie is available to middleware. Never trust
   // an arbitrary auth_session cookie as a session marker.

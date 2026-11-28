@@ -83,9 +83,9 @@ describe('TokenBlacklistService', () => {
   });
 
   describe('blacklistAllUserTokens', () => {
-    it('stores user-level blacklist marker in Redis for 24h', async () => {
+    it('stores user-level blacklist marker in Redis for 29 days (28-day rememberMe tokens plus slack)', async () => {
       await service.blacklistAllUserTokens('user-123');
-      expect(mockRedis.set).toHaveBeenCalledWith('blacklist:user:user-123', '1', 86400);
+      expect(mockRedis.set).toHaveBeenCalledWith('blacklist:user:user-123', '1', 29 * 24 * 3600);
     });
 
     it('skips when Redis is unavailable', async () => {

@@ -1,5 +1,13 @@
-import { Controller, Get, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  Res,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../common/services/redis.service';
@@ -44,7 +52,7 @@ export class HealthController {
   @Public()
   @Get('ready')
   @ApiOperation({ summary: 'Readiness probe — checks database and cache' })
-  async readiness() {
+  async readiness(@Res({ passthrough: true }) res: Response) {
     const checks: Record<string, CheckResult> = {
       database: await this.check('database', DB_CHECK_TIMEOUT_MS, async () => {
         await this.prisma.$queryRaw`SELECT 1`;
@@ -56,9 +64,25 @@ export class HealthController {
     };
 
     const allUp = Object.values(checks).every((v) => v.status === 'up');
+    if (!allUp) {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    // Public probes must not expose connection strings, stack traces or raw
+    // dependency errors. The full cause is logged server-side in check().
+    const publicChecks = Object.fromEntries(
+      Object.entries(checks).map(([name, result]) => [
+        name,
+        {
+          status: result.status,
+          ...(result.latencyMs !== undefined && { latencyMs: result.latencyMs }),
+        },
+      ]),
+    );
+
     return {
       status: allUp ? 'ready' : 'degraded',
-      checks,
+      checks: publicChecks,
       timestamp: new Date().toISOString(),
     };
   }

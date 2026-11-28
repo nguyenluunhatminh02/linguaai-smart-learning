@@ -1,3 +1,5 @@
+import unicodedata
+
 from fastapi import APIRouter, Depends, Request
 
 from app.config import settings
@@ -19,6 +21,11 @@ from app.rate_limit import limiter
 from app.utils import ai_json_request
 
 router = APIRouter(prefix="/ai/content", tags=["Content Generation"])
+
+
+def _strip_invisible_chars(text: str) -> str:
+    """Drop Unicode format (Cf) characters that can hide tag-smuggling payloads."""
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
 
 
 @router.post("/generate-cards", response_model=GenerateCardsResponse, dependencies=[Depends(verify_key)])

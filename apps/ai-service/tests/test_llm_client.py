@@ -369,11 +369,13 @@ async def test_generate_stream_forwards_tokens(llm_client: LLMClient):
 
 @pytest.mark.asyncio
 async def test_health_check_returns_true_on_200(llm_client: LLMClient):
+    """health_check uses GET /v1/models, not POST."""
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
+    mock_response.json.return_value = {"object": "list", "data": [{"id": "model1"}]}
 
     mock_client = AsyncMock(spec=httpx.AsyncClient)
-    mock_client.post.return_value = mock_response
+    mock_client.get.return_value = mock_response
     mock_client.is_closed = False
 
     with patch.object(llm_client, "_get_client", return_value=mock_client):
@@ -384,8 +386,9 @@ async def test_health_check_returns_true_on_200(llm_client: LLMClient):
 
 @pytest.mark.asyncio
 async def test_health_check_returns_false_on_exception(llm_client: LLMClient):
+    """health_check uses GET /v1/models, not POST."""
     mock_client = AsyncMock(spec=httpx.AsyncClient)
-    mock_client.post.side_effect = httpx.ConnectError("down")
+    mock_client.get.side_effect = httpx.ConnectError("down")
     mock_client.is_closed = False
 
     with patch.object(llm_client, "_get_client", return_value=mock_client):
@@ -401,7 +404,7 @@ async def test_health_check_returns_false_on_503(llm_client: LLMClient):
     mock_response.status_code = 503
 
     mock_client = AsyncMock(spec=httpx.AsyncClient)
-    mock_client.post.return_value = mock_response
+    mock_client.get.return_value = mock_response
     mock_client.is_closed = False
 
     with patch.object(llm_client, "_get_client", return_value=mock_client):

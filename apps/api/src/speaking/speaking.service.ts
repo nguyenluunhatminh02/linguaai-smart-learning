@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { TokensService } from '../tokens/tokens.service';
+import { validateAudioPayload, extensionForMimeType } from '../files/file-validation';
 import Groq from 'groq-sdk';
 
 /**
@@ -16,9 +17,6 @@ import Groq from 'groq-sdk';
 export class SpeakingService {
   private readonly groq: Groq;
   private readonly modelStt: string;
-
-  /** Upper bound on the base64 audio payload accepted for a single transcription. */
-  private static readonly MAX_AUDIO_BASE64_LENGTH = 2_000_000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -100,14 +98,9 @@ export class SpeakingService {
     idempotencyKey?: string,
   ) {
     // Validate the payload before doing any billable work. WebSocket frames
-    // bypass Express's body limit, so the service enforces the cap itself.
-    if (
-      typeof audio !== 'string' ||
-      audio.length === 0 ||
-      audio.length > SpeakingService.MAX_AUDIO_BASE64_LENGTH
-    ) {
-      throw new BadRequestException('Audio payload is missing or too large');
-    }
+    // bypass Express's body limit, so the shared validator enforces the cap
+    // on decoded bytes and checks the audio signature here as well.
+    const decoded = validateAudioPayload(audio, mimeType ?? 'audio/webm');
 
     const toLangCode = (lang?: string): string => {
       if (!lang) return 'en';
@@ -145,12 +138,13 @@ export class SpeakingService {
     // 2. Transcribe using Groq Whisper
     let transcript: string;
     try {
-      const buf = Buffer.from(audio, 'base64');
-      const mime = mimeType || 'audio/webm';
-      const ext = (mime.split('/')[1]?.split(';')[0] || 'webm').replace('mpeg', 'mp3');
+      // Filename/extension are derived from validated MIME, never from the client.
+      const ext = extensionForMimeType(decoded.mimeType)!;
 
       // Build a File-like object that groq-sdk accepts
-      const audioFile = new File([buf], `speech.${ext}`, { type: mime });
+      const audioBytes = new Uint8Array(decoded.buffer.byteLength);
+      audioBytes.set(decoded.buffer);
+      const audioFile = new File([audioBytes], `speech.${ext}`, { type: decoded.mimeType });
 
       const transcriptionResult = await this.groq.audio.transcriptions.create({
         file: audioFile as any,

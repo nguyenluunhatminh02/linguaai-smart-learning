@@ -11,12 +11,13 @@ import {
   Put,
   Query,
   Req,
+  Res,
   ParseIntPipe,
   DefaultValuePipe,
   ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { UsersService } from './users.service';
 import { TokensService } from '../tokens/tokens.service';
 import { SessionService } from '../auth/services/session.service';
@@ -92,10 +93,23 @@ export class UsersController {
     return { message: 'Account deletion requested. You have 30 days to cancel.' };
   }
 
+  @Get('export')
+  @ApiOperation({ summary: 'Export all personal data owned by the current user (SEC-11)' })
+  async exportMe(@CurrentUser('id') userId: string, @Res() res: Response) {
+    const data = await this.usersService.exportUserData(userId);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, private');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="linguaai-data-export-${userId}.json"`,
+    );
+    return res.send(JSON.stringify(data, null, 2));
+  }
+
   @Post('cancel-delete')
   @ApiOperation({ summary: 'Cancel account deletion' })
-  async cancelDelete(@CurrentUser() user: User) {
-    await this.sessionService.cancelDeleteAccount(user);
+  async cancelDelete(@CurrentUser() user: User, @Req() req: Request) {
+    await this.sessionService.cancelDeleteAccount(user, req);
     return { message: 'Account deletion cancelled' };
   }
 

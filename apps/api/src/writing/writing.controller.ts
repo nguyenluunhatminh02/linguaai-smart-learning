@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Body, Param, Query, UseGuards, ParseUUIDPipe,
-  ParseIntPipe, Headers, ConflictException, NotFoundException,
+  ParseIntPipe, Headers, ConflictException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { createHash, randomUUID } from 'crypto';
@@ -222,19 +222,12 @@ export class WritingController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single writing submission owned by the caller' })
-  async getById(
+  getById(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    // Ownership check in the query itself: another user's UUID must be 404,
-    // not a disclosure of their essay and AI feedback.
-    const item = await this.prisma.writing_submissions.findFirst({
-      where: { id, user_id: userId },
-      select: { id: true },
-    });
-    if (!item) {
-      throw new NotFoundException('Writing submission not found');
-    }
-    return this.writingService.getById(id);
+    // The service scopes the lookup by owner, so another user's UUID is a 404
+    // rather than a disclosure of their essay and AI feedback.
+    return this.writingService.getById(userId, id);
   }
 }

@@ -1,47 +1,75 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
-import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import {
+  StorageAdapter,
+  VALIDATION_ERROR_MESSAGE,
+  extensionForMimeType,
+  validateUploadedFile,
+  normalizeMimeType,
+} from './file-validation';
 
+/**
+ * Upload service using the local storage adapter.
+ * Object names are always generated here from the authenticated owner id;
+ * client filenames and client-supplied keys are never accepted.
+ *
+ * REL-04 follow-up: replace StorageAdapter with an object-storage port that
+ * stores owner/size/MIME/checksum metadata and issues short-lived signed URLs.
+ * Until then /uploads/ is public static content — do not store private files.
+ */
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
-  private readonly uploadDir = path.join(process.cwd(), 'uploads');
 
-  constructor(private config: ConfigService) {
-    // Đảm bảo thư mục uploads tồn tại
-    if (!fs.existsSync(this.uploadDir)) {
-      fs.mkdirSync(this.uploadDir, { recursive: true });
-      this.logger.log(`Created local uploads directory at ${this.uploadDir}`);
-    }
-  }
+  constructor(
+    private readonly config: ConfigService,
+    private readonly storage: StorageAdapter,
+  ) {}
 
-  /**
-   * Upload file to local storage (acts as fallback and default)
-   */
-  async uploadFile(file: Express.Multer.File): Promise<string> {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-
-    const fileExt = path.extname(file.originalname);
-    const fileName = `${uuidv4()}${fileExt}`;
-    const filePath = path.join(this.uploadDir, fileName);
-
+  async uploadFile(file: Express.Multer.File, ownerId?: string): Promise<string> {
+    const validated = validateUploadedFile(file);
+    const userId = this.requireOwnerId(ownerId);
+    const key = this.storage.generateKey(userId, validated.extension);
     try {
-      // Ghi file buffer vào thư mục uploads
-      fs.writeFileSync(filePath, file.buffer);
-      this.logger.log(`File saved locally: ${filePath}`);
-
-      // Trả về URL tương đối
-      const apiPort = this.config.get('API_PORT', '3001');
-      const apiUrL = this.config.get('API_URL', `http://localhost:${apiPort}`);
-      return `${apiUrL}/uploads/${fileName}`;
+      await this.storage.put(key, validated.buffer);
+      this.logger.log(`File saved locally for owner ${userId}: ${key}`);
     } catch (err: any) {
       this.logger.error(`Failed to save file locally: ${err.message}`, err.stack);
       throw new BadRequestException('Failed to upload file');
     }
+    const apiPort = this.config.get('API_PORT', '3001');
+    const apiUrl = this.config.get('API_URL', `http://localhost:${apiPort}`);
+    return this.storage.urlForKey(key, apiUrl);
+  }
+
+  async assertOwner(key: string, userId: string): Promise<string> {
+    const ownedKey = this.storage.assertOwner(key, this.requireOwnerId(userId));
+    const head = await this.storage.head(ownedKey);
+    if (!head) throw new BadRequestException('File not found or access denied');
+    return ownedKey;
+  }
+
+  async deleteFile(key: string, userId: string): Promise<void> {
+    await this.storage.delete(await this.assertOwner(key, userId));
+  }
+
+  async headFile(key: string, userId: string): Promise<{ key: string; size: number } | null> {
+    const ownedKey = this.storage.assertOwner(key, this.requireOwnerId(userId));
+    return this.storage.head(ownedKey);
+  }
+
+  /** Extension derived from a validated MIME type, for callers that need one. */
+  extensionForMime(mimeType: string): string {
+    const extension = extensionForMimeType(normalizeMimeType(mimeType));
+    if (!extension) throw new BadRequestException(VALIDATION_ERROR_MESSAGE);
+    return extension;
+  }
+
+  private requireOwnerId(ownerId?: string): string {
+    if (typeof ownerId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(ownerId)) {
+      throw new BadRequestException('Authenticated user is required to upload files');
+    }
+    return ownerId;
   }
 
   /**
@@ -64,7 +92,7 @@ export class FilesService {
     // Google Translate TTS URL
     const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(text)}`;
     this.logger.log(`Generated TTS URL for text: "${text.substring(0, 30)}" [${langCode}]`);
-    
+
     return ttsUrl;
   }
 }

@@ -7,6 +7,14 @@ from app.config import settings
 
 client = TestClient(app)
 
+# Every chat route requires gateway-asserted client identity in addition to
+# the service API key. The API-key-only cases below still test the 401 gate.
+AUTH_HEADERS = {
+    "X-API-Key": "test-api-key-123",
+    "X-User-ID": "user-123",
+    "X-User-Roles": "user",
+}
+
 
 @pytest.fixture(autouse=True)
 def setup_api_keys(monkeypatch):
@@ -48,7 +56,7 @@ async def test_chat_success_with_valid_key():
 
         response = client.post(
             "/v1/ai/chat",
-            headers={"X-API-Key": "test-api-key-123"},
+            headers=AUTH_HEADERS,
             json={
                 "language": "English",
                 "messages": [{"role": "user", "content": "Hello"}],
@@ -75,7 +83,7 @@ async def test_chat_maps_llm_failure_to_503():
 
         response = client.post(
             "/v1/ai/chat",
-            headers={"X-API-Key": "test-api-key-123"},
+            headers=AUTH_HEADERS,
             json={
                 "language": "English",
                 "messages": [{"role": "user", "content": "Hello"}],
@@ -112,18 +120,26 @@ def test_chat_stream_rejects_invalid_api_key():
 
 @pytest.mark.asyncio
 async def test_chat_stream_success_with_valid_key():
-    """Happy path: chat stream succeeds and returns SSE chunks."""
-    async def mock_async_generator(*args, **kwargs):
-        yield "Hello"
-        yield " world"
-        yield "!"
+    """Happy path: chat stream succeeds and returns SSE chunks in roadmap contract."""
+    calls = []
+
+    def tracked_chat_stream(*args, **kwargs):
+        calls.append((args, kwargs))
+        async def generator():
+            yield "Hello"
+            yield " world"
+            yield "!"
+        return generator()
 
     with patch("app.routers.chat.llm_client") as mock_client:
-        mock_client.chat_stream = mock_async_generator
+        mock_client.chat_stream = tracked_chat_stream
+        # Clear any cached usage from previous tests
+        if hasattr(mock_client, "last_stream_usage"):
+            delattr(mock_client, "last_stream_usage")
 
         response = client.post(
             "/v1/ai/chat/stream",
-            headers={"X-API-Key": "test-api-key-123"},
+            headers=AUTH_HEADERS,
             json={
                 "language": "English",
                 "messages": [{"role": "user", "content": "Hello"}],
@@ -132,20 +148,35 @@ async def test_chat_stream_success_with_valid_key():
 
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+        assert response.headers["cache-control"] == "no-cache"
 
-        # Verify the chunks streamed back
-        expected_content = (
-            'data: {"token": "Hello"}\n\n'
-            'data: {"token": " world"}\n\n'
-            'data: {"token": "!"}\n\n'
-            'data: [DONE]\n\n'
-        )
-        assert response.text == expected_content
+        # Verify the roadmap SSE contract: accepted → delta (seq 1,2,3) → completed
+        lines = response.text.strip().split("\n\n")
+        assert len(lines) == 5  # accepted + 3 deltas + completed
+
+        # Event 1: accepted
+        assert lines[0] == 'event: accepted\ndata: {}'
+
+        # Events 2-4: delta with seq
+        assert lines[1] == 'event: delta\ndata: {"seq":1,"text":"Hello"}'
+        assert lines[2] == 'event: delta\ndata: {"seq":2,"text":" world"}'
+        assert lines[3] == 'event: delta\ndata: {"seq":3,"text":"!"}'
+
+        # Event 5: completed (no usage since mock doesn't set last_stream_usage)
+        assert lines[4] == 'event: completed\ndata: {}'
+
+        # Verify the LLM client was called with correct parameters
+        assert len(calls) == 1
+        call_kwargs = calls[0][1]
+        assert call_kwargs["model"] == settings.groq_model_heavy
+        assert call_kwargs["temperature"] == 0.7
+        # Messages must be wrapped with <user_input> tags
+        assert call_kwargs["messages"][1]["content"] == "<user_input>Hello</user_input>"
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_emits_stream_interrupted_on_llm_failure():
-    """A mid-stream upstream failure must end the SSE stream with an error event."""
+async def test_chat_stream_emits_failed_on_llm_failure():
+    """A mid-stream upstream failure must emit a 'failed' event with structured error."""
     async def failing_async_generator(*args, **kwargs):
         yield "partial"
         raise RuntimeError("upstream dropped")
@@ -155,7 +186,7 @@ async def test_chat_stream_emits_stream_interrupted_on_llm_failure():
 
         response = client.post(
             "/v1/ai/chat/stream",
-            headers={"X-API-Key": "test-api-key-123"},
+            headers=AUTH_HEADERS,
             json={
                 "language": "English",
                 "messages": [{"role": "user", "content": "Hello"}],
@@ -163,9 +194,23 @@ async def test_chat_stream_emits_stream_interrupted_on_llm_failure():
         )
 
         assert response.status_code == 200
-        assert 'data: {"token": "partial"}\n\n' in response.text
-        assert 'data: {"error": "stream_interrupted"}\n\n' in response.text
-        assert "[DONE]" not in response.text
+        # Verify the roadmap SSE contract for failures
+        lines = response.text.strip().split("\n\n")
+        assert len(lines) == 3  # accepted + 1 delta + failed
+
+        # Event 1: accepted
+        assert lines[0] == 'event: accepted\ndata: {}'
+
+        # Event 2: delta with partial token
+        assert lines[1] == 'event: delta\ndata: {"seq":1,"text":"partial"}'
+
+        # Event 3: failed with structured error payload
+        assert lines[2].startswith('event: failed\ndata: ')
+        import json
+        error_data = json.loads(lines[2].split('data: ')[1])
+        assert error_data["error"]["code"] == "PROVIDER_UNAVAILABLE"
+        assert error_data["error"]["retryable"] is True
+        assert "message" in error_data["error"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────

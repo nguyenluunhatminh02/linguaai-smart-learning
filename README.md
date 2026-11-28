@@ -106,7 +106,7 @@ SETUP.md             Detailed setup guide (Vietnamese)
 ## Documentation
 
 - [SETUP.md](SETUP.md) — detailed setup and operation guide.
-- [docs/setup.md](docs/setup.md) — environment configuration.
+- [docs/provider-setup.md](docs/provider-setup.md) — environment variable names, owners and secret rotation (values are never documented).
 - [docs/function_app.md](docs/function_app.md) — feature catalogue.
 - [docs/ai_service.md](docs/ai_service.md) — AI service API.
 - [docs/test_func.md](docs/test_func.md) — functional test scenarios.
@@ -114,3 +114,11 @@ SETUP.md             Detailed setup guide (Vietnamese)
 ## Security
 
 `.env`, `.env.local` and key files are gitignored. Never commit API keys, database passwords or JWT secrets.
+
+Secrets checklist (SEC-10):
+
+- [ ] Every `.env.example` uses `<replace-me>` placeholders, never a real or plausible credential; real values live only in gitignored env files or the deployment secret store.
+- [ ] Provider key `GROQ_API_KEY` and service keys `AI_SERVICE_API_KEYS`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `MFA_ENCRYPTION_KEY`, `DATABASE_PASSWORD` / `POSTGRES_PASSWORD`, and `REDIS_PASSWORD` are set server-side only.
+- [ ] No secret uses a `NEXT_PUBLIC_*` name; `NEXT_PUBLIC_DISABLE_AUTH=false` outside local development.
+- [ ] Logs, CI output, error reports and client bundles contain no keys (`NEXT_PUBLIC_*` values are public at build time by design).
+- [ ] If a secret was ever committed or logged, rotate it at the provider and update all owning env files; see [docs/provider-setup.md](docs/provider-setup.md) for the rotation checklist.

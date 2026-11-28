@@ -271,7 +271,7 @@ describe('RateLimiterService', () => {
   it('fails closed when the limiter backend errors', async () => {
     redis.incrWithExpiry.mockRejectedValue(new Error('Redis down'));
     await expect(limiter.checkRateLimit('ip:2', config)).rejects.toMatchObject({
-      status: HttpStatus.TOO_MANY_REQUESTS,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
     });
   });
 

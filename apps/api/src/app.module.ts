@@ -20,12 +20,17 @@ import { LearningModule } from "./learning/learning.module";
 
 // ── Domain: Assessment (Quiz) ────────────────────────
 import { QuizModule } from "./quiz/quiz.module";
+import { ProficiencyModule } from "./proficiency/proficiency.module";
+
+// ── Domain: Content Workflow ─────────────────────────
+import { ContentWorkflowModule } from "./content-workflow/content-workflow.module";
 
 // ── Domain: AI-Powered Features ──────────────────────
 import { WritingModule } from "./writing/writing.module";
 import { ReadingModule } from "./reading/reading.module";
 import { GrammarModule } from "./grammar/grammar.module";
 import { ChatModule } from "./chat/chat.module";
+import { AiOperationsModule } from "./ai-operations/ai-operations.module";
 import { RecommendationsModule } from "./recommendations/recommendations.module";
 
 // ── Domain: Admin & Analytics ────────────────────────
@@ -102,12 +107,15 @@ class HttpOnlyThrottlerGuard extends ThrottlerGuard {
 
     // ── Domain: Assessment (Quiz) ────────────────────────
     QuizModule,
+    ProficiencyModule,
+    ContentWorkflowModule,
 
     // ── Domain: AI-Powered Features ──────────────────────
     WritingModule,
     ReadingModule,
     GrammarModule,
     ChatModule,
+    AiOperationsModule,
     RecommendationsModule,
 
     // ── Domain: Admin & Analytics ────────────────────────

@@ -480,6 +480,212 @@ export class UsersService {
 
   // ── Login history ─────────────────────────────────────────────────────────────
 
+  // ── Privacy: data export and purge (SEC-11) ─────────────────────────────────
+
+  /**
+   * Build a portable copy of everything the user owns. Every query is scoped
+   * to `userId`; nested chat messages are fetched through the caller's own
+   * conversation ids, so another user's transcript can never be included.
+   * Secrets (password hashes, MFA secrets, backup codes, reset/verification
+   * tokens and security-question answers) are never exported.
+   */
+  async exportUserData(userId: string): Promise<Record<string, unknown>> {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        phone: true,
+        avatar_url: true,
+        date_of_birth: true,
+        gender: true,
+        language: true,
+        timezone: true,
+        provider: true,
+        email_verified: true,
+        created_at: true,
+        updated_at: true,
+        notification_email_enabled: true,
+        notification_push_enabled: true,
+        notification_in_app_enabled: true,
+        notification_security_enabled: true,
+        profile_public: true,
+        show_email: true,
+        show_phone: true,
+        show_activity_status: true,
+        learning_level: true,
+        daily_study_minutes: true,
+        daily_word_goal: true,
+        daily_goal: true,
+        native_language: true,
+        target_language: true,
+        streak_count: true,
+        total_xp: true,
+        user_roles: { select: { roles: { select: { name: true } } } },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const [
+      devices,
+      securityQuestions,
+      loginHistory,
+      notifications,
+      tokenBalance,
+      tokenTransactions,
+      decks,
+      completions,
+      srsEvents,
+      cardProgress,
+      reviewSessions,
+      writingSubmissions,
+      speakingSubmissions,
+      readingPassages,
+      conversations,
+      quizAttempts,
+      streaks,
+      badges,
+      aiOperations,
+      creditGrants,
+    ] = await Promise.all([
+      this.prisma.user_devices.findMany({ where: { user_id: userId } }),
+      this.prisma.security_questions.findMany({
+        where: { user_id: userId },
+        select: { question: true, sort_order: true },
+      }),
+      this.prisma.login_history.findMany({ where: { user_id: userId } }),
+      this.prisma.notifications.findMany({ where: { user_id: userId } }),
+      this.prisma.user_token_balance.findUnique({ where: { user_id: userId } }),
+      this.prisma.token_transactions.findMany({ where: { user_id: userId } }),
+      this.prisma.decks.findMany({ where: { creator_id: userId }, include: { cards: true } }),
+      this.prisma.learning_completions.findMany({ where: { user_id: userId } }),
+      this.prisma.srs_review_events.findMany({ where: { user_id: userId } }),
+      this.prisma.user_card_progress.findMany({ where: { user_id: userId } }),
+      this.prisma.review_sessions.findMany({ where: { user_id: userId } }),
+      this.prisma.writing_submissions.findMany({ where: { user_id: userId } }),
+      this.prisma.speaking_submissions.findMany({ where: { user_id: userId } }),
+      this.prisma.reading_passages.findMany({ where: { generated_by_user_id: userId } }),
+      this.prisma.chat_conversations.findMany({
+        where: { user_id: userId },
+        include: { chat_messages: true },
+      }),
+      this.prisma.quiz_attempts.findMany({ where: { user_id: userId } }),
+      this.prisma.user_streaks.findMany({ where: { user_id: userId } }),
+      this.prisma.user_badges.findMany({ where: { user_id: userId } }),
+      this.prisma.ai_operations.findMany({ where: { user_id: userId } }),
+      // Generated Prisma client predates the BILL-05 model; see the same
+      // narrow-delegate workaround in tokens.service.ts (grantDelegate).
+      (this.prisma as any).daily_credit_grants?.findMany({
+        where: { user_id: userId },
+      }) ?? Promise.resolve([]),
+    ]);
+
+    return {
+      exportedAt: new Date().toISOString(),
+      profile: user,
+      learningPreferences: mapLearningPreferences(user),
+      devices: devices.map((d: any) => ({
+        id: d.id,
+        deviceName: d.device_name,
+        browser: d.browser,
+        os: d.operating_system,
+        ipAddress: d.ip_address,
+        isTrusted: d.trusted,
+        lastSeenAt: d.last_active_at,
+        createdAt: d.created_at,
+      })),
+      securityQuestions,
+      loginHistory,
+      notifications,
+      tokens: { balance: tokenBalance, transactions: tokenTransactions },
+      decks,
+      learningCompletions: completions,
+      srsReviewEvents: srsEvents,
+      cardProgress,
+      reviewSessions,
+      writingSubmissions,
+      speakingSubmissions,
+      readingPassages,
+      conversations,
+      quizAttempts,
+      streaks,
+      badges,
+      aiOperations,
+      dailyCreditGrants: creditGrants,
+    };
+  }
+
+  /**
+   * Delete every row owned by the user, including auth records the scheduled
+   * purge does not cover and learning rows that would otherwise survive the
+   * soft-delete/anonymize flow. Only the users row itself is left for the
+   * scheduler to finalize; FK cascades remove nested cards/messages once the
+   * parent decks/conversations are gone.
+   */
+  async purgeUserData(userId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user_badges.deleteMany({ where: { user_id: userId } });
+      await tx.user_streaks.deleteMany({ where: { user_id: userId } });
+      await tx.quiz_attempts.deleteMany({ where: { user_id: userId } });
+      await tx.quizzes.deleteMany({ where: { creator_id: userId } });
+      await tx.chat_conversations.deleteMany({ where: { user_id: userId } });
+      await tx.reading_passages.deleteMany({
+        where: { generated_by_user_id: userId },
+      });
+      await tx.speaking_submissions.deleteMany({ where: { user_id: userId } });
+      await tx.writing_submissions.deleteMany({ where: { user_id: userId } });
+      await tx.review_sessions.deleteMany({ where: { user_id: userId } });
+      await tx.learning_completions.deleteMany({ where: { user_id: userId } });
+      await tx.srs_review_events.deleteMany({ where: { user_id: userId } });
+      await tx.user_card_progress.deleteMany({ where: { user_id: userId } });
+      await tx.decks.deleteMany({ where: { creator_id: userId } });
+      await tx.ai_operations.deleteMany({ where: { user_id: userId } });
+      // Stale generated client: optional narrow delegate (see export above).
+      await (tx as any).daily_credit_grants?.deleteMany({
+        where: { user_id: userId },
+      });
+      await tx.token_transactions.deleteMany({ where: { user_id: userId } });
+      await tx.user_token_balance.deleteMany({ where: { user_id: userId } });
+      await tx.notifications.deleteMany({ where: { user_id: userId } });
+      await tx.login_history.deleteMany({ where: { user_id: userId } });
+      await tx.login_attempts.deleteMany({ where: { user_id: userId } });
+      await tx.audit_logs.deleteMany({ where: { user_id: userId } });
+      await tx.security_questions.deleteMany({ where: { user_id: userId } });
+      await tx.user_devices.deleteMany({ where: { user_id: userId } });
+      await tx.mfa_secrets.deleteMany({ where: { user_id: userId } });
+      await tx.verification_tokens.deleteMany({ where: { user_id: userId } });
+      await tx.oauth_accounts.deleteMany({ where: { user_id: userId } });
+      await tx.password_history.deleteMany({ where: { user_id: userId } });
+      await tx.refresh_tokens.deleteMany({ where: { user_id: userId } });
+      await tx.user_roles.deleteMany({ where: { users_id: userId } });
+    });
+
+    // The avatar is the only user-owned file outside the DB. Reuse the
+    // validated unlink logic so a crafted avatar_url cannot traverse paths.
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      select: { avatar_url: true },
+    });
+    if (user?.avatar_url) {
+      const filename = user.avatar_url.replace(/^\/uploads\//, '');
+      const uploadDir = path.join(process.cwd(), 'uploads');
+      const resolvedPath = path.resolve(uploadDir, filename);
+      if (resolvedPath.startsWith(path.resolve(uploadDir) + path.sep)) {
+        try {
+          if (fs.existsSync(resolvedPath)) fs.unlinkSync(resolvedPath);
+        } catch (err) {
+          this.logger.warn(`Failed to delete avatar file: ${err}`);
+        }
+      }
+    }
+    await this.prisma.users.update({
+      where: { id: userId },
+      data: { avatar_url: null, fcm_token: null, is_active: false },
+    });
+  }
+
   async getLoginHistory(
     userId: string,
     page: number,

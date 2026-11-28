@@ -1,11 +1,85 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Groq from 'groq-sdk';
+import Groq, { APIConnectionTimeoutError, APIUserAbortError } from 'groq-sdk';
 
 type ChatMsg = { role: string; content: string };
 
 /** Bounded call duration so a hung provider cannot hold API workers/sockets. */
 const GROQ_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Safe, stable error codes understood by chat orchestration (see REL-01). */
+export type ProviderErrorCode =
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_ABORTED';
+
+export interface ProviderErrorPayload {
+  code: ProviderErrorCode;
+  message: string;
+  retryable: boolean;
+  /** True only for caller-requested cancellation, never for provider failures. */
+  aborted: boolean;
+  statusCode: number;
+}
+
+/**
+ * Only sanitized fields cross the provider boundary. Provider-supplied text,
+ * payloads and stacks are logged server-side and never placed in the response.
+ */
+export class ProviderException extends HttpException {
+  readonly code: ProviderErrorCode;
+  readonly retryable: boolean;
+  readonly aborted: boolean;
+
+  constructor(payload: ProviderErrorPayload) {
+    super(
+      {
+        code: payload.code,
+        message: payload.message,
+        retryable: payload.retryable,
+        aborted: payload.aborted,
+      },
+      payload.statusCode,
+    );
+    this.code = payload.code;
+    this.retryable = payload.retryable;
+    this.aborted = payload.aborted;
+  }
+
+  /** Explicit accessor for SSE orchestration error events. */
+  getPayload(): ProviderErrorPayload {
+    return {
+      code: this.code,
+      message: this.message,
+      retryable: this.retryable,
+      aborted: this.aborted,
+      statusCode: this.getStatus(),
+    };
+  }
+}
+
+export interface ChatStreamOptions {
+  /** Cancellation signal supplied by chat orchestration on disconnect. */
+  signal?: AbortSignal;
+}
+
+/** True when the signal has been cancelled or a cancellation error reached us. */
+export function isProviderAbort(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  if (err instanceof APIUserAbortError) return true;
+  if (err instanceof Error && err.name === 'AbortError') return true;
+  return false;
+}
+
+function isProviderTimeout(err: unknown): boolean {
+  return (
+    err instanceof APIConnectionTimeoutError ||
+    (err instanceof Error &&
+      (err.name === 'TimeoutError' ||
+        err.name === 'APIConnectionTimeoutError' ||
+        /timed?\s?out/i.test(err.message)))
+  );
+}
 
 @Injectable()
 export class GroqService {
@@ -41,13 +115,21 @@ export class GroqService {
     return this._groqChat(msgs);
   }
 
+  /**
+   * Async iterable of text tokens. A caller-supplied signal is propagated to
+   * the provider request and checked before every yield, so cancellation stops
+   * the generator promptly even if the SDK does not surface an abort error.
+   */
   async *chatStream(
     messages: ChatMsg[],
     systemPrompt?: string,
+    options: ChatStreamOptions = {},
   ): AsyncGenerator<string> {
+    const { signal } = options;
+    if (signal?.aborted) return;
     const msgs = this._buildMessages(messages, systemPrompt);
     this.logger.log(`Stream request: model=${this.model}`);
-    yield* this._groqStream(msgs);
+    yield* this._groqStream(msgs, signal);
   }
 
   private _buildMessages(
@@ -61,13 +143,47 @@ export class GroqService {
   }
 
   /**
-   * Convert provider/SDK errors into a generic Nest exception so raw request
-   * details (URLs, params, provider payloads) never reach API clients —
-   * especially through the SSE stream controller's error serialization.
+   * Log provider details server-side for operators, then throw only a fixed
+   * code/message. Raw err.message, String(err) and SDK payloads never cross
+   * this boundary — controllers otherwise serialize them into SSE responses.
    */
-  private _serviceError(err: unknown): ServiceUnavailableException {
-    this.logger.error(`Groq request failed: ${err instanceof Error ? err.message : String(err)}`);
-    return new ServiceUnavailableException('AI service is temporarily unavailable');
+  private _providerError(
+    err: unknown,
+    signal?: AbortSignal,
+  ): ProviderException {
+    const aborted = isProviderAbort(err, signal);
+    const timedOut = !aborted && isProviderTimeout(err);
+
+    this.logger.error(
+      `Groq request failed: ${timedOut ? 'timeout' : aborted ? 'aborted' : 'provider error'}` +
+        ` | metadata: ${err instanceof Error ? err.name : typeof err}`,
+    );
+
+    if (aborted) {
+      return new ProviderException({
+        code: 'PROVIDER_ABORTED',
+        message: 'AI request was cancelled',
+        retryable: false,
+        aborted: true,
+        statusCode: 499,
+      });
+    }
+    if (timedOut) {
+      return new ProviderException({
+        code: 'PROVIDER_TIMEOUT',
+        message: 'AI service timed out',
+        retryable: true,
+        aborted: false,
+        statusCode: 504,
+      });
+    }
+    return new ProviderException({
+      code: 'PROVIDER_UNAVAILABLE',
+      message: 'AI service is temporarily unavailable',
+      retryable: true,
+      aborted: false,
+      statusCode: 503,
+    });
   }
 
   private async _groqChat(
@@ -83,7 +199,7 @@ export class GroqService {
         top_p: 1,
       }, { timeout: GROQ_REQUEST_TIMEOUT_MS });
     } catch (err) {
-      throw this._serviceError(err);
+      throw this._providerError(err);
     }
     const content = completion.choices[0]?.message?.content || '';
     this.logger.log(`Groq response received (${content.length} chars)`);
@@ -92,8 +208,13 @@ export class GroqService {
 
   private async *_groqStream(
     messages: { role: string; content: string }[],
+    signal?: AbortSignal,
   ): AsyncGenerator<string> {
     let stream;
+    const requestOptions = {
+      timeout: GROQ_REQUEST_TIMEOUT_MS,
+      ...(signal ? { signal } : {}),
+    };
     try {
       stream = await this.groqClient.chat.completions.create({
         model: this.model,
@@ -102,19 +223,40 @@ export class GroqService {
         max_completion_tokens: 1024,
         top_p: 1,
         stream: true,
-      }, { timeout: GROQ_REQUEST_TIMEOUT_MS });
+      }, requestOptions);
     } catch (err) {
-      // The SSE controller serializes thrown errors; only a sanitized Nest
-      // exception may cross this boundary.
-      throw this._serviceError(err);
+      throw this._providerError(err, signal);
     }
+
+    let streamIterator: AsyncIterator<Groq.Chat.ChatCompletionChunk> | undefined;
+    let cancelled = false;
     try {
-      for await (const chunk of stream) {
-        const token = chunk.choices[0]?.delta?.content || '';
+      streamIterator = stream[Symbol.asyncIterator]();
+      while (!cancelled) {
+        // Yielding is a suspension point: the client may disconnect while the
+        // consumer is busy, so check again immediately before each value.
+        if (signal?.aborted) break;
+        let next: IteratorResult<Groq.Chat.ChatCompletionChunk>;
+        try {
+          next = await streamIterator.next();
+        } catch (err) {
+          // Caller cancellation is a benign end of stream, not a provider
+          // failure; any other error is mapped before leaving the adapter.
+          if (isProviderAbort(err, signal)) {
+            cancelled = true;
+            continue;
+          }
+          throw this._providerError(err, signal);
+        }
+        if (signal?.aborted) break;
+        if (next.done) break;
+        const token = next.value.choices[0]?.delta?.content || '';
         if (token) yield token;
       }
-    } catch (err) {
-      throw this._serviceError(err);
+    } finally {
+      // Explicitly close the SDK stream so a consumer `break` aborts the
+      // underlying provider connection instead of leaving it open.
+      await streamIterator?.return?.().catch(() => undefined);
     }
   }
 }

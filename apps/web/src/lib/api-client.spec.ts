@@ -132,9 +132,9 @@ describe('apiClient', () => {
     mockSetAccessToken.mockImplementation((token: string | null) => {
       currentToken = token;
     });
-    let resolveFetch: (value: unknown) => void = () => {};
+    let resolveFetch: (value: Response) => void = () => {};
     vi.mocked(fetch).mockImplementation(
-      () => new Promise((resolve) => { resolveFetch = resolve; }),
+      () => new Promise<Response>((resolve) => { resolveFetch = resolve; }),
     );
     mockClient.mockImplementation((config: RequestConfig) => ({ config }));
 
@@ -145,7 +145,7 @@ describe('apiClient', () => {
     resolveFetch({
       ok: true,
       json: async () => ({ data: { accessToken: 'fresh-token' } }),
-    });
+    } as unknown as Response);
     await Promise.all([first, second]);
     expect(fetch).toHaveBeenCalledTimes(1);
   });

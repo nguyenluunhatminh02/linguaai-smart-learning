@@ -70,13 +70,28 @@ export class SrsService {
     };
   }
 
+  /**
+   * A replayed operation must not create progress for a card that is no longer
+   * visible to the caller (e.g. a private deck was unlisted after the first
+   * review). This check runs before the replay response is returned.
+   */
+  private async assertCardAccess(userId: string, cardId: string) {
+    const card = await this.prisma.cards.findFirst({
+      where: { id: cardId, retired_at: null, decks: { OR: [{ creator_id: userId }, { is_public: true }] } },
+      select: { id: true },
+    });
+    if (!card) throw new NotFoundException('Card not found');
+    return card;
+  }
+
   async reviewCard(userId: string, dto: ReviewCardDto) {
-    const replay = (event: { user_id: string; card_id: string; result: Prisma.JsonValue }) => {
+    const replay = async (event: { user_id: string; card_id: string; result: Prisma.JsonValue }) => {
       if (event.user_id !== userId || event.card_id !== dto.cardId) {
         throw new ConflictException('Review operation already exists');
       }
       const saved = event.result as { grade: number; response: Prisma.JsonObject };
       if (saved.grade !== dto.grade) throw new ConflictException('Review operation already exists');
+      await this.assertCardAccess(userId, dto.cardId);
       return saved.response;
     };
 
@@ -179,7 +194,13 @@ export class SrsService {
   async startSession(userId: string, dto: StartSessionDto) {
     if (dto.sessionId) {
       const existing = await this.prisma.review_sessions.findUnique({ where: { id: dto.sessionId } });
-      if (existing) return this.confirmSession(existing, userId, dto.deckId);
+      if (existing) {
+        this.confirmSession(existing, userId, dto.deckId);
+        // A replay must not bypass the deck visibility check applied to a
+        // fresh session, even when the session itself belongs to the caller.
+        await this.assertDeckAccess(userId, dto.deckId);
+        return existing;
+      }
     }
     await this.assertDeckAccess(userId, dto.deckId);
     try {
@@ -271,7 +292,15 @@ export class SrsService {
 
   async getForecast(userId: string, days = 30) {
     const allProgress = await this.prisma.user_card_progress.findMany({
-      where: { user_id: userId, cards: { retired_at: null } },
+      where: {
+        user_id: userId,
+        cards: {
+          retired_at: null,
+          // Forecast is derived from the same visible-card policy used by
+          // stats/dashboard; private decks of other users are excluded.
+          decks: { OR: [{ creator_id: userId }, { is_public: true }] },
+        },
+      },
     });
     const forecast: { date: string; count: number }[] = [];
     const now = new Date();

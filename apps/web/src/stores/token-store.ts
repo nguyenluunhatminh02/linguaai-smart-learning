@@ -2,7 +2,13 @@ import { create } from "zustand";
 import apiClient from "@/lib/api-client";
 
 /* ────────────────────────────────────────────────────
- * Token costs for each AI feature (tokens consumed per use)
+ * Display-only cost labels.
+ *
+ * These values are NOT a billing source of truth. The server pricing catalog
+ * (TokensService.getPricingCatalog) owns prices and the authoritative balance.
+ * This copy exists only for UI labels until the read-only catalog is consumed
+ * directly; it must never be used for debit arithmetic, authorization, or to
+ * construct client-side ledger entries.
  * ──────────────────────────────────────────────────── */
 export const TOKEN_COSTS = {
   ai_chat: 5, // per message
@@ -33,7 +39,7 @@ export const TOKEN_FEATURE_LABELS: Record<AIFeature, string> = {
 };
 
 /* ────────────────────────────────────────────────────
- * Token packages for purchase
+ * Token packages for display only. Purchases are server-owned.
  * ──────────────────────────────────────────────────── */
 export interface TokenPackage {
   id: string;
@@ -84,7 +90,9 @@ export const TOKEN_PACKAGES: TokenPackage[] = [
 ];
 
 /* ────────────────────────────────────────────────────
- * Token usage history entry
+ * Read models. Only server ledger rows are stored in `transactions`.
+ * `history` is retained as an empty, legacy display field; the client never
+ * synthesizes entries for it.
  * ──────────────────────────────────────────────────── */
 export interface TokenUsage {
   id: string;
@@ -106,8 +114,13 @@ export interface TokenTransaction {
   createdAt?: string;
 }
 
+/** Accept only usable, server-supplied amounts; never default or guess. */
+function isServerAmount(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 /* ────────────────────────────────────────────────────
- * Zustand store
+ * Zustand store: a read model of server state only.
  * ──────────────────────────────────────────────────── */
 interface TokenState {
   balance: number;
@@ -116,102 +129,84 @@ interface TokenState {
   history: TokenUsage[];
   transactions: TokenTransaction[];
 
+  /** Adopt the balance returned by GET /tokens/balance. */
   loadBalance: () => Promise<void>;
-  consumeTokens: (feature: AIFeature) => Promise<boolean>;
-  addTokens: (amount: number) => void;
-  canAfford: (feature: AIFeature) => boolean;
+  /** Adopt only server ledger rows from GET /tokens/history. */
   loadHistory: () => Promise<void>;
+  /** Adopt an authoritative balance carried by a server operation result. */
+  syncBalance: (balance: unknown, todayUsed?: unknown) => void;
+  /** Drop all cached token state without performing any request. */
+  clear: () => void;
+  /** Display hint only — the server enforces quota. */
+  canAfford: (feature: AIFeature) => boolean;
 }
 
-const FREE_DAILY_TOKENS = 30; // free users get 30 tokens/day
-
-export const useTokenStore = create<TokenState>((set, get) => ({
-  balance: FREE_DAILY_TOKENS,
+const EMPTY_STATE = {
+  balance: 0,
   todayUsed: 0,
   isLoading: false,
-  history: [],
-  transactions: [],
+  history: [] as TokenUsage[],
+  transactions: [] as TokenTransaction[],
+};
+
+export const useTokenStore = create<TokenState>((set, get) => ({
+  // Unknown until the server says otherwise: 0 is an empty placeholder, not
+  // a claimed free allowance.
+  ...EMPTY_STATE,
 
   loadBalance: async () => {
     set({ isLoading: true });
     try {
       const { data } = await apiClient.get("/tokens/balance");
-      const payload = data.data ?? data;
-      set({
-        balance: payload.balance ?? 0,
-        todayUsed: payload.todayUsed ?? 0,
-        isLoading: false,
-      });
+      // apiClient unwraps `data.data` and camelizes keys; the fallback keeps
+      // compatibility with wrapped/mocked payloads.
+      const payload = (data?.data ?? data) as Record<string, unknown> | null | undefined;
+      const patch: Partial<TokenState> = {};
+
+      if (isServerAmount(payload?.balance)) patch.balance = payload.balance;
+      if (isServerAmount(payload?.todayUsed)) patch.todayUsed = payload.todayUsed;
+      if (Object.keys(patch).length > 0) set(patch);
+      // Missing/invalid values are ignored; no default is invented.
     } catch {
-      // Server unavailable — keep last known balance
+      // Server unavailable: keep the last known server-reported balance.
+    } finally {
       set({ isLoading: false });
     }
-  },
-
-  consumeTokens: async (feature: AIFeature) => {
-    const cost = TOKEN_COSTS[feature];
-
-    // Call backend — server is the ONLY source of truth.
-    // NO optimistic fallback to prevent client-side balance manipulation.
-    try {
-      const { data } = await apiClient.post("/tokens/consume", {
-        feature,
-        cost,
-      });
-      const payload = data.data ?? data;
-      const newBalance = payload.balance;
-      const newTodayUsed = get().todayUsed + cost;
-
-      set({ balance: newBalance, todayUsed: newTodayUsed });
-
-      const entry: TokenUsage = {
-        id: crypto.randomUUID(),
-        feature,
-        cost,
-        createdAt: new Date().toISOString(),
-      };
-      set((state) => ({ history: [entry, ...state.history].slice(0, 50) }));
-
-      // Reload transactions history
-      get().loadHistory().catch(() => {});
-
-      return true;
-    } catch (err) {
-      const error = err as { response?: { status?: number }; message?: string };
-      // 400 = insufficient balance (expected rejection)
-      if (error?.response?.status === 400) return false;
-
-      // Any other error (network, 5xx) = hard fail.
-      // Do NOT allow optimistic consumption — that would be a security hole.
-      // The user must have connectivity to use paid features.
-      console.error(`Token consumption failed for ${feature}:`, error.message);
-      return false;
-    }
-  },
-
-  addTokens: async (amount: number) => {
-    try {
-      const { data } = await apiClient.post("/tokens/purchase", { amount });
-      const payload = data.data ?? data;
-      set({ balance: payload.balance });
-      
-      // Reload transactions history
-      get().loadHistory().catch(() => {});
-    } catch {
-      // Server unavailable — balance unchanged
-    }
-  },
-
-  canAfford: (feature: AIFeature) => {
-    return get().balance >= TOKEN_COSTS[feature];
   },
 
   loadHistory: async () => {
     try {
       const { data } = await apiClient.get("/tokens/history");
-      set({ transactions: data || [] });
+      const payload = (data?.data ?? data) as
+        | TokenTransaction[]
+        | { transactions?: TokenTransaction[] }
+        | null
+        | undefined;
+      const rows = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.transactions)
+          ? payload.transactions
+          : null;
+      if (rows) set({ transactions: rows });
     } catch {
-      // silently handle
+      // Keep the last server-reported history.
     }
+  },
+
+  syncBalance: (balance, todayUsed) => {
+    const patch: Partial<TokenState> = {};
+    if (isServerAmount(balance)) patch.balance = balance;
+    if (todayUsed !== undefined && isServerAmount(todayUsed)) patch.todayUsed = todayUsed;
+    if (Object.keys(patch).length > 0) set(patch);
+  },
+
+  clear: () => {
+    set({ ...EMPTY_STATE, history: [], transactions: [] });
+  },
+
+  canAfford: (feature: AIFeature) => {
+    // Display hint for cost labels only. The server is authoritative and may
+    // reject the operation for quota, reservation, or policy reasons.
+    return get().balance >= TOKEN_COSTS[feature];
   },
 }));

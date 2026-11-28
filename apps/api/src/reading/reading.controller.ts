@@ -82,7 +82,7 @@ export class ReadingController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a reading passage by ID' })
-  getById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.readingService.getById(id);
+  getById(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.readingService.getById(userId, id);
   }
 }

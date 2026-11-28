@@ -1,0 +1,96 @@
+# Minimal CI skeleton (OPS-02). Unit tests only: no real provider keys,
+# no service containers, no build-image or deploy jobs.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Fake, non-secret values only. Never read real keys or .env files in CI.
+  NODE_ENV: test
+  APP_ENV: test
+  CI: "true"
+  DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/linguaai_ci
+  JWT_SECRET: ci-only-jwt-secret-not-a-real-key-0123456789
+  JWT_REFRESH_SECRET: ci-only-refresh-secret-not-a-real-key-0123456789
+  AI_SERVICE_API_KEYS: ci-only-ai-service-key-0123456789
+  GROQ_API_KEY: ci-fake-groq-key
+  GROQ_MODEL: llama-3.3-70b-versatile
+  AI_SERVICE_URL: http://127.0.0.1:8000
+  FRONTEND_URL: http://127.0.0.1:3000
+
+jobs:
+  checks:
+    name: Lint, type-check and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter api db:generate
+
+      - name: Type-check API
+        run: pnpm --filter api type-check
+
+      - name: Type-check web
+        run: pnpm --filter web type-check
+
+      - name: Lint API
+        run: pnpm --filter api lint
+
+      - name: Lint web
+        run: pnpm --filter web lint
+
+      - name: API unit tests
+        run: pnpm --filter api test -- --runInBand
+
+      - name: Web unit tests
+        run: pnpm --filter web test:run
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.3"
+          cache: pip
+          cache-dependency-path: apps/ai-service/requirements.txt
+
+      - name: Install AI service test dependencies in a venv
+        working-directory: apps/ai-service
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt "pytest==8.3.5" "pytest-asyncio==0.25.3"
+          python -m pip check
+
+      - name: AI service unit tests
+        working-directory: apps/ai-service
+        run: |
+          . .venv/bin/activate
+          python -m pytest -q

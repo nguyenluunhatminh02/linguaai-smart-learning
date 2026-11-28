@@ -1,7 +1,8 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, quiz_attempts, quiz_questions } from "../generated/prisma";
 import { AiClientService } from "../common/services/ai-client.service";
+import { AnalyticsService } from "../analytics/analytics.service";
 import {
   CreateQuizDto,
   SubmitQuizDto,
@@ -48,6 +49,13 @@ interface StoredAnswer extends GradedAnswer {
 }
 
 const QUIZ_QUESTION_TYPES = new Set(["mcq", "true_false", "fill_blank"]);
+
+// Activity rewards are computed server-side from persisted attempt data so a
+// client cannot inflate XP by submitting a forged score or duration.
+const QUIZ_BASE_XP = 10;
+const XP_PER_CORRECT_ANSWER = 10;
+const DEFAULT_QUIZ_TIME_LIMIT_MINUTES = 15;
+const MAX_ABS_MINUTES = 24 * 60;
 
 /**
  * Validate a single AI-generated question before it is persisted. Throws for
@@ -104,10 +112,38 @@ function validateGeneratedQuestion(q: any, index: number) {
 
 @Injectable()
 export class QuizService {
+  private readonly logger = new Logger(QuizService.name);
+
   constructor(
     private prisma: PrismaService,
     private aiClient: AiClientService,
+    // Optional so quiz completions stay functional before QuizModule registers AnalyticsModule.
+    @Optional() private analytics?: AnalyticsService,
   ) {}
+
+  private xpForAttempt(score: number, total: number): number {
+    if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0) return QUIZ_BASE_XP;
+    const bounded = Math.min(Math.max(0, Math.floor(score)), Math.floor(total));
+    return QUIZ_BASE_XP + bounded * XP_PER_CORRECT_ANSWER;
+  }
+
+  private minutesForAttempt(durationSeconds: number, timeLimitMinutes?: number | null): number {
+    const seconds = Number.isFinite(durationSeconds) && durationSeconds > 0 ? Math.floor(durationSeconds) : 0;
+    const configured = Number(timeLimitMinutes) || DEFAULT_QUIZ_TIME_LIMIT_MINUTES;
+    const cap = Math.min(Math.max(1, configured), MAX_ABS_MINUTES);
+    return Math.min(Math.max(1, Math.ceil(seconds / 60)), cap);
+  }
+
+  private async awardActivity(userId: string, xp: number, minutes: number): Promise<void> {
+    if (!this.analytics) return;
+    try {
+      await this.analytics.recordActivity(userId, xp, minutes, 0);
+    } catch (error) {
+      // A failed analytics write must not turn a committed submission into a 500
+      // or fall through into the P2002 replay handler below.
+      this.logger.warn(`Quiz activity recording failed for user ${userId}: ${String(error)}`);
+    }
+  }
 
   async create(userId: string, dto: CreateQuizDto) {
     const quiz = await this.prisma.quizzes.create({
@@ -246,6 +282,13 @@ export class QuizService {
           duration_seconds: dto.durationSeconds,
         },
       });
+      // Award only for a newly persisted attempt; the replay paths below must
+      // never credit XP a second time.
+      await this.awardActivity(
+        userId,
+        this.xpForAttempt(attempt.score, attempt.total_questions),
+        this.minutesForAttempt(dto.durationSeconds, quiz.time_limit_minutes),
+      );
       return this.submissionResult(attempt, userId, dto.quizId);
     } catch (error) {
       if (!dto.attemptId || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;

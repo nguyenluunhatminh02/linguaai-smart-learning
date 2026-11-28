@@ -47,8 +47,11 @@ export class DecksController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get deck by ID' })
-  findById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.decksService.findById(id);
+  findById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.decksService.findById(id, userId);
   }
 
   @Patch(':id')

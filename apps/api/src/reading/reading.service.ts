@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -162,8 +162,19 @@ export class ReadingService {
     return { items, total, page, pageSize: limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async getById(id: string) {
-    return this.prisma.reading_passages.findUnique({ where: { id } });
+  /**
+   * SEC-02: a passage belongs to the user who generated it. The ownership
+   * predicate lives in the repository query, so another user's valid UUID is
+   * indistinguishable from a missing one (404, never the passage body).
+   */
+  async getById(userId: string, id: string) {
+    const passage = await this.prisma.reading_passages.findFirst({
+      where: { id, generated_by_user_id: userId },
+    });
+    if (!passage) {
+      throw new NotFoundException('Reading passage not found');
+    }
+    return passage;
   }
 
   /**

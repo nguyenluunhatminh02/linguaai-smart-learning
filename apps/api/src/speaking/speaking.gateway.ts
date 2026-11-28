@@ -15,6 +15,14 @@ import Groq from 'groq-sdk';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokensService } from '../tokens/tokens.service';
+import {
+  MAX_UPLOAD_BYTES,
+  decodeStrictBase64,
+  extensionForMimeType,
+  hasAudioSignature,
+  isAllowedAudioMimeType,
+  normalizeMimeType,
+} from '../files/file-validation';
 
 type ExtWS = WebSocket & {
   _sid?: string;
@@ -40,11 +48,7 @@ const ALLOWED_LANGUAGES = new Set([
   'english', 'vietnamese', 'japanese', 'chinese', 'korean',
   'spanish', 'french', 'german',
 ]);
-const ALLOWED_MIME_TYPES = new Set([
-  'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg',
-  'audio/wav', 'audio/x-wav', 'audio/flac', 'audio/aac',
-]);
-const MAX_AUDIO_BASE64_LENGTH = 7 * 1024 * 1024; // ~5 MiB decoded audio
+const MAX_AUDIO_BASE64_LENGTH = Math.ceil(MAX_UPLOAD_BYTES / 3) * 4;
 const MAX_MESSAGES_PER_CONNECTION = 20;
 const MESSAGE_WINDOW_MS = 60_000;
 const MAX_PROMPT_TRANSCRIPT_LENGTH = 8_000;
@@ -205,13 +209,20 @@ export class SpeakingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     if (typeof payload?.audio !== 'string' ||
         payload.audio.length === 0 ||
-        payload.audio.length > MAX_AUDIO_BASE64_LENGTH ||
-        !/^[A-Za-z0-9+/]*={0,2}$/.test(payload.audio)) {
+        payload.audio.length > MAX_AUDIO_BASE64_LENGTH) {
       this.send(client, 'error', { message: 'Invalid or oversized audio data.' });
       return;
     }
-    const mime = typeof payload.mimeType === 'string' ? payload.mimeType.split(';')[0] : '';
-    if (!ALLOWED_MIME_TYPES.has(mime)) {
+    // Shared strict decoder: canonical base64, one decoded-byte budget for
+    // REST and WS, and no billable work before the payload is proven valid.
+    const buf = decodeStrictBase64(payload.audio);
+    if (!buf) {
+      this.send(client, 'error', { message: 'Invalid or oversized audio data.' });
+      return;
+    }
+    const mime = normalizeMimeType(payload.mimeType);
+    if (!isAllowedAudioMimeType(mime) ||
+        !hasAudioSignature(buf, mime)) {
       this.send(client, 'error', { message: 'Unsupported audio format.' });
       return;
     }
@@ -246,9 +257,10 @@ export class SpeakingGateway implements OnGatewayConnection, OnGatewayDisconnect
       // ── Phase 1: Groq Whisper STT ──────────────────────────
       this.send(client, 'status', { phase: 'transcribing', message: 'Đang nhận dạng giọng nói...' });
 
-      const buf = Buffer.from(payload.audio, 'base64');
-      const ext = (mime.split('/')[1] || 'webm').replace('mpeg', 'mp3');
-      const audioFile = new File([buf], `speech.${ext}`, { type: mime });
+      const ext = extensionForMimeType(mime)!;
+      const audioBytes = new Uint8Array(buf.byteLength);
+      audioBytes.set(buf);
+      const audioFile = new File([audioBytes], `speech.${ext}`, { type: mime });
 
       const transcriptionResult = await this.groq.audio.transcriptions.create(
         {

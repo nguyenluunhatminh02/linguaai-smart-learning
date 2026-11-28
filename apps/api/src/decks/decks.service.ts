@@ -44,9 +44,21 @@ export class DecksService {
     return { items, total, page, pageSize: limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findById(id: string) {
+  /**
+   * Read a deck by id. Private decks are visible only to their creator; a
+   * non-owner gets the same 404 as a missing deck so ids cannot be probed.
+   * `userId` is optional only for internal existence checks without a caller
+   * (HTTP reads always pass the authenticated user id).
+   */
+  async findById(id: string, userId?: string) {
     const deck = await this.prisma.decks.findUnique({ where: { id } });
     if (!deck) throw new NotFoundException('Deck not found');
+    if (!userId || !deck.is_public) {
+      // Missing caller identity, or a private deck: only the owner may read.
+      if (!userId || deck.creator_id !== userId) {
+        throw new NotFoundException('Deck not found');
+      }
+    }
     return deck;
   }
 
@@ -65,7 +77,7 @@ export class DecksService {
   }
 
   async update(id: string, userId: string, dto: UpdateDeckDto) {
-    const deck = await this.findById(id);
+    const deck = await this.findById(id, userId);
     if (deck.creator_id !== userId) throw new ForbiddenException();
     const { isPublic, ...rest } = dto;
     return this.prisma.decks.update({
@@ -78,7 +90,7 @@ export class DecksService {
   }
 
   async remove(id: string, userId: string) {
-    const deck = await this.findById(id);
+    const deck = await this.findById(id, userId);
     if (deck.creator_id !== userId) throw new ForbiddenException();
 
     // Deleting a deck cascades to its cards, and from there to every learner's

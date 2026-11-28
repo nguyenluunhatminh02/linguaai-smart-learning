@@ -1,5 +1,30 @@
+"""Rate limiting, concurrency and budget guards for the AI service.
+
+The module keeps the existing ``limiter`` export and ``_rate_limit_key``
+function so current routers and tests keep working. On top of that it adds:
+
+* ``acquire_concurrency_slot`` — per-user and global upstream concurrency
+  guards backed by Redis, with a fail-closed policy for billable routes.
+* ``precheck_budget`` — daily token-budget guard, also Redis-backed.
+* ``release_concurrency_slot`` — call in a ``finally`` block to free a slot.
+
+The existing slowapi ``limiter`` is retained for the permissive per-minute
+limit on health and diagnostic routes. Billable routes should migrate to
+``feature_guard`` (see ``app.core.deps``) which uses the feature-specific
+limits from ``app.core.limits``.
+
+Redis failure policy: billable routes fail closed (no Redis, no spend).
+Health routes keep using the in-memory fallback so a Redis outage does not
+break readiness probes.
+"""
+
+from __future__ import annotations
+
 import hashlib
+import logging
 import os
+import sys
+from typing import Optional
 from urllib.parse import quote
 
 from dotenv import load_dotenv
@@ -7,8 +32,22 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+from app.core.limits import (
+    BUDGET_WINDOW_SECONDS,
+    DAILY_TOKEN_BUDGET,
+    ESTIMATED_TOKENS_PER_CHAR,
+    FAIL_CLOSED_ON_STORE_ERROR,
+    FEATURE_LIMITS,
+    MAX_CONCURRENT_GLOBAL,
+    MAX_CONCURRENT_PER_USER,
+    PATH_FEATURE_MAP,
+    RATE_WINDOW_SECONDS,
+)
+
 # Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger("rate_limit")
 
 # A single shared backend API key represents every end user, so on its own it
 # would put the whole platform in one rate-limit bucket. The gateway forwards a
@@ -16,7 +55,7 @@ load_dotenv()
 # gateway), which distinguishes users' requests without trusting a raw user id
 # from an unauthenticated caller. Fingerprints keep credentials/correlation ids
 # out of limiter storage and logs.
-_CALLER_HINTS = ("X-Request-ID", "X-User-ID")
+_CALLER_HINTS = ("X-Request-ID",)
 
 
 def _fingerprint(value: str) -> str:
@@ -28,23 +67,33 @@ def _rate_limit_key(request: Request) -> str:
 
     Every request coming from the NestJS backend carries the same X-API-Key, so
     that key alone would give the whole platform one shared bucket. A gateway-
-    supplied correlation/user id splits the bucket per end user; direct
+    supplied correlation id splits the bucket per end user; direct
     server-to-server calls without those headers keep using the shared key.
+
+    The key includes the request path so different features get separate
+    buckets even when they share a caller.
     """
     api_key = request.headers.get("X-API-Key")
     if not api_key:
         return get_remote_address(request)
 
     key_fingerprint = _fingerprint(api_key)
-    for header in _CALLER_HINTS:
-        hint = request.headers.get(header, "").strip()
-        if hint:
-            return f"key:{key_fingerprint}:user:{_fingerprint(hint)}"
+    # Prefer the server-sanitized id from RequestIDMiddleware; fall back to a
+    # header only when middleware has not run (e.g. direct limiter unit calls).
+    hint = getattr(request.state, "request_id", None)
+    if not hint:
+        for header in _CALLER_HINTS:
+            candidate = request.headers.get(header, "").strip()
+            if candidate:
+                hint = candidate
+                break
+    if hint:
+        path = request.url.path or ""
+        return f"key:{key_fingerprint}:user:{_fingerprint(hint)}:path:{path}"
     return f"key:{key_fingerprint}"
 
 
 # Get Redis connection parameters from environment
-import sys
 is_testing = "pytest" in sys.modules or os.getenv("APP_ENV") == "test"
 
 if is_testing:
@@ -74,3 +123,234 @@ limiter = Limiter(
     in_memory_fallback=["20/minute"],
     in_memory_fallback_enabled=True,
 )
+
+
+# ---------------------------------------------------------------------------
+# Redis-backed concurrency and budget guards
+# ---------------------------------------------------------------------------
+
+_redis_client = None
+_redis_unavailable = False
+
+
+def _get_redis():
+    """Return a Redis client, or None when Redis is unavailable.
+
+    The client is created lazily and cached. If the connection fails, the
+    module marks Redis as unavailable and subsequent calls return None
+    without retrying, so a Redis outage does not cause repeated connection
+    attempts on every request.
+    """
+    global _redis_client, _redis_unavailable
+    if _redis_unavailable:
+        return None
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        import redis.asyncio as aioredis
+
+        _redis_client = aioredis.from_url(redis_url, decode_responses=True)
+        return _redis_client
+    except Exception:
+        logger.exception("Redis connection failed; concurrency/budget guards disabled")
+        _redis_unavailable = True
+        return None
+
+
+def _concurrency_key(feature: str, api_key: str, scope: str) -> str:
+    """Return the Redis key for a concurrency slot.
+
+    ``scope`` is either ``user`` (per verified key) or ``global`` (all users).
+    """
+    if scope == "global":
+        return f"ai:concurrency:global:{feature}"
+    return f"ai:concurrency:user:{_fingerprint(api_key)}:{feature}"
+
+
+def _budget_key(feature: str) -> str:
+    return f"ai:budget:daily:{feature}"
+
+
+async def acquire_concurrency_slot(
+    feature: str,
+    api_key: str,
+    request: Request,
+) -> None:
+    """Reserve a concurrency slot for a billable request.
+
+    Raises ``ConcurrencyLimitExceededException`` if the per-user or global
+    limit is reached. Raises ``ProviderUnavailableException`` if Redis is
+    unreachable and the fail-closed policy is in effect.
+    """
+    from app.core.exceptions import (
+        ConcurrencyLimitExceededException,
+        ProviderUnavailableException,
+    )
+
+    r = _get_redis()
+    if r is None:
+        if FAIL_CLOSED_ON_STORE_ERROR:
+            raise ProviderUnavailableException("Concurrency guard unavailable")
+        return
+
+    user_key = _concurrency_key(feature, api_key, "user")
+    global_key = _concurrency_key(feature, api_key, "global")
+
+    try:
+        # Atomic increment with a TTL; the slot is released explicitly or
+        # expires after the request timeout. We use INCR + EXPIRE in a
+        # pipeline to avoid a race where the key is created but never expires.
+        async with r.pipeline(transaction=True) as pipe:
+            pipe.incr(user_key)
+            pipe.expire(user_key, 120)
+            pipe.incr(global_key)
+            pipe.expire(global_key, 120)
+            results = await pipe.execute()
+
+        user_count = results[0]
+        global_count = results[2]
+
+        if user_count > MAX_CONCURRENT_PER_USER:
+            await _decrement(r, user_key)
+            await _decrement(r, global_key)
+            raise ConcurrencyLimitExceededException(
+                f"Too many concurrent {feature} requests for this user"
+            )
+        if global_count > MAX_CONCURRENT_GLOBAL:
+            await _decrement(r, user_key)
+            await _decrement(r, global_key)
+            raise ConcurrencyLimitExceededException(
+                f"Too many concurrent {feature} requests globally"
+            )
+    except ConcurrencyLimitExceededException:
+        raise
+    except Exception:
+        logger.exception("Concurrency guard failed")
+        if FAIL_CLOSED_ON_STORE_ERROR:
+            raise ProviderUnavailableException("Concurrency guard unavailable")
+
+
+async def _decrement(r, key: str) -> None:
+    """Decrement a counter, deleting it if it reaches zero."""
+    try:
+        new_val = await r.decr(key)
+        if new_val <= 0:
+            await r.delete(key)
+    except Exception:
+        logger.exception("Failed to decrement concurrency counter %s", key)
+
+
+async def release_concurrency_slot(
+    feature: str,
+    api_key: str,
+) -> None:
+    """Release a concurrency slot after the request completes."""
+    r = _get_redis()
+    if r is None:
+        return
+    user_key = _concurrency_key(feature, api_key, "user")
+    global_key = _concurrency_key(feature, api_key, "global")
+    await _decrement(r, user_key)
+    await _decrement(r, global_key)
+
+
+async def check_rate_limit(feature: str, api_key: str) -> None:
+    """Check the per-feature request-per-minute limit for a verified key.
+
+    Unlike the permissive slowapi limiter kept for health/diagnostic routes,
+    this guard uses the roadmap feature-specific values (chat 10/min, content
+    3/min). The counter uses a 60-second TTL and fails closed for billable
+    routes when Redis is unavailable.
+    """
+    from app.core.exceptions import (
+        ProviderUnavailableException,
+        RateLimitExceededException,
+    )
+
+    if feature not in FEATURE_LIMITS:
+        raise RateLimitExceededException("Unknown AI feature")
+
+    r = _get_redis()
+    if r is None:
+        if FAIL_CLOSED_ON_STORE_ERROR:
+            raise ProviderUnavailableException("Rate guard unavailable")
+        return
+
+    key = f"ai:rate:{feature}:{_fingerprint(api_key)}"
+    limit = FEATURE_LIMITS[feature]
+    try:
+        count = await r.incr(key)
+        if count == 1:
+            await r.expire(key, RATE_WINDOW_SECONDS)
+        if count > limit:
+            raise RateLimitExceededException(
+                f"Too many {feature} requests", retry_after=RATE_WINDOW_SECONDS
+            )
+    except RateLimitExceededException:
+        raise
+    except Exception:
+        logger.exception("Rate guard failed")
+        if FAIL_CLOSED_ON_STORE_ERROR:
+            raise ProviderUnavailableException("Rate guard unavailable")
+
+
+async def precheck_budget(feature: str) -> None:
+    """Check that the daily budget for a feature has not been exhausted.
+
+    This is a precheck: the actual token usage is recorded after the provider
+    responds. If Redis is unavailable and fail-closed is on, the request is
+    rejected to prevent unbounded spend.
+    """
+    from app.core.exceptions import (
+        BudgetExceededException,
+        ProviderUnavailableException,
+    )
+
+    r = _get_redis()
+    if r is None:
+        if FAIL_CLOSED_ON_STORE_ERROR:
+            raise ProviderUnavailableException("Budget guard unavailable")
+        return
+
+    key = _budget_key(feature)
+    try:
+        current = await r.get(key)
+        if current is not None and int(current) >= DAILY_TOKEN_BUDGET:
+            raise BudgetExceededException(f"Daily {feature} budget exhausted")
+    except BudgetExceededException:
+        raise
+    except Exception:
+        logger.exception("Budget guard failed")
+        if FAIL_CLOSED_ON_STORE_ERROR:
+            raise ProviderUnavailableException("Budget guard unavailable")
+
+
+async def record_usage(feature: str, tokens: int) -> None:
+    """Record actual token usage against the daily budget.
+
+    Called after the provider responds with usage metadata. If Redis is
+    unavailable, the usage is logged but not recorded; the budget guard
+    will have already rejected the request if it was exhausted.
+    """
+    r = _get_redis()
+    if r is None:
+        return
+    key = _budget_key(feature)
+    try:
+        await r.incrby(key, tokens)
+        await r.expire(key, BUDGET_WINDOW_SECONDS)
+    except Exception:
+        logger.exception("Failed to record usage for %s", feature)
+
+
+def estimate_tokens(text: str) -> int:
+    """Estimate token count for budget precheck before the provider responds."""
+    return max(1, int(len(text) * ESTIMATED_TOKENS_PER_CHAR))
+
+
+def feature_for_path(path: str) -> Optional[str]:
+    """Map a request path to a feature name for guard keying."""
+    for prefix, feature in PATH_FEATURE_MAP.items():
+        if f"/{prefix}/" in path or path.endswith(f"/{prefix}"):
+            return feature
+    return None

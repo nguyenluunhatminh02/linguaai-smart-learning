@@ -5,14 +5,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Check,
-  Crown,
-  Zap,
-  Star,
   ChevronDown,
   ChevronUp,
   Coins,
-  Sparkles,
   Gift,
   MessageSquare,
   PenTool,
@@ -23,12 +18,8 @@ import {
   Mic,
   Map,
   Download,
-  CreditCard,
-  Loader2,
 } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import apiClient from "@/lib/api-client";
 import { useLanguageStore } from "@/stores/language-store";
 import { useEffect } from "react";
 import {
@@ -37,7 +28,6 @@ import {
   TOKEN_COSTS,
   TOKEN_FEATURE_LABELS,
   type AIFeature,
-  type TokenPackage,
 } from "@/stores/token-store";
 
 const pricingLocalDict = {
@@ -50,19 +40,10 @@ const pricingLocalDict = {
     colAmount: "Số lượng",
     colBalanceAfter: "Số dư sau",
     exportCsv: "Xuất CSV",
-    sandboxTitle: "Cổng thanh toán thử nghiệm",
-    cancel: "Hủy",
-    packagePrefix: "Gói",
-    receiveTokens: "Nhận {tokens} Tokens (bao gồm bonus)",
-    payWith: "Thanh toán",
-    cardName: "Tên trên thẻ",
-    cardNumber: "Số thẻ",
-    expiry: "Hạn sử dụng",
-    cvc: "CVC",
-    momoScan: "Quét mã MoMo để thanh toán",
-    sandboxWarning: "Đây là môi trường thử nghiệm giả lập.",
-    processing: "Đang xử lý giao dịch thử nghiệm...",
-    paymentUnavailable: "Không thể bắt đầu thanh toán. Vui lòng thử lại sau.",
+    purchaseComingSoon: "Nạp token sẽ sớm ra mắt",
+    purchaseComingSoonHint: "Thanh toán chưa khả dụng. Bạn vẫn nhận 30 token miễn phí mỗi ngày.",
+    faqPurchaseSoonQ: "Khi nào có thể mua token?",
+    faqPurchaseSoonA: "Tính năng nạp token bằng tiền đang được phát triển. Hiện bạn chỉ dùng được token miễn phí hàng ngày và token được cấp cho tài khoản.",
   },
   en: {
     historyTitle: "Token Transaction History",
@@ -73,19 +54,10 @@ const pricingLocalDict = {
     colAmount: "Amount",
     colBalanceAfter: "Balance After",
     exportCsv: "Export CSV",
-    sandboxTitle: "Experimental Payment Sandbox",
-    cancel: "Cancel",
-    packagePrefix: "Package",
-    receiveTokens: "Receive {tokens} Tokens (includes bonus)",
-    payWith: "Pay with",
-    cardName: "Cardholder Name",
-    cardNumber: "Card Number",
-    expiry: "Expiry",
-    cvc: "CVC",
-    momoScan: "Scan MoMo QR to pay",
-    sandboxWarning: "This is a simulated testing environment.",
-    processing: "Processing simulated transaction...",
-    paymentUnavailable: "Could not start checkout. Please try again later.",
+    purchaseComingSoon: "Token top-up coming soon",
+    purchaseComingSoonHint: "Payments are not available yet. You still receive 30 free tokens every day.",
+    faqPurchaseSoonQ: "When can I buy tokens?",
+    faqPurchaseSoonA: "Paid token top-up is still under development. For now you can use daily free tokens and any tokens granted to your account.",
   },
   ja: {
     historyTitle: "トークン取引履歴",
@@ -96,19 +68,10 @@ const pricingLocalDict = {
     colAmount: "数量",
     colBalanceAfter: "取引後残高",
     exportCsv: "CSV出力",
-    sandboxTitle: "テスト用決済ゲートウェイ",
-    cancel: "キャンセル",
-    packagePrefix: "パック",
-    receiveTokens: "{tokens}トークンを受け取る（ボーナス含む）",
-    payWith: "決済",
-    cardName: "カード名義",
-    cardNumber: "カード番号",
-    expiry: "有効期限",
-    cvc: "CVC",
-    momoScan: "MoMo QRコードをスキャンして決済",
-    sandboxWarning: "これはテスト用のシミュレーション環境です。",
-    processing: "テスト決済を処理中...",
-    paymentUnavailable: "決済を開始できませんでした。しばらくしてからもう一度お試しください。",
+    purchaseComingSoon: "トークン購入は近日公開",
+    purchaseComingSoonHint: "決済はまだ利用できません。毎日30トークン無料で受け取れます。",
+    faqPurchaseSoonQ: "トークンはいつ購入できますか？",
+    faqPurchaseSoonA: "有料トークンの購入機能は開発中です。現在は毎日の無料トークンと付与されたトークンをご利用ください。",
   },
   ko: {
     historyTitle: "토큰 거래 내역",
@@ -119,19 +82,10 @@ const pricingLocalDict = {
     colAmount: "수량",
     colBalanceAfter: "거래 후 잔액",
     exportCsv: "CSV 내보내기",
-    sandboxTitle: "테스트 결제 게이트웨이",
-    cancel: "취소",
-    packagePrefix: "패키지",
-    receiveTokens: "{tokens}토큰 받기 (보너스 포함)",
-    payWith: "결제하기",
-    cardName: "카드 소유자 이름",
-    cardNumber: "카드 번호",
-    expiry: "만료일",
-    cvc: "CVC",
-    momoScan: "MoMo QR 스캔하여 결제",
-    sandboxWarning: "이것은 시뮬레이션된 테스트 환경입니다.",
-    processing: "시뮬레이션된 결제 처리 중...",
-    paymentUnavailable: "결제를 시작할 수 없습니다. 나중에 다시 시도해 주세요.",
+    purchaseComingSoon: "토큰 충전 준비 중",
+    purchaseComingSoonHint: "결제는 아직 이용할 수 없습니다. 매일 30개의 무료 토큰을 받을 수 있습니다.",
+    faqPurchaseSoonQ: "토큰은 언제 구매할 수 있나요?",
+    faqPurchaseSoonA: "유료 토큰 충전 기능은 개발 중입니다. 지금은 매일 무료 토큰과 지급된 토큰을 사용할 수 있습니다.",
   },
   zh: {
     historyTitle: "代币交易历史",
@@ -142,19 +96,10 @@ const pricingLocalDict = {
     colAmount: "数量",
     colBalanceAfter: "交易后余额",
     exportCsv: "导出 CSV",
-    sandboxTitle: "测试支付网关",
-    cancel: "取消",
-    packagePrefix: "礼包",
-    receiveTokens: "获得 {tokens} 代币（含赠送）",
-    payWith: "支付",
-    cardName: "持卡人姓名",
-    cardNumber: "卡号",
-    expiry: "有效期",
-    cvc: "CVC",
-    momoScan: "扫描 MoMo 二维码进行支付",
-    sandboxWarning: "这是模拟测试环境。",
-    processing: "正在处理模拟交易...",
-    paymentUnavailable: "无法开始结账，请稍后再试。",
+    purchaseComingSoon: "代币充值即将推出",
+    purchaseComingSoonHint: "暂不支持付款。您每天仍可获得 30 个免费代币。",
+    faqPurchaseSoonQ: "什么时候可以购买代币？",
+    faqPurchaseSoonA: "付费代币充值仍在开发中。目前可使用每日免费代币和账户获赠的代币。",
   },
 };
 
@@ -163,17 +108,7 @@ export default function PricingPage() {
   const localT = pricingLocalDict[locale as keyof typeof pricingLocalDict] || pricingLocalDict.en;
   const { balance, isLoading, transactions, loadBalance, loadHistory } = useTokenStore();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [purchasing, setPurchasing] = useState<string | null>(null);
   const [tab, setTab] = useState<"packages" | "usage" | "history">("packages");
-
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState<TokenPackage | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "momo">("stripe");
-  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
-  const [cardExpiry, setCardExpiry] = useState("12/28");
-  const [cardCvc, setCardCvc] = useState("123");
-  const [cardName, setCardName] = useState("NGUYEN VAN A");
-  const [isPaying, setIsPaying] = useState(false);
 
   useEffect(() => {
     loadBalance().catch(() => {});
@@ -188,34 +123,6 @@ export default function PricingPage() {
       case "admin_grant": return amount > 0 ? "Quản trị viên cấp" : "Quản trị viên trừ";
       case "consumption": return "Tiêu dùng";
       default: return type;
-    }
-  };
-
-  const handlePurchase = (pkg: TokenPackage) => {
-    setSelectedPackage(pkg);
-    setShowPaymentModal(true);
-  };
-
-  const confirmPayment = async () => {
-    if (!selectedPackage) return;
-    setIsPaying(true);
-    try {
-      // Tokens may only be credited by the backend after the payment provider
-      // confirms the charge (via a verified webhook). Never call
-      // /tokens/purchase from the browser: that endpoint grants free tokens.
-      const { data } = await apiClient.post("/payments/checkout", {
-        packageId: selectedPackage.id,
-        method: paymentMethod,
-      });
-      const payload = data?.data ?? data;
-      const checkoutUrl = payload?.checkoutUrl ?? payload?.url;
-      if (typeof checkoutUrl !== "string" || !checkoutUrl) {
-        throw new Error("Checkout URL missing from payment response");
-      }
-      window.location.assign(checkoutUrl);
-    } catch {
-      toast.error(localT.paymentUnavailable);
-      setIsPaying(false);
     }
   };
 
@@ -257,7 +164,12 @@ export default function PricingPage() {
     cards_generate: BookOpen,
   };
 
-  const faqItems = t.tokens.faq;
+  // The shared dictionary's last two entries promise purchased-token/refund
+  // behaviour that is not available; keep only the general token questions.
+  const faqItems = [
+    ...t.tokens.faq.slice(0, 2),
+    { q: localT.faqPurchaseSoonQ, a: localT.faqPurchaseSoonA },
+  ];
 
   return (
     <div className="space-y-8">
@@ -416,32 +328,16 @@ export default function PricingPage() {
                     </p>
                   </div>
 
-                  <Button
-                    variant={pkg.popular ? "gradient" : "default"}
-                    className="w-full"
-                    onClick={() => handlePurchase(pkg)}
-                    disabled={purchasing !== null}
-                  >
-                    {purchasing === pkg.id ? (
-                      <span className="flex items-center gap-2">
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        {t.tokens.processing}
-                      </span>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-1.5 h-4 w-4" />{" "}
-                        {t.tokens.buyNow}
-                      </>
-                    )}
+                  <Button variant="outline" className="w-full" disabled>
+                    {localT.purchaseComingSoon}
                   </Button>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          {/* Guarantee */}
           <p className="text-center text-sm text-muted-foreground animate-fade-in">
-            {t.tokens.moneyBack}
+            {localT.purchaseComingSoonHint}
           </p>
         </>
       )}
@@ -604,150 +500,6 @@ export default function PricingPage() {
         </div>
       </div>
 
-      {showPaymentModal && selectedPackage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity animate-fade-in">
-          <Card className="w-full max-w-md p-6 shadow-2xl bg-card/90 border border-border/80 backdrop-blur-md animate-scale-in">
-            <CardHeader className="p-0 mb-4 flex flex-row items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-amber-500" />
-                Cổng thanh toán thử nghiệm
-              </CardTitle>
-              <button
-                className="text-muted-foreground hover:text-foreground text-sm font-medium"
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setSelectedPackage(null);
-                }}
-                disabled={isPaying}
-              >
-                {localT.cancel}
-              </button>
-            </CardHeader>
-            <CardContent className="p-0 space-y-4">
-              {/* Package Summary */}
-              <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-3.5 flex justify-between items-center text-sm">
-                <div>
-                  <p className="font-semibold text-foreground">{localT.packagePrefix} {selectedPackage.name}</p>
-                  <p className="text-xs text-muted-foreground">{localT.receiveTokens.replace("{tokens}", (selectedPackage.tokens + Math.floor(selectedPackage.tokens * selectedPackage.bonus / 100)).toLocaleString())}</p>
-                </div>
-                <div className="text-right font-bold text-lg text-amber-600 dark:text-amber-400">
-                  ${selectedPackage.price} <span className="text-xs font-normal text-muted-foreground">({selectedPackage.priceVi}.000₫)</span>
-                </div>
-              </div>
-
-              {/* Payment Method Switcher */}
-              <div className="flex gap-2 p-1 rounded-xl bg-muted/40 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("stripe")}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg font-medium transition",
-                    paymentMethod === "stripe" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  Stripe Sandbox
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("momo")}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg font-medium transition",
-                    paymentMethod === "momo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  MoMo Giả lập
-                </button>
-              </div>
-
-              {paymentMethod === "stripe" ? (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">{localT.cardName}</label>
-                    <input
-                      type="text"
-                      className="w-full bg-muted/30 border rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-1 focus:ring-amber-500/50"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value.toUpperCase())}
-                      disabled={isPaying}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">{localT.cardNumber}</label>
-                    <input
-                      type="text"
-                      className="w-full bg-muted/30 border rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-1 focus:ring-amber-500/50"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      disabled={isPaying}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">{localT.expiry}</label>
-                      <input
-                        type="text"
-                        placeholder="MM/YY"
-                        className="w-full bg-muted/30 border rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-1 focus:ring-amber-500/50"
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(e.target.value)}
-                        disabled={isPaying}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">{localT.cvc}</label>
-                      <input
-                        type="text"
-                        placeholder="123"
-                        className="w-full bg-muted/30 border rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-1 focus:ring-amber-500/50"
-                        value={cardCvc}
-                        onChange={(e) => setCardCvc(e.target.value)}
-                        disabled={isPaying}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-4 flex flex-col items-center justify-center space-y-3 bg-muted/20 border border-dashed rounded-xl">
-                  {/* Mock QR code */}
-                  <div className="h-32 w-32 bg-white p-2 rounded-lg shadow-sm border flex items-center justify-center">
-                    <svg viewBox="0 0 100 100" className="h-full w-full text-pink-600">
-                      <rect width="100" height="100" fill="none" />
-                      {/* Outer markers */}
-                      <path d="M 5,5 h 25 v 25 h -25 z M 70,5 h 25 v 25 h -25 z M 5,70 h 25 v 25 h -25 z" fill="currentColor" />
-                      {/* Inner markers */}
-                      <path d="M 10,10 h 15 v 15 h -15 z M 75,10 h 15 v 15 h -15 z M 10,75 h 15 v 15 h -15 z" fill="white" />
-                      {/* Random pixel-like patterns */}
-                      <path d="M 40,10 h 10 v 10 h -10 z M 50,20 h 10 v 10 h -10 z M 40,40 h 20 v 20 h -20 z M 20,40 h 10 v 10 h -10 z M 70,50 h 20 v 10 h -20 z M 10,50 h 10 v 10 h -10 z M 40,70 h 10 v 20 h -10 z M 50,80 h 20 v 10 h -20 z M 80,70 h 10 v 20 h -10 z" fill="currentColor" />
-                    </svg>
-                  </div>
-                  <div className="text-center text-xs space-y-1">
-                    <p className="font-semibold text-pink-600">{localT.momoScan}</p>
-                    <p className="text-muted-foreground">{localT.sandboxWarning}</p>
-                  </div>
-                </div>
-              )}
-
-              <Button
-                variant="gradient"
-                className="w-full h-11 text-sm rounded-xl font-medium flex items-center justify-center gap-2"
-                onClick={confirmPayment}
-                disabled={isPaying}
-              >
-                {isPaying ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin animate-spin-slow" />
-                    {localT.processing}
-                  </>
-                ) : (
-                  <>
-                    {localT.payWith} {paymentMethod === "stripe" ? "Stripe Sandbox" : "MoMo Giả lập"} (${selectedPackage.price})
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiClientService } from '../common/services/ai-client.service';
 import { AssessWritingDto } from './dto/writing.dto';
@@ -206,9 +206,12 @@ export class WritingService {
     return { items: mapped, total, page, pageSize: limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async getById(id: string) {
-    const item = await this.prisma.writing_submissions.findUnique({ where: { id } });
-    if (!item) return null;
+  /** Read a single submission only when it belongs to the authenticated user. */
+  async getById(userId: string, id: string) {
+    const item = await this.prisma.writing_submissions.findFirst({
+      where: { id, user_id: userId },
+    });
+    if (!item) throw new NotFoundException('Writing submission not found');
     const ai = (item.ai_feedback as any) || {};
     const rawScore = ai.overall_score ?? ai.scores?.overall ?? 0;
     return {

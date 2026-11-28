@@ -581,6 +581,97 @@ describe("SrsService", () => {
     });
   });
 
+  // ─── SEC-02 ownership regressions ───────────────────────────────────────
+  describe("deck visibility and operation ownership", () => {
+    const userId = "user-123";
+    const cardId = "card-456";
+    const deckId = "deck-456";
+    const sessionId = "11111111-1111-4111-8111-111111111111";
+
+    it("rejects getDueCards for a private deck owned by another user", async () => {
+      mockPrismaService.decks.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.getDueCards(userId, deckId)).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockPrismaService.user_card_progress.findMany).not.toHaveBeenCalled();
+      expect(mockPrismaService.cards.findMany).not.toHaveBeenCalled();
+    });
+
+    it("allows getDueCards for a public deck owned by another user", async () => {
+      mockPrismaService.user_card_progress.findMany.mockResolvedValue([]);
+      mockPrismaService.cards.findMany.mockResolvedValueOnce([]);
+
+      await expect(service.getDueCards(userId, deckId)).resolves.toMatchObject({
+        dueCards: [], newCards: [], totalDue: 0, totalNew: 0,
+      });
+      expect(mockPrismaService.decks.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: deckId,
+            OR: [{ creator_id: userId }, { is_public: true }],
+          }),
+        }),
+      );
+    });
+
+    it("rejects a review of a card in an inaccessible deck without writing progress", async () => {
+      mockPrismaService.cards.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.reviewCard(userId, { cardId, grade: 3 })).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockPrismaService.user_card_progress.upsert).not.toHaveBeenCalled();
+      expect(mockPrismaService.srs_review_events.create).not.toHaveBeenCalled();
+    });
+
+    it("does not let a foreign operationId replay into the caller's history", async () => {
+      mockPrismaService.srs_review_events.findUnique.mockResolvedValueOnce({
+        user_id: "other-user",
+        card_id: cardId,
+        result: { grade: 3, response: { cardId, nextReviewDate: new Date().toISOString() } },
+      });
+
+      await expect(
+        service.reviewCard(userId, { cardId, grade: 3, operationId: "review-foreign" }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(mockPrismaService.user_card_progress.upsert).not.toHaveBeenCalled();
+    });
+
+    it("rejects a session replay for a deck the caller cannot access", async () => {
+      mockPrismaService.review_sessions.findUnique.mockResolvedValueOnce({
+        id: sessionId, user_id: userId, deck_id: deckId,
+      });
+      mockPrismaService.decks.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.startSession(userId, { deckId, sessionId })).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockPrismaService.review_sessions.create).not.toHaveBeenCalled();
+    });
+
+    it("rejects a replayed session whose deck differs from the requested deck", async () => {
+      mockPrismaService.review_sessions.findUnique.mockResolvedValueOnce({
+        id: sessionId, user_id: userId, deck_id: "other-deck",
+      });
+
+      await expect(service.startSession(userId, { deckId, sessionId })).rejects.toBeInstanceOf(ConflictException);
+      expect(mockPrismaService.review_sessions.create).not.toHaveBeenCalled();
+    });
+
+    it("getForecast filters progress to accessible decks", async () => {
+      mockPrismaService.user_card_progress.findMany.mockResolvedValueOnce([]);
+
+      await service.getForecast(userId, 1);
+
+      expect(mockPrismaService.user_card_progress.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            user_id: userId,
+            cards: expect.objectContaining({
+              retired_at: null,
+              decks: { OR: [{ creator_id: userId }, { is_public: true }] },
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
   // ─── FSRS Integration ────────────────────────────────────────────────────
   describe("FSRS algorithm integration", () => {
     it("should use FSRS calculate method for reviews", async () => {

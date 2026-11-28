@@ -5,20 +5,45 @@ import { RedisService } from './redis.service';
 
 /**
  * CSRF Service
- * 
+ *
  * Provides Cross-Site Request Forgery protection by generating and validating CSRF tokens.
  * Tokens are stored in Redis for distributed environments.
+ *
+ * CSRF tokens are only meaningful when the browser sends the session cookie
+ * automatically: Keep the refresh cookie HttpOnly/Secure/SameSite, allow only
+ * concrete CORS origins with credentials, and wire verification into every
+ * cookie-authenticated state-changing route (the guard itself is owned by the
+ * auth slice).
  */
 @Injectable()
 export class CsrfService {
   private readonly logger = new Logger(CsrfService.name);
   private readonly TOKEN_LENGTH = 32;
   private readonly PREFIX = 'csrf:';
+  private readonly DEFAULT_TTL_SECONDS = 3600;
 
   constructor(
     private config: ConfigService,
     private redis: RedisService,
   ) {}
+
+  /**
+   * Server-side signing secret. Without it a token could be forged by anyone
+   * who knows the source code, so both issuing and verifying fail closed.
+   */
+  private getSecret(): string {
+    const secret = this.config.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new Error('JWT_SECRET is required for CSRF tokens');
+    }
+    return secret;
+  }
+
+  private ttlSeconds(maxAgeMs: number): number {
+    return Number.isFinite(maxAgeMs) && maxAgeMs > 0
+      ? Math.ceil(maxAgeMs / 1000)
+      : this.DEFAULT_TTL_SECONDS;
+  }
 
   /**
    * Generate a new CSRF token
@@ -27,14 +52,21 @@ export class CsrfService {
    * @param ttlSeconds - Time to live in seconds (default: 1 hour)
    * @returns The generated CSRF token
    */
-  async generateToken(sessionId: string, ttlSeconds: number = 3600): Promise<string> {
+  async generateToken(
+    sessionId: string,
+    ttlSeconds: number = this.DEFAULT_TTL_SECONDS,
+  ): Promise<string> {
+    if (!sessionId) {
+      throw new Error('sessionId is required to issue a CSRF token');
+    }
     // Generate random token
     const token = randomBytes(this.TOKEN_LENGTH).toString('hex');
-    
-    // Store token in Redis
+
+    // Store only its hash: a Redis read must not hand a usable CSRF token
+    // to anyone with read access to the cache.
     const key = `${this.PREFIX}${sessionId}`;
-    await this.redis.set(key, token, ttlSeconds);
-    
+    await this.redis.set(key, this.hashToken(token), ttlSeconds);
+
     return token;
   }
 
@@ -46,21 +78,22 @@ export class CsrfService {
    * @returns True if the token is valid, false otherwise
    */
   async validateToken(token: string, sessionId: string): Promise<boolean> {
-    if (!token || token.length !== this.TOKEN_LENGTH * 2) {
+    if (!token || !sessionId || token.length !== this.TOKEN_LENGTH * 2) {
       return false;
     }
 
     try {
       const key = `${this.PREFIX}${sessionId}`;
-      const storedToken = await this.redis.get(key);
-      
-      if (!storedToken) {
-        this.logger.warn(`No CSRF token found for session: ${sessionId}`);
+      const storedHash = await this.redis.get(key);
+
+      if (!storedHash) {
+        // Never log session identifiers: they are credentials.
+        this.logger.warn('No CSRF token found for session');
         return false;
       }
 
       // Use constant-time comparison to prevent timing attacks
-      return this.constantTimeCompare(token, storedToken);
+      return this.constantTimeCompare(this.hashToken(token), storedHash);
     } catch (error) {
       this.logger.error(`CSRF token validation error: ${error.message}`);
       return false;
@@ -97,8 +130,7 @@ export class CsrfService {
    * session cannot be replayed with another session's identifier.
    */
   private computeHmac(token: string, timestamp: string, sessionId: string): string {
-    const secret = this.config.get<string>('JWT_SECRET') || 'fallback-secret';
-    return createHmac('sha256', secret)
+    return createHmac('sha256', this.getSecret())
       .update(`${token}:${timestamp}:${sessionId}`)
       .digest('hex');
   }
@@ -109,7 +141,10 @@ export class CsrfService {
    * @param sessionId - The session ID
    * @returns A signed token that can be verified later
    */
-  async generateSignedToken(sessionId: string): Promise<string> {
+  async generateSignedToken(
+    sessionId: string,
+    maxAgeMs: number = this.DEFAULT_TTL_SECONDS * 1000,
+  ): Promise<string> {
     if (!sessionId) {
       throw new Error('sessionId is required to issue a CSRF token');
     }
@@ -119,9 +154,14 @@ export class CsrfService {
     const signature = this.computeHmac(token, timestamp, sessionId);
     const signedToken = `${token}:${timestamp}:${signature}`;
 
-    // Track the token in Redis so it can be revoked with the session and
-    // consumed exactly once on validation.
-    await this.redis.set(`${this.PREFIX}signed:${sessionId}`, token, 3600);
+    // Track the token hash in Redis so it can be revoked with the session and
+    // consumed exactly once on validation. TTL mirrors maxAge so the cache
+    // entry never outlives the token's logical validity window.
+    await this.redis.set(
+      `${this.PREFIX}signed:${sessionId}`,
+      this.hashToken(token),
+      this.ttlSeconds(maxAgeMs),
+    );
 
     return signedToken;
   }
@@ -142,6 +182,9 @@ export class CsrfService {
     if (!signedToken || !sessionId) {
       return false;
     }
+    // Fail closed before any parsing: an unconfigured server must never
+    // accept CSRF tokens, even malformed ones.
+    this.getSecret();
 
     const parts = signedToken.split(':');
     // Signature is last part, timestamp is second-to-last, token is everything before
@@ -172,11 +215,13 @@ export class CsrfService {
     }
 
     // Verify the token is still stored for this session (it may have been
-    // revoked on logout) and consume it so it cannot be reused.
+    // revoked on logout) and consume it so it cannot be reused. RedisService
+    // returns null / swallows errors when Redis is unavailable; fail closed in
+    // that case instead of accepting a signature-only token.
     const key = `${this.PREFIX}signed:${sessionId}`;
     try {
-      const storedToken = await this.redis.get(key);
-      if (!storedToken || !this.constantTimeCompare(token, storedToken)) {
+      const storedHash = await this.redis.get(key);
+      if (!storedHash || !this.constantTimeCompare(this.hashToken(token), storedHash)) {
         this.logger.warn('CSRF signed token not found or mismatched for session');
         return false;
       }

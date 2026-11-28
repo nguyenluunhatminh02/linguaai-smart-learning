@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware } from '@nestjs/common';
+import { HttpException, Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { isIP } from 'net';
 import { RateLimiterService } from '../services/rate-limiter.service';
@@ -37,13 +37,23 @@ export class RateLimitMiddleware implements NestMiddleware {
         window: this.windowSec,
         keyPrefix: 'general',
       });
-      res.setHeader('X-RateLimit-Limit', this.maxRequests);
+      res.setHeader('X-RateLimit-Limit', result.limit);
       res.setHeader('X-RateLimit-Remaining', result.remaining);
-      res.setHeader('X-RateLimit-Reset', result.resetTime.toISOString());
+      // Epoch seconds (HTTP convention), not ISO 8601 text.
+      res.setHeader('X-RateLimit-Reset', result.resetAt);
       next();
     } catch (error) {
-      // checkRateLimit throws HttpException (429 or 503); let Nest's exception
-      // filter handle it so status codes and bodies stay consistent.
+      // checkRateLimit throws 429 (quota) or 503 (closed-policy outage).
+      // Expose the TTL-derived retry hint, then hand off to Nest's exception
+      // filter. Never call next() here: a failed limiter must not pass traffic.
+      const payload = error instanceof HttpException
+        ? (error.getResponse() as { resetAt?: number; retryAfterSeconds?: number })
+        : undefined;
+      const retryAfter = payload?.retryAfterSeconds ?? this.windowSec;
+      res.setHeader('Retry-After', String(retryAfter));
+      res.setHeader('X-RateLimit-Limit', this.maxRequests);
+      res.setHeader('X-RateLimit-Remaining', 0);
+      res.setHeader('X-RateLimit-Reset', payload?.resetAt ?? Math.floor(Date.now() / 1000) + retryAfter);
       next(error);
     }
   }

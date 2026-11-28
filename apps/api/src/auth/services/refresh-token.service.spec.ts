@@ -17,6 +17,12 @@ describe('RefreshTokenService', () => {
     $transaction: jest.fn(),
   };
 
+  // createRefreshToken and rotateToken both run inside a transaction; the
+  // callback receives a tx client exposing the same refresh_tokens delegate.
+  beforeEach(() => {
+    mockPrisma.$transaction.mockImplementation((cb: any) => cb(mockPrisma));
+  });
+
   const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
   beforeEach(async () => {
@@ -184,104 +190,93 @@ describe('RefreshTokenService', () => {
   });
 
   describe('rotateToken', () => {
-    it('revokes old token and creates a new one', async () => {
-      const oldRt = {
-        id: 'rt-old',
-        token: 'old-token',
-        user_id: 'user-123',
-        device_info: null,
-        ip_address: null,
-        user_agent: null,
-        expires_at: new Date(Date.now() + 86_400_000),
-      };
-      const txMock = {
-        refresh_tokens: {
-          findFirst: jest.fn().mockResolvedValue(oldRt),
-          update: jest.fn().mockResolvedValue({}),
-          create: jest.fn().mockResolvedValue({ id: 'rt-new', token: 'new-token' }),
-        },
-      };
-      mockPrisma.$transaction.mockImplementation((cb: any) => cb(txMock));
+    const oldRt = {
+      id: 'rt-old',
+      token: 'old-token',
+      user_id: 'user-123',
+      device_info: 'Chrome',
+      ip_address: '127.0.0.1',
+      user_agent: 'Mozilla',
+      expires_at: new Date(Date.now() + 86_400_000),
+    };
+
+    it('atomically revokes the old row and creates a replacement with the same session metadata', async () => {
+      mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.refresh_tokens.findFirst.mockResolvedValue(oldRt);
+      mockPrisma.refresh_tokens.create.mockResolvedValue({ id: 'rt-new', token: 'new-token' });
 
       const result = await service.rotateToken('old-token', 7);
 
-      expect(txMock.refresh_tokens.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { token: 'old-token', is_revoked: false } }),
-      );
-      expect(txMock.refresh_tokens.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'rt-old' }, data: { is_revoked: true } }),
-      );
+      // The conditional UPDATE is the reuse-detection primitive: only a row
+      // that is still active can be rotated. No row lock is requested.
+      expect(mockPrisma.refresh_tokens.updateMany).toHaveBeenCalledWith({
+        where: { token: 'old-token', is_revoked: false },
+        data: { is_revoked: true },
+      });
+      expect(mockPrisma.refresh_tokens.findFirst).toHaveBeenCalledWith({
+        where: { token: 'old-token' },
+        include: { users: { include: { user_roles: { include: { roles: true } } } } },
+      });
+      expect(mockPrisma.refresh_tokens.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          user_id: oldRt.user_id,
+          device_info: oldRt.device_info,
+          ip_address: oldRt.ip_address,
+          user_agent: oldRt.user_agent,
+          expires_at: expect.any(Date),
+          token: expect.stringMatching(/^[0-9a-f]{128}$/),
+        }),
+      });
       expect(result).toEqual({ id: 'rt-new', token: 'new-token' });
     });
 
-    it('throws error when old token is invalid', async () => {
-      const txMock = {
-        refresh_tokens: {
-          findFirst: jest.fn().mockResolvedValue(null),
-        },
-      };
-      mockPrisma.$transaction.mockImplementation((cb: any) => cb(txMock));
+    it('rejects a revoked token without creating a replacement', async () => {
+      mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.rotateToken('bad-token')).rejects.toThrow('Invalid or expired refresh token');
+      await expect(service.rotateToken('replayed-token')).rejects.toThrow(
+        'Invalid or expired refresh token',
+      );
+      expect(mockPrisma.refresh_tokens.findFirst).not.toHaveBeenCalled();
+      expect(mockPrisma.refresh_tokens.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the row vanished after the conditional update', async () => {
+      mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.refresh_tokens.findFirst.mockResolvedValue(null);
+
+      await expect(service.rotateToken('vanished-token')).rejects.toThrow(
+        'Invalid or expired refresh token',
+      );
+      expect(mockPrisma.refresh_tokens.create).not.toHaveBeenCalled();
     });
 
     it('allows exactly one of two concurrent rotations of the same token', async () => {
-      // Simulates Postgres row-level locking: the first transaction revokes
-      // the old row before the second reads it, so the second must fail.
-      const oldRt = {
-        id: 'rt-old',
-        token: 'shared-token',
-        user_id: 'user-123',
-        device_info: null,
-        ip_address: null,
-        user_agent: null,
-        expires_at: new Date(Date.now() + 86_400_000),
-      };
-      const state = { revoked: false, created: [] as any[] };
-
-      // Deferred gate: the second findFirst waits until the first rotation
-      // has committed its revocation, mimicking `SELECT ... FOR UPDATE`.
-      let commitRevocation!: () => void;
-      const revocationCommitted = new Promise<void>((resolve) => {
-        commitRevocation = resolve;
+      // Simulates Postgres Read Committed: both conditional UPDATEs contend
+      // for the same row, so only the first one matches is_revoked=false.
+      const state = { active: true, created: [] as any[] };
+      let releaseSecond!: () => void;
+      const secondMayProceed = new Promise<void>((resolve) => {
+        releaseSecond = resolve;
       });
-      const findFirstCalls: string[] = [];
-      let firstFind: Promise<void> | null = null;
+      let updateCalls = 0;
 
-      const makeTx = () => ({
-        refresh_tokens: {
-          findFirst: jest.fn(async (args: any) => {
-            // The production query must request FOR UPDATE; without the lock
-            // two concurrent transactions could both observe is_revoked=false.
-            expect(args).toEqual(
-              expect.objectContaining({
-                where: { token: 'shared-token', is_revoked: false },
-                lock: expect.objectContaining({ mode: 'update' }),
-              }),
-            );
-            findFirstCalls.push(args.where.token);
-            if (findFirstCalls.length === 1) {
-              firstFind = revocationCommitted;
-            } else {
-              await firstFind;
-            }
-            return state.revoked ? null : { ...oldRt };
-          }),
-          update: jest.fn(async () => {
-            state.revoked = true;
-            // "Commit" the revocation, unblocking any waiting reader.
-            commitRevocation();
-            return {};
-          }),
-          create: jest.fn(async ({ data }: any) => {
-            const record = { id: `rt-new-${state.created.length + 1}`, ...data };
-            state.created.push(record);
-            return record;
-          }),
-        },
+      mockPrisma.refresh_tokens.updateMany.mockImplementation(async () => {
+        updateCalls += 1;
+        if (updateCalls === 1) {
+          // First UPDATE commits the revocation, releasing the waiting caller.
+          state.active = false;
+          releaseSecond();
+          return { count: 1 };
+        }
+        await secondMayProceed;
+        return { count: state.active ? 1 : 0 };
       });
-
-      mockPrisma.$transaction.mockImplementation((cb: any) => cb(makeTx()));
+      mockPrisma.refresh_tokens.findFirst.mockResolvedValue(oldRt);
+      mockPrisma.refresh_tokens.create.mockImplementation(async ({ data }: any) => {
+        const record = { id: `rt-new-${state.created.length + 1}`, ...data };
+        state.created.push(record);
+        return record;
+      });
 
       const results = await Promise.allSettled([
         service.rotateToken('shared-token', 7),

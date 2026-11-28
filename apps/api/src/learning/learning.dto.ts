@@ -24,4 +24,22 @@ export class CompleteSkillActivityDto {
   @Min(0)
   @Max(86400)
   durationSeconds?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(86400)
+  score?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(86400)
+  total?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
+  attemptNumber?: number;
 }

@@ -1,22 +1,50 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+/**
+ * P0 BUG-03/BUG-04 fix — CHAT-03 frontend chat state.
+ *
+ * Stream parsing uses the shared chunk-safe parser in @/lib/sse-parser: EOF and
+ * legacy `data: [DONE]` are incomplete, never a verified success. The deployed
+ * backend still emits only legacy token events and has no operation/status
+ * endpoint, so that path remains visibly incomplete and never invalidates
+ * balance/messages or persists a fabricated reply client-side.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient, refreshAccessToken } from "@/lib/api-client";
+import {
+  parseSseStream,
+  type SseEvent,
+  type SseOutcome,
+} from "@/lib/sse-parser";
 import { getAccessToken } from "@/stores/auth-store";
 import { Avatar } from "@/components/ui/avatar";
-import { MessageSquare, Send, Plus, Bot, User, Sparkles, Mic, MicOff, Volume2 } from "lucide-react";
+import {
+  MessageSquare,
+  Send,
+  Plus,
+  Bot,
+  Sparkles,
+  Mic,
+  MicOff,
+  Volume2,
+  Square,
+} from "lucide-react";
 import { toast } from "sonner";
 import { speakWord } from "@/lib/speech";
 import { useLanguageStore } from "@/stores/language-store";
-import { TokenCost, useTokenGate } from "@/components/ui/token-cost";
+import { TokenCost } from "@/components/ui/token-cost";
 
 interface Message {
   id?: string;
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
+  /** Present on locally shown partial/failed answers; such messages are never history. */
+  provisional?: boolean;
 }
 
 interface Conversation {
@@ -54,13 +82,100 @@ interface ISpeechRecognition {
   stop: () => void;
 }
 
+type StreamState =
+  | "idle"
+  | "submitting"
+  | "streaming"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "reconnecting";
+
+type TerminalStatus = "SUCCEEDED" | "FAILED" | "UNKNOWN" | "CANCELLED";
+
+interface OperationStatus {
+  status: TerminalStatus | "RUNNING" | "PENDING";
+  conversationId?: string | null;
+  messageId?: string | null;
+  balance?: number;
+  content?: string;
+  errorCode?: string | null;
+}
+
+/** Read the JSON payload of an SSE event; unnamed legacy events use `message`. */
+function payloadOf(event: SseEvent): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(event.data);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Malformed payloads never become a successful completion.
+  }
+  return {};
+}
+
+function eventText(payload: Record<string, unknown>): string | null {
+  const text = payload.text ?? payload.token;
+  return typeof text === "string" ? text : null;
+}
+
+function operationKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+
+/** Best-effort status reconciliation. 404/5xx leave the turn non-terminal. */
+async function fetchOperationStatus(
+  operationId: string,
+  signal: AbortSignal,
+): Promise<OperationStatus | null> {
+  for (const path of [`/ai-operations/${operationId}`, `/chat/operations/${operationId}`]) {
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${getAccessToken() ?? ""}` },
+        signal,
+      });
+      if (!response.ok) continue;
+      const body: unknown = await response.json();
+      const payload = (
+        body && typeof body === "object" && "data" in body
+          ? (body as { data: unknown }).data
+          : body
+      ) as OperationStatus | null;
+      if (payload && typeof payload.status === "string") return payload;
+    } catch {
+      // Endpoint not available (legacy backend) or request aborted: try the next.
+    }
+  }
+  return null;
+}
+
+function isTerminalStatus(status: OperationStatus["status"] | undefined): status is TerminalStatus {
+  return status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED" || status === "UNKNOWN";
+}
+
+function statusMessage(status: TerminalStatus, errorCode?: string | null): string {
+  if (status === "SUCCEEDED") return "Response saved.";
+  if (status === "CANCELLED") return "This turn was cancelled; no reply was saved.";
+  if (status === "FAILED") return `The response failed${errorCode ? ` (${errorCode})` : ""}. No reply was saved.`;
+  return "The operation ended in an unknown state. Please retry with the same turn.";
+}
+
 export default function ChatPage() {
   const { t } = useLanguageStore();
+  const queryClient = useQueryClient();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [streamState, setStreamState] = useState<StreamState>("idle");
+  const [statusNote, setStatusNote] = useState<string | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("english");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +184,8 @@ export default function ChatPage() {
   // Abort in-flight streams when the user switches conversations so their
   // callbacks cannot write the answer into the wrong chat.
   const abortStreamRef = useRef<AbortController | null>(null);
-  const streamSeqRef = useRef(0);
+  const turnSeqRef = useRef(0);
+  const keyRef = useRef<string | null>(null);
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
   const activeConvIdRef = useRef<string | null>(null);
@@ -94,7 +210,8 @@ export default function ChatPage() {
         SpeechRecognition?: new () => ISpeechRecognition;
         webkitSpeechRecognition?: new () => ISpeechRecognition;
       };
-      const SpeechRecognition = windowWithSpeech.SpeechRecognition || windowWithSpeech.webkitSpeechRecognition;
+      const SpeechRecognition =
+        windowWithSpeech.SpeechRecognition || windowWithSpeech.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = false;
@@ -106,7 +223,6 @@ export default function ChatPage() {
             currentTranscript += event.results[i][0].transcript;
           }
           if (currentTranscript.trim()) {
-            // Append to anything already typed instead of replacing it.
             setInput((prev) =>
               prev.trim()
                 ? `${prev.trim()} ${currentTranscript.trim()}`
@@ -127,6 +243,17 @@ export default function ChatPage() {
     }
   }, []);
 
+  useEffect(() => {
+    apiClient
+      .get("/chat/conversations")
+      .then((r) => setConversations(r.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streamState]);
+
   const toggleListening = () => {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -137,12 +264,12 @@ export default function ChatPage() {
         return;
       }
 
-      let langCode = 'en-US';
-      if (targetLanguage === 'vietnamese') langCode = 'vi-VN';
-      if (targetLanguage === 'japanese') langCode = 'ja-JP';
-      if (targetLanguage === 'korean') langCode = 'ko-KR';
-      if (targetLanguage === 'french') langCode = 'fr-FR';
-      if (targetLanguage === 'spanish') langCode = 'es-ES';
+      let langCode = "en-US";
+      if (targetLanguage === "vietnamese") langCode = "vi-VN";
+      if (targetLanguage === "japanese") langCode = "ja-JP";
+      if (targetLanguage === "korean") langCode = "ko-KR";
+      if (targetLanguage === "french") langCode = "fr-FR";
+      if (targetLanguage === "spanish") langCode = "es-ES";
 
       recognitionRef.current.lang = langCode;
       try {
@@ -157,199 +284,376 @@ export default function ChatPage() {
     }
   };
 
-  useEffect(() => {
+  const refreshConversations = useCallback(() => {
     apiClient
       .get("/chat/conversations")
       .then((r) => setConversations(r.data))
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const releaseController = useCallback((controller: AbortController) => {
+    // Only the request that still owns the ref may clear it.
+    if (abortStreamRef.current === controller) abortStreamRef.current = null;
+  }, []);
+
+  const cancelTurn = useCallback(() => {
+    const controller = abortStreamRef.current;
+    turnSeqRef.current += 1; // invalidate callbacks from this turn
+    controller?.abort();
+    releaseController(controller ?? new AbortController());
+    keyRef.current = null;
+    setSending(false);
+    setStreamState("cancelled");
+    setStatusNote("This turn was cancelled; no reply was saved.");
+  }, [releaseController]);
 
   const loadConversation = async (convId: string) => {
-    // Cancel any in-flight stream so its callbacks cannot write into this
-    // newly selected conversation.
-    abortStreamRef.current?.abort();
-    abortStreamRef.current = null;
-    streamSeqRef.current += 1;
+    const controller = abortStreamRef.current;
+    controller?.abort();
+    releaseController(controller ?? new AbortController());
+    turnSeqRef.current += 1;
+    keyRef.current = null;
     setSending(false);
+    setStreamState("idle");
+    setStatusNote(null);
     setActiveConvId(convId);
     try {
       const res = await apiClient.get(`/chat/conversations/${convId}/messages`);
-      // Guard against a second switch while this request was in flight.
-      if (activeConvIdRef.current === convId) setMessages(res.data);
+      if (activeConvIdRef.current === convId) setMessages(res.data ?? []);
     } catch {
       if (activeConvIdRef.current === convId) setMessages([]);
     }
   };
 
   const handleNewConversation = () => {
-    abortStreamRef.current?.abort();
-    abortStreamRef.current = null;
-    streamSeqRef.current += 1;
+    const controller = abortStreamRef.current;
+    controller?.abort();
+    releaseController(controller ?? new AbortController());
+    turnSeqRef.current += 1;
+    keyRef.current = null;
     setSending(false);
+    setStreamState("idle");
+    setStatusNote(null);
     setActiveConvId(null);
     setMessages([]);
   };
 
-  const { consumeAndRun, canAfford: canAffordChat } = useTokenGate("ai_chat");
+  /** Invalidations are permitted only after a verified terminal success/refund. */
+  const onVerifiedTerminal = useCallback(
+    (status: OperationStatus) => {
+      if (status.status === "SUCCEEDED") {
+        void queryClient.invalidateQueries({ queryKey: ["token-balance"] });
+        const convId = status.conversationId ?? activeConvIdRef.current;
+        if (convId) {
+          void queryClient.invalidateQueries({ queryKey: ["chat", "conversations", convId, "messages"] });
+          void queryClient.invalidateQueries({ queryKey: ["chat", convId] });
+        }
+        void queryClient.invalidateQueries({ queryKey: ["chat", "conversations"] });
+        refreshConversations();
+      } else {
+        // A refunded FAILED/CANCELLED operation also changes the balance.
+        void queryClient.invalidateQueries({ queryKey: ["token-balance"] });
+        void queryClient.invalidateQueries({ queryKey: ["chat", "conversations"] });
+      }
+    },
+    [queryClient, refreshConversations],
+  );
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;
-    if (!canAffordChat) {
-      toast.error(t.common.insufficientTokens || "Insufficient token balance");
-      return;
-    }
 
-    // Capture the conversation at send time. Only messages belonging to it
-    // may be sent to /chat/stream or /chat/send.
+    // One key per user turn, created at click time. It is reused for the whole
+    // turn including 401 refresh and reconnects; never mint a second key here.
+    const turnKey = keyRef.current ?? operationKey();
+    keyRef.current = turnKey;
+
     const convId = activeConvIdRef.current;
-    const streamId = ++streamSeqRef.current;
-    const isCurrent = () =>
-      streamSeqRef.current === streamId && activeConvIdRef.current === convId;
+    const turnId = ++turnSeqRef.current;
+    const isCurrent = () => turnSeqRef.current === turnId && activeConvIdRef.current === convId;
 
     const userMsg: Message = { role: "user", content: input.trim() };
-    // Use the ref snapshot: `messages` from the closure may be from a
-    // different conversation if the user switched while a stream was active.
-    const allMessages = [...messagesRef.current, userMsg];
-    const promptMessages = allMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    // The new contract sends one turn only; DB history is the server's source
+    // of truth, so no client-supplied assistant messages are forwarded.
+    const message = userMsg.content;
 
+    const allMessages = [...messagesRef.current, userMsg];
     setMessages(allMessages);
     setInput("");
     setSending(true);
-
-    // Save the turn to history. The backend derives the stored assistant
-    // reply from the prompt, so only call this for a successful stream —
-    // calling it on failure would bill the user and store a different answer.
-    const persist = async () => {
-      try {
-        const saveRes = await apiClient.post("/chat/send", {
-          messages: promptMessages,
-          conversationId: convId || undefined,
-          language: targetLanguage,
-        });
-        const newConvId = saveRes.data.conversationId;
-        if (!convId && newConvId && isCurrent()) {
-          setActiveConvId(newConvId);
-          apiClient
-            .get("/chat/conversations")
-            .then((r) => setConversations(r.data))
-            .catch(() => {});
-        }
-      } catch {
-        /* history save is best-effort */
-      }
-    };
+    setStreamState("submitting");
+    setStatusNote(null);
 
     const abortController = new AbortController();
     abortStreamRef.current = abortController;
     let assistantIdx = -1;
+    let partial = "";
+    let operationId: string | null = null;
+    let terminalStatus: TerminalStatus | null = null;
+    let terminalBalance: number | undefined;
+    let terminalConversationId: string | null = null;
+    let terminalErrorCode: string | null = null;
+    let legacyDone = false;
+    let sawNamedTerminal = false;
 
-    const setAssistantContent = (content: string) => {
+    const setAssistantContent = (content: string, provisional = true) => {
       if (!isCurrent() || assistantIdx < 0) return;
       setMessages((prev) => {
         const updated = [...prev];
         if (updated.length <= assistantIdx) return prev;
-        updated[assistantIdx] = { role: "assistant", content };
+        updated[assistantIdx] = {
+          role: "assistant",
+          content,
+          provisional,
+        };
         return updated;
       });
     };
 
+    const ensureAssistantPlaceholder = () => {
+      if (!isCurrent() || assistantIdx >= 0) return;
+      assistantIdx = allMessages.length;
+      setMessages((prev) =>
+        isCurrent()
+          ? [...prev, { role: "assistant", content: "", provisional: true }]
+          : prev,
+      );
+    };
+
+    const applyEvent = (event: SseEvent) => {
+      if (!isCurrent()) return;
+      const data = payloadOf(event);
+      switch (event.event) {
+        case "accepted": {
+          const acceptedOp = data.operationId;
+          if (typeof acceptedOp === "string") operationId = acceptedOp;
+          const acceptedConvId = data.conversationId;
+          if (typeof acceptedConvId === "string" && !convId && activeConvIdRef.current === convId) {
+            setActiveConvId(acceptedConvId);
+            refreshConversations();
+          }
+          return;
+        }
+        case "delta":
+        case "message": {
+          // Unnamed `message` events are the legacy token stream.
+          const text = eventText(data);
+          if (text) {
+            ensureAssistantPlaceholder();
+            partial += text;
+            setAssistantContent(partial);
+            setStreamState("streaming");
+          }
+          return;
+        }
+        default:
+          // Terminal events are classified by the shared parser's outcome.
+          return;
+      }
+    };
+
+    const applyOutcome = (outcome: SseOutcome) => {
+      if (!isCurrent()) return;
+      legacyDone = outcome.reason === "legacy-done";
+      if (outcome.operationId) operationId = outcome.operationId;
+      if (typeof outcome.balance === "number") terminalBalance = outcome.balance;
+      const payload = outcome.event ? payloadOf(outcome.event) : {};
+
+      if (outcome.status === "completed") {
+        sawNamedTerminal = true;
+        terminalStatus = "SUCCEEDED";
+        const messageId = outcome.messageId ?? (
+          typeof payload.messageId === "string" ? payload.messageId : null
+        );
+        terminalConversationId = typeof payload.conversationId === "string"
+          ? payload.conversationId
+          : convId;
+        // A completed event can arrive before any delta (e.g. on replay).
+        ensureAssistantPlaceholder();
+        if (assistantIdx >= 0) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            if (updated.length > assistantIdx) {
+              updated[assistantIdx] = {
+                role: "assistant",
+                content: partial,
+                id: messageId ?? undefined,
+                provisional: false,
+              };
+            }
+            return updated;
+          });
+        }
+        setStreamState("completed");
+        return;
+      }
+      if (outcome.status === "failed") {
+        terminalErrorCode = outcome.error?.code ?? null;
+        setStreamState("failed");
+        // Only a server-sent `failed` event is a verified terminal state. A
+        // malformed local event stays unverified and must not invalidate balance.
+        if (outcome.reason === "failed-event") {
+          sawNamedTerminal = true;
+          terminalStatus = "FAILED";
+        }
+      }
+    };
+
+    const reconcile = async () => {
+      if (!isCurrent()) return;
+      const hasVerifiedTerminal = sawNamedTerminal && terminalStatus !== null;
+      if (!hasVerifiedTerminal && operationId) {
+        setStreamState("reconnecting");
+        const status = await fetchOperationStatus(operationId, abortController.signal);
+        if (!isCurrent()) return;
+        if (status && isTerminalStatus(status.status)) {
+          terminalStatus = status.status;
+          terminalErrorCode = status.errorCode ?? terminalErrorCode;
+          terminalConversationId = status.conversationId ?? terminalConversationId;
+          if (typeof status.balance === "number") terminalBalance = status.balance;
+          if (status.status === "SUCCEEDED") {
+            if (assistantIdx >= 0) {
+              setAssistantContent(status.content ?? partial, false);
+            }
+            setStreamState("completed");
+          } else {
+            setStreamState(status.status === "FAILED" ? "failed" : "cancelled");
+          }
+        }
+      }
+
+      if (!isCurrent()) return;
+      if (terminalStatus === "SUCCEEDED") {
+        onVerifiedTerminal({
+          status: "SUCCEEDED",
+          conversationId: terminalConversationId,
+          balance: terminalBalance,
+        });
+        if (typeof terminalBalance === "number") {
+          queryClient.setQueryData(["token-balance"], (old: unknown) =>
+            old && typeof old === "object"
+              ? { ...(old as Record<string, unknown>), balance: terminalBalance }
+              : { balance: terminalBalance },
+          );
+        }
+        setStatusNote("Response saved.");
+        keyRef.current = null;
+        return;
+      }
+
+      if (terminalStatus !== null) {
+        onVerifiedTerminal({ status: terminalStatus, errorCode: terminalErrorCode });
+        setStatusNote(
+          terminalStatus === "FAILED" || terminalStatus === "UNKNOWN" || terminalStatus === "CANCELLED"
+            ? statusMessage(terminalStatus, terminalErrorCode)
+            : "Response saved.",
+        );
+        keyRef.current = null;
+        return;
+      }
+
+      // EOF without a verified terminal (including legacy [DONE]) is NOT success.
+      setStreamState("failed");
+      setStatusNote(
+        legacyDone || partial
+          ? "Connection ended before the response was confirmed. The partial text is not saved; retry this turn."
+          : "The stream ended without a result. Retry this turn.",
+      );
+    };
+
     try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
       const doFetch = (authToken: string | null) =>
-        fetch(`${baseUrl}/chat/stream`, {
+        fetch(`${API_BASE}/chat/stream`, {
           method: "POST",
           signal: abortController.signal,
           headers: {
             "Content-Type": "application/json",
+            "Idempotency-Key": turnKey,
             ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
+          // Single turn only. No client history, no client billing.
           body: JSON.stringify({
-            messages: promptMessages,
+            conversationId: convId,
             language: targetLanguage,
+            message,
+            idempotencyKey: turnKey,
           }),
         });
 
       let response = await doFetch(getAccessToken());
 
-      // The SSE stream bypasses the axios interceptor, so handle token refresh
-      // here: on 401 refresh once (single-flight) and retry before giving up.
+      // The SSE stream bypasses the axios interceptor: on 401 refresh once
+      // (single-flight) and retry with the SAME operation key.
       if (response.status === 401) {
+        setStreamState("reconnecting");
         const newToken = await refreshAccessToken();
+        if (!isCurrent()) return;
         if (newToken) response = await doFetch(newToken);
       }
 
-      if (!response.ok || !response.body) throw new Error("Stream failed");
-
-      if (!isCurrent()) return;
-      assistantIdx = allMessages.length;
-      setMessages((prev) =>
-        isCurrent() ? [...prev, { role: "assistant", content: "" }] : prev,
-      );
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = "";
-      let streamError: string | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        // SSE events may be split across chunks; buffer incomplete lines.
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) {
-              streamError =
-                typeof parsed.error === "string"
-                  ? parsed.error
-                  : parsed.error.message || "Stream failed";
-              break;
-            }
-            if (parsed.token) {
-              fullContent += parsed.token;
-              setAssistantContent(fullContent);
-            }
-          } catch {
-            /* skip malformed lines */
-          }
-        }
-        if (streamError) break;
-      }
-
-      if (!isCurrent()) return;
-
-      if (streamError) {
-        // Never bill or persist a fabricated answer for a failed stream.
-        setAssistantContent(`Sorry, something went wrong: ${streamError}`);
+      if (!response.ok || !response.body) {
+        terminalStatus = "FAILED";
+        setStreamState("failed");
+        setStatusNote("The response failed. No reply was saved.");
         return;
       }
 
-      await persist();
-      // Deduct tokens only after a successful, complete response.
-      await consumeAndRun(async () => {});
+      if (!isCurrent()) return;
+      setStreamState("streaming");
+
+      const result = await parseSseStream(response.body, {
+        signal: abortController.signal,
+        treatLegacyDoneAsCompleted: false,
+      });
+      for (const event of result.events) {
+        applyEvent(event);
+        if (!isCurrent()) return;
+      }
+      applyOutcome(result.outcome);
+      if (!isCurrent()) return;
+      await reconcile();
     } catch {
       if (!isCurrent()) return;
-      setAssistantContent(
-        "Sorry, something went wrong. Please try again.",
-      );
+      // Network failure: try to recover via status, keeping the same key.
+      try {
+        setStreamState("reconnecting");
+        const status = await fetchOperationStatus(turnKey, abortController.signal);
+        if (!isCurrent()) return;
+        if (status && isTerminalStatus(status.status)) {
+          terminalStatus = status.status;
+          terminalErrorCode = status.errorCode ?? null;
+          await reconcile();
+          return;
+        }
+      } catch {
+        /* no status endpoint on the legacy backend */
+      }
+      setStreamState("failed");
+      setStatusNote("The connection was lost before the response was confirmed. Retry this turn.");
     } finally {
-      abortStreamRef.current = null;
+      releaseController(abortController);
       if (isCurrent()) setSending(false);
     }
   };
+
+  const isBusy = sending && streamState !== "completed" && streamState !== "failed";
+  const stateLabel = useMemo(() => {
+    switch (streamState) {
+      case "submitting":
+        return t.chat.sending || "Sending...";
+      case "reconnecting":
+        return "Reconnecting to check this turn...";
+      case "streaming":
+        return "Streaming response...";
+      case "completed":
+        return "Response saved.";
+      case "failed":
+        return "Response not confirmed.";
+      case "cancelled":
+        return "Turn cancelled.";
+      default:
+        return null;
+    }
+  }, [streamState, t.chat.sending]);
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
@@ -449,7 +753,7 @@ export default function ChatPage() {
             )}
             {messages.map((msg, i) => (
               <div
-                key={i}
+                key={msg.id ?? i}
                 className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {msg.role === "assistant" && (
@@ -462,10 +766,15 @@ export default function ChatPage() {
                     msg.role === "user"
                       ? "rounded-2xl rounded-br-md bg-primary px-4 py-3 text-primary-foreground"
                       : "rounded-2xl rounded-bl-md bg-muted px-4 py-3"
-                  }`}
+                  } ${msg.provisional ? "border border-dashed border-primary/30" : ""}`}
                 >
                   <div className="whitespace-pre-wrap">{msg.content}</div>
-                  {msg.role === "assistant" && msg.content && (
+                  {msg.provisional && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Partial response — not saved until confirmed.
+                    </p>
+                  )}
+                  {msg.role === "assistant" && msg.content && !msg.provisional && (
                     <button
                       type="button"
                       onClick={() => speakWord(msg.content)}
@@ -479,20 +788,6 @@ export default function ChatPage() {
                 {msg.role === "user" && <Avatar name="You" size="sm" />}
               </div>
             ))}
-            {sending && messages[messages.length - 1]?.content === "" && (
-              <div className="flex gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl gradient-bg">
-                  <Bot className="h-3.5 w-3.5 text-white" />
-                </div>
-                <div className="rounded-2xl rounded-bl-md bg-muted px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <span className="typing-dot h-2 w-2 rounded-full bg-muted-foreground/50" />
-                    <span className="typing-dot delay-200 h-2 w-2 rounded-full bg-muted-foreground/50" />
-                    <span className="typing-dot delay-400 h-2 w-2 rounded-full bg-muted-foreground/50" />
-                  </div>
-                </div>
-              </div>
-            )}
             <div ref={messagesEndRef} />
           </div>
 
@@ -501,11 +796,17 @@ export default function ChatPage() {
             <div className="mb-1.5 flex justify-end">
               <TokenCost feature="ai_chat" variant="badge" showWarning={true} />
             </div>
+            {(stateLabel || statusNote) && (
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs" role="status">
+                <span className="text-muted-foreground">{stateLabel}</span>
+                {statusNote && <span className="text-amber-600 dark:text-amber-400">{statusNote}</span>}
+              </div>
+            )}
             <form
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                handleSend();
+                void handleSend();
               }}
             >
               <label htmlFor="chat-input" className="sr-only">
@@ -518,8 +819,13 @@ export default function ChatPage() {
                 className="h-11 w-11 rounded-xl shrink-0 transition-all"
                 onClick={toggleListening}
                 aria-label="Voice input"
+                disabled={isBusy}
               >
-                {isListening ? <MicOff className="h-4 w-4 animate-pulse" /> : <Mic className="h-4 w-4 text-muted-foreground" />}
+                {isListening ? (
+                  <MicOff className="h-4 w-4 animate-pulse" />
+                ) : (
+                  <Mic className="h-4 w-4 text-muted-foreground" />
+                )}
               </Button>
               <input
                 id="chat-input"
@@ -527,15 +833,27 @@ export default function ChatPage() {
                 placeholder={t.chat.placeholder}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                disabled={sending}
+                disabled={isBusy}
                 aria-label="Type your message"
               />
+              {isBusy && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 rounded-xl shrink-0"
+                  onClick={cancelTurn}
+                  aria-label={t.common.cancel || "Cancel"}
+                >
+                  <Square className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              )}
               <Button
                 type="submit"
                 variant="gradient"
                 size="icon"
                 className="h-11 w-11 rounded-xl"
-                disabled={sending || !input.trim()}
+                disabled={isBusy || !input.trim()}
                 aria-label="Send message"
               >
                 <Send className="h-4 w-4" aria-hidden="true" />

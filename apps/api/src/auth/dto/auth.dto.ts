@@ -46,6 +46,7 @@ function MatchProperty(property: string, validationOptions?: ValidationOptions):
 export class ForgotPasswordDto {
   @ApiProperty({ example: 'alice@example.com' })
   @IsEmail()
+  @MaxLength(254)
   email: string;
 }
 
@@ -54,6 +55,7 @@ export class ResetPasswordDto {
   @ApiProperty({ description: 'Token received in email' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   token: string;
 
   @ApiProperty({ example: 'NewP@ssw0rd!' })
@@ -90,6 +92,7 @@ export class RefreshTokenDto {
 export class ResendVerificationDto {
   @ApiProperty({ example: 'alice@example.com' })
   @IsEmail()
+  @MaxLength(254)
   email: string;
 }
 
@@ -98,6 +101,7 @@ export class MfaVerifyDto {
   @ApiProperty({ description: 'MFA pending JWT returned from login' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(4096)
   mfaToken: string;
 
   @ApiProperty({ description: '6-digit TOTP code or backup code' })
