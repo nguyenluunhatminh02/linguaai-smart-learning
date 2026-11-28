@@ -28,7 +28,11 @@ const makeUser = (over: any = {}) => ({
 });
 
 const mockReq = () =>
-  ({ headers: {}, socket: { remoteAddress: '127.0.0.1' }, get: jest.fn() } as any);
+  ({
+    headers: {},
+    socket: { remoteAddress: '127.0.0.1' },
+    get: jest.fn(),
+  }) as any;
 
 describe('MfaController', () => {
   let controller: MfaController;
@@ -73,7 +77,10 @@ describe('MfaController', () => {
     const result = await controller.setup(user);
     expect(mockMfaService.setupMfa).toHaveBeenCalledWith(user);
     expect(result).toEqual(
-      expect.objectContaining({ secret: 'SECRET', qrCodeUrl: expect.any(String) }),
+      expect.objectContaining({
+        secret: 'SECRET',
+        qrCodeUrl: expect.any(String),
+      }),
     );
   });
 

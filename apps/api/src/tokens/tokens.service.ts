@@ -5,13 +5,21 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { RedisService } from "../common/services/redis.service";
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../common/services/redis.service';
+
+import { createHash } from 'crypto';
 
 export namespace TokensService {
   /** Statuses the BILL-03 layer may pass when asking for settle/refund. */
-  export type OperationStatus = "RESERVED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "CANCELLED";
+  export type OperationStatus =
+    | 'RESERVED'
+    | 'RUNNING'
+    | 'SUCCEEDED'
+    | 'FAILED'
+    | 'UNKNOWN'
+    | 'CANCELLED';
 
   /**
    * Minimal operation view needed for token accounting. BILL-03 owns the real
@@ -32,7 +40,7 @@ export class TokensService {
   private readonly logger = new Logger(TokensService.name);
 
   /** Explicit version: bump only with a deliberate pricing change. */
-  static readonly PRICING_VERSION = "1";
+  static readonly PRICING_VERSION = '1';
 
   /**
    * Server-side pricing catalog (single source of truth). Frozen so callers
@@ -69,12 +77,12 @@ export class TokensService {
   // client see the model through a narrow typed facade avoids a generator
   // dependency in this slice while keeping every query typed.
   private static readonly GRANT_TYPES = {
-    DAILY_TOPUP: "DAILY_TOPUP",
-    DAILY_CHECKIN: "DAILY_CHECKIN",
+    DAILY_TOPUP: 'DAILY_TOPUP',
+    DAILY_CHECKIN: 'DAILY_CHECKIN',
   } as const;
   private static readonly GRANT_IDEMPOTENCY_PREFIXES = {
-    DAILY_TOPUP: "daily_topup",
-    DAILY_CHECKIN: "daily_checkin",
+    DAILY_TOPUP: 'daily_topup',
+    DAILY_CHECKIN: 'daily_checkin',
   } as const;
   private static readonly MS_PER_UTC_DAY = 86_400_000;
   private static readonly CHECKIN_BONUSES = [5, 5, 8, 8, 10, 10, 15] as const;
@@ -83,13 +91,21 @@ export class TokensService {
   private static readonly BILLING_RETRY_ATTEMPTS = 3;
   private static readonly BILLING_RETRY_BASE_MS = 5;
   private static readonly BILLING_RETRY_MAX_MS = 50;
-  private static readonly BILLING_TX_OPTIONS = { isolationLevel: "Serializable" as const };
+  private static readonly BILLING_TX_OPTIONS = {
+    isolationLevel: 'Serializable' as const,
+  };
   private static readonly BILLING_LEDGER_MAX_KEY_LENGTH = 128;
 
   /** Operation-scoped billing phases; all keys remain unique inside the ledger. */
-  private static readonly BILLING_ENTRY_KINDS = ["debit", "settle", "refund"] as const;
-  private static readonly SETTLE_FROM_STATUSES: readonly TokensService.OperationStatus[] = ["RESERVED", "RUNNING", "UNKNOWN"];
-  private static readonly REFUND_FROM_STATUSES: readonly TokensService.OperationStatus[] = ["RESERVED", "RUNNING", "UNKNOWN", "FAILED", "CANCELLED"];
+  private static readonly BILLING_ENTRY_KINDS = [
+    'debit',
+    'settle',
+    'refund',
+  ] as const;
+  private static readonly SETTLE_FROM_STATUSES: readonly TokensService.OperationStatus[] =
+    ['RESERVED', 'RUNNING', 'UNKNOWN'];
+  private static readonly REFUND_FROM_STATUSES: readonly TokensService.OperationStatus[] =
+    ['RESERVED', 'RUNNING', 'UNKNOWN', 'FAILED', 'CANCELLED'];
 
   constructor(
     private prisma: PrismaService,
@@ -149,7 +165,11 @@ export class TokensService {
       }
 
       try {
-        await this.redis.set(`token:balance:${userId}`, balance.toString(), TokensService.REDIS_BALANCE_TTL);
+        await this.redis.set(
+          `token:balance:${userId}`,
+          balance.toString(),
+          TokensService.REDIS_BALANCE_TTL,
+        );
       } catch (err: any) {
         this.logger.warn(`Failed to update balance cache: ${err.message}`);
       }
@@ -168,7 +188,12 @@ export class TokensService {
    * Uses a transaction with Serializable isolation level to guarantee balance never goes negative.
    * Implements request idempotency.
    */
-  async consumeTokens(userId: string, feature: string, _cost?: number, idempotencyKey?: string) {
+  async consumeTokens(
+    userId: string,
+    feature: string,
+    _cost?: number,
+    idempotencyKey?: string,
+  ) {
     // Pricing is server-authoritative. The optional client-supplied cost is
     // deliberately ignored: callers must never be able to choose what they pay.
     // Unknown features are rejected before any database access.
@@ -184,55 +209,65 @@ export class TokensService {
       const conflicting =
         existing &&
         ((existing.user_id !== undefined && existing.user_id !== userId) ||
-         (existing.feature !== undefined && existing.feature !== feature) ||
-         existing.amount !== -actualCost);
+          (existing.feature !== undefined && existing.feature !== feature) ||
+          existing.amount !== -actualCost);
       if (existing && !conflicting) {
-        this.logger.log(`Idempotency key hit: ${idempotencyKey}. Returning duplicate transaction output.`);
-        return { balance: existing.balance_after, cost: Math.abs(existing.amount) };
+        this.logger.log(
+          `Idempotency key hit: ${idempotencyKey}. Returning duplicate transaction output.`,
+        );
+        return {
+          balance: existing.balance_after,
+          cost: Math.abs(existing.amount),
+        };
       }
       if (conflicting) {
-        throw new BadRequestException('Idempotency key already used for a different request');
+        throw new BadRequestException(
+          'Idempotency key already used for a different request',
+        );
       }
     }
 
     // Check and apply daily top-up first
     await this.checkAndApplyDailyTopup(userId);
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.user_token_balance.findUnique({
-        where: { user_id: userId },
-      });
-      const currentBalance = row?.balance ?? 0;
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const row = await tx.user_token_balance.findUnique({
+          where: { user_id: userId },
+        });
+        const currentBalance = row?.balance ?? 0;
 
-      if (currentBalance < actualCost) {
-        throw new ForbiddenException(
-          `Insufficient token balance: need ${actualCost}, have ${currentBalance}`,
-        );
-      }
+        if (currentBalance < actualCost) {
+          throw new ForbiddenException(
+            `Insufficient token balance: need ${actualCost}, have ${currentBalance}`,
+          );
+        }
 
-      const newBalance = currentBalance - actualCost;
+        const newBalance = currentBalance - actualCost;
 
-      await tx.user_token_balance.upsert({
-        where: { user_id: userId },
-        create: { user_id: userId, balance: newBalance },
-        update: { balance: newBalance },
-      });
+        await tx.user_token_balance.upsert({
+          where: { user_id: userId },
+          create: { user_id: userId, balance: newBalance },
+          update: { balance: newBalance },
+        });
 
-      await tx.token_transactions.create({
-        data: {
-          user_id: userId,
-          amount: -actualCost,
-          type: "consumption",
-          feature,
-          balance_after: newBalance,
-          idempotency_key: idempotencyKey,
-        },
-      });
+        await tx.token_transactions.create({
+          data: {
+            user_id: userId,
+            amount: -actualCost,
+            type: 'consumption',
+            feature,
+            balance_after: newBalance,
+            idempotency_key: idempotencyKey,
+          },
+        });
 
-      return { balance: newBalance, cost: actualCost };
-    }, {
-      isolationLevel: "Serializable",
-    });
+        return { balance: newBalance, cost: actualCost };
+      },
+      {
+        isolationLevel: 'Serializable',
+      },
+    );
 
     // Invalidate Redis cache
     await this.invalidateCache(userId);
@@ -243,11 +278,19 @@ export class TokensService {
   /**
    * Add tokens to a user's balance (purchase, bonus, refund, daily_topup).
    */
-  async addTokens(userId: string, amount: number, type = "purchase", feature = "", idempotencyKey?: string) {
+  async addTokens(
+    userId: string,
+    amount: number,
+    type = 'purchase',
+    feature = '',
+    idempotencyKey?: string,
+  ) {
     // Grants must never debit an account. Refunds are represented as positive
     // amounts too; consumption is handled exclusively by consumeTokens.
     if (!Number.isSafeInteger(amount) || amount <= 0) {
-      throw new BadRequestException('Token grant amount must be a positive integer');
+      throw new BadRequestException(
+        'Token grant amount must be a positive integer',
+      );
     }
 
     if (idempotencyKey) {
@@ -255,40 +298,49 @@ export class TokensService {
         where: { idempotency_key: idempotencyKey },
       });
       if (existing) {
-        return { balance: existing.balance_after, added: existing.amount, duplicate: true };
+        return {
+          balance: existing.balance_after,
+          added: existing.amount,
+          duplicate: true,
+        };
       }
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Atomic increment prevents lost updates when grants/consumes overlap.
-      const updated = await tx.user_token_balance.upsert({
-        where: { user_id: userId },
-        create: { user_id: userId, balance: amount },
-        update: { balance: { increment: amount } },
-      });
-      const newBalance =
-        typeof updated?.balance === "number" ? updated.balance : amount;
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        // Atomic increment prevents lost updates when grants/consumes overlap.
+        const updated = await tx.user_token_balance.upsert({
+          where: { user_id: userId },
+          create: { user_id: userId, balance: amount },
+          update: { balance: { increment: amount } },
+        });
+        const newBalance =
+          typeof updated?.balance === 'number' ? updated.balance : amount;
 
-      await tx.token_transactions.create({
-        data: {
-          user_id: userId,
-          amount,
-          type,
-          feature: feature || type,
-          balance_after: newBalance,
-          idempotency_key: idempotencyKey,
-        },
-      });
+        await tx.token_transactions.create({
+          data: {
+            user_id: userId,
+            amount,
+            type,
+            feature: feature || type,
+            balance_after: newBalance,
+            idempotency_key: idempotencyKey,
+          },
+        });
 
-      return { balance: newBalance, added: amount };
-    }, {
-      isolationLevel: "Serializable",
-    });
+        return { balance: newBalance, added: amount };
+      },
+      {
+        isolationLevel: 'Serializable',
+      },
+    );
 
     // Invalidate Redis cache
     await this.invalidateCache(userId);
 
-    this.logger.log(`Added ${amount} tokens (${type}) for user ${userId}; new balance: ${result.balance}`);
+    this.logger.log(
+      `Added ${amount} tokens (${type}) for user ${userId}; new balance: ${result.balance}`,
+    );
     return result;
   }
 
@@ -298,7 +350,11 @@ export class TokensService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /** One shared UTC day identity for grants, usage and streak arithmetic. */
-  private static utcDay(now = new Date()): { day: string; start: Date; endExclusive: Date } {
+  private static utcDay(now = new Date()): {
+    day: string;
+    start: Date;
+    endExclusive: Date;
+  } {
     const day = now.toISOString().slice(0, 10); // YYYY-MM-DD UTC
     const startMs = Date.parse(`${day}T00:00:00.000Z`);
     return {
@@ -310,7 +366,10 @@ export class TokensService {
 
   /** Shift a UTC day string by whole days without local-time rounding. */
   private static shiftUtcDay(day: string, deltaDays: number): string {
-    return new Date(Date.parse(`${day}T00:00:00.000Z`) + deltaDays * TokensService.MS_PER_UTC_DAY)
+    return new Date(
+      Date.parse(`${day}T00:00:00.000Z`) +
+        deltaDays * TokensService.MS_PER_UTC_DAY,
+    )
       .toISOString()
       .slice(0, 10);
   }
@@ -322,13 +381,23 @@ export class TokensService {
    */
   private static grantDelegate(client: any): {
     findUnique(args: {
-      where: { user_id_grant_type_day: { user_id: string; grant_type: string; day: Date } };
+      where: {
+        user_id_grant_type_day: {
+          user_id: string;
+          grant_type: string;
+          day: Date;
+        };
+      };
       select?: { amount?: true };
     }): Promise<{ amount: number } | null>;
     findMany(args: {
-      where: { user_id: string; grant_type?: string; day?: { gte?: Date; lte?: Date } };
+      where: {
+        user_id: string;
+        grant_type?: string;
+        day?: { gte?: Date; lte?: Date };
+      };
       select: { day: true; amount?: true };
-      orderBy: { day: "asc" | "desc" };
+      orderBy: { day: 'asc' | 'desc' };
     }): Promise<Array<{ day: Date; amount?: number }>>;
     create(args: {
       data: { user_id: string; grant_type: string; day: Date; amount: number };
@@ -337,24 +406,37 @@ export class TokensService {
     const delegate = client?.daily_credit_grants;
     if (
       !delegate ||
-      typeof delegate.findUnique !== "function" ||
-      typeof delegate.findMany !== "function" ||
-      typeof delegate.create !== "function"
+      typeof delegate.findUnique !== 'function' ||
+      typeof delegate.findMany !== 'function' ||
+      typeof delegate.create !== 'function'
     ) {
-      throw new Error("daily_credit_grants is unavailable: apply the BILL-05 migration and regenerate Prisma");
+      throw new Error(
+        'daily_credit_grants is unavailable: apply the BILL-05 migration and regenerate Prisma',
+      );
     }
     return delegate;
   }
 
   private static grantWhere(user_id: string, grant_type: string, day: string) {
     return {
-      user_id_grant_type_day: { user_id, grant_type, day: new Date(`${day}T00:00:00.000Z`) },
+      user_id_grant_type_day: {
+        user_id,
+        grant_type,
+        day: new Date(`${day}T00:00:00.000Z`),
+      },
     };
   }
 
   /** Deterministic ledger key shared by every phase of a daily grant. */
-  private static dailyGrantKey(userId: string, grantType: string, day: string): string {
-    const prefix = TokensService.GRANT_IDEMPOTENCY_PREFIXES[grantType as keyof typeof TokensService.GRANT_IDEMPOTENCY_PREFIXES] ?? grantType.toLowerCase();
+  private static dailyGrantKey(
+    userId: string,
+    grantType: string,
+    day: string,
+  ): string {
+    const prefix =
+      TokensService.GRANT_IDEMPOTENCY_PREFIXES[
+        grantType as keyof typeof TokensService.GRANT_IDEMPOTENCY_PREFIXES
+      ] ?? grantType.toLowerCase();
     return `${prefix}:${userId}:${day}`;
   }
 
@@ -391,7 +473,10 @@ export class TokensService {
   ): Promise<{ amount: number; replay: boolean }> {
     const delegate = TokensService.grantDelegate(tx);
     const where = TokensService.grantWhere(userId, grantType, day);
-    const existing = await delegate.findUnique({ where, select: { amount: true } });
+    const existing = await delegate.findUnique({
+      where,
+      select: { amount: true },
+    });
     if (existing) return { amount: existing.amount, replay: true };
 
     const key = TokensService.dailyGrantKey(userId, grantType, day);
@@ -420,8 +505,14 @@ export class TokensService {
         data: {
           user_id: userId,
           amount,
-          type: grantType === TokensService.GRANT_TYPES.DAILY_CHECKIN ? "bonus" : "daily_topup",
-          feature: grantType === TokensService.GRANT_TYPES.DAILY_CHECKIN ? "daily_checkin" : "daily_topup",
+          type:
+            grantType === TokensService.GRANT_TYPES.DAILY_CHECKIN
+              ? 'bonus'
+              : 'daily_topup',
+          feature:
+            grantType === TokensService.GRANT_TYPES.DAILY_CHECKIN
+              ? 'daily_checkin'
+              : 'daily_topup',
           balance_after: newBalance,
           idempotency_key: key,
         },
@@ -429,7 +520,12 @@ export class TokensService {
     }
 
     await delegate.create({
-      data: { user_id: userId, grant_type: grantType, day: new Date(`${day}T00:00:00.000Z`), amount },
+      data: {
+        user_id: userId,
+        grant_type: grantType,
+        day: new Date(`${day}T00:00:00.000Z`),
+        amount,
+      },
     });
     return { amount, replay: false };
   }
@@ -444,7 +540,13 @@ export class TokensService {
     return this.withBillingRetry(async () => {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          return this.applyDailyGrantInTx(tx, userId, day, grantType, computeAmount);
+          return this.applyDailyGrantInTx(
+            tx,
+            userId,
+            day,
+            grantType,
+            computeAmount,
+          );
         }, TokensService.BILLING_TX_OPTIONS);
       } catch (error: unknown) {
         if (TokensService.isDailyReplay(error)) {
@@ -452,11 +554,13 @@ export class TokensService {
           if (marker) return { amount: marker.amount, replay: true };
           // A concurrent transaction may have committed the ledger row first;
           // use it to reconstruct the original grant instead of failing.
-          const ledger = await this.readBillingEntry(TokensService.dailyGrantKey(userId, grantType, day));
+          const ledger = await this.readBillingEntry(
+            TokensService.dailyGrantKey(userId, grantType, day),
+          );
           if (ledger && ledger.user_id === userId && ledger.amount > 0) {
             return { amount: ledger.amount, replay: true };
           }
-          throw new ConflictException("Daily grant could not be confirmed");
+          throw new ConflictException('Daily grant could not be confirmed');
         }
         throw error;
       }
@@ -464,7 +568,11 @@ export class TokensService {
   }
 
   /** Cache a processed day; a cache failure must never change the outcome. */
-  private async cacheDailyGrant(key: string, value: string, ttl: number): Promise<void> {
+  private async cacheDailyGrant(
+    key: string,
+    value: string,
+    ttl: number,
+  ): Promise<void> {
     try {
       await this.redis.set(key, value, ttl);
     } catch (err: any) {
@@ -478,7 +586,7 @@ export class TokensService {
     const agg = await this.prisma.token_transactions.aggregate({
       where: {
         user_id: userId,
-        type: "consumption",
+        type: 'consumption',
         created_at: { gte: start, lt: endExclusive },
       },
       _sum: { amount: true },
@@ -499,7 +607,11 @@ export class TokensService {
     // The DB marker must be consulted before treating a check-in as done.
     try {
       if (await this.redis.get(checkinKey)) {
-        const marked = await this.readDailyGrant(userId, TokensService.GRANT_TYPES.DAILY_CHECKIN, day);
+        const marked = await this.readDailyGrant(
+          userId,
+          TokensService.GRANT_TYPES.DAILY_CHECKIN,
+          day,
+        );
         if (marked) {
           const balance = await this.getBalance(userId);
           return {
@@ -517,9 +629,17 @@ export class TokensService {
       this.logger.warn(`Failed to read check-in cache: ${err.message}`);
     }
 
-    const marked = await this.readDailyGrant(userId, TokensService.GRANT_TYPES.DAILY_CHECKIN, day);
+    const marked = await this.readDailyGrant(
+      userId,
+      TokensService.GRANT_TYPES.DAILY_CHECKIN,
+      day,
+    );
     if (marked) {
-      await this.cacheDailyGrant(checkinKey, "1", TokensService.REDIS_CHECKIN_TTL);
+      await this.cacheDailyGrant(
+        checkinKey,
+        '1',
+        TokensService.REDIS_CHECKIN_TTL,
+      );
       const balance = await this.getBalance(userId);
       return {
         balance: balance.balance,
@@ -534,8 +654,17 @@ export class TokensService {
     const streak = await this.checkInStreak(userId, day);
     const dailyBonus = bonuses[Math.min(streak, bonuses.length - 1)];
 
-    const grant = await this.runDailyGrant(userId, TokensService.GRANT_TYPES.DAILY_CHECKIN, day, () => dailyBonus);
-    await this.cacheDailyGrant(checkinKey, "1", TokensService.REDIS_CHECKIN_TTL);
+    const grant = await this.runDailyGrant(
+      userId,
+      TokensService.GRANT_TYPES.DAILY_CHECKIN,
+      day,
+      () => dailyBonus,
+    );
+    await this.cacheDailyGrant(
+      checkinKey,
+      '1',
+      TokensService.REDIS_CHECKIN_TTL,
+    );
     if (!grant.replay && grant.amount > 0) await this.invalidateCache(userId);
 
     const balanceRow = await this.prisma.user_token_balance.findUnique({
@@ -547,28 +676,44 @@ export class TokensService {
       todayUsed: await this.todayUsed(userId),
       tokensEarned: grant.replay ? 0 : grant.amount,
       alreadyCheckedIn: grant.replay,
-      streak: grant.replay ? await this.checkInStreak(userId, day, true) : streak + 1,
+      streak: grant.replay
+        ? await this.checkInStreak(userId, day, true)
+        : streak + 1,
     };
   }
 
   /** Consecutive granted UTC days ending yesterday, or today when replayed. */
-  private async checkInStreak(userId: string, day: string, includeToday = false): Promise<number> {
+  private async checkInStreak(
+    userId: string,
+    day: string,
+    includeToday = false,
+  ): Promise<number> {
     const days = await TokensService.grantDelegate(this.prisma).findMany({
       where: {
         user_id: userId,
         grant_type: TokensService.GRANT_TYPES.DAILY_CHECKIN,
         day: {
-          gte: new Date(TokensService.shiftUtcDay(day, -TokensService.CHECKIN_BONUSES.length)),
+          gte: new Date(
+            TokensService.shiftUtcDay(
+              day,
+              -TokensService.CHECKIN_BONUSES.length,
+            ),
+          ),
           lte: new Date(`${day}T00:00:00.000Z`),
         },
       },
       select: { day: true },
-      orderBy: { day: "desc" },
+      orderBy: { day: 'desc' },
     });
-    const granted = new Set(days.map((row) => row.day.toISOString().slice(0, 10)));
+    const granted = new Set(
+      days.map((row) => row.day.toISOString().slice(0, 10)),
+    );
     let cursor = includeToday ? day : TokensService.shiftUtcDay(day, -1);
     let streak = 0;
-    while (streak < TokensService.CHECKIN_BONUSES.length && granted.has(cursor)) {
+    while (
+      streak < TokensService.CHECKIN_BONUSES.length &&
+      granted.has(cursor)
+    ) {
       streak += 1;
       cursor = TokensService.shiftUtcDay(cursor, -1);
     }
@@ -585,10 +730,14 @@ export class TokensService {
     const topupKey = `token:last_topup:${userId}`;
 
     try {
-      if (await this.redis.get(topupKey) === day) {
+      if ((await this.redis.get(topupKey)) === day) {
         // Cheap fast path, but confirm the cached day has a durable marker:
         // a Redis-only fixture must not suppress the first real grant.
-        const marked = await this.readDailyGrant(userId, TokensService.GRANT_TYPES.DAILY_TOPUP, day);
+        const marked = await this.readDailyGrant(
+          userId,
+          TokensService.GRANT_TYPES.DAILY_TOPUP,
+          day,
+        );
         if (marked) return false;
       }
     } catch (err: any) {
@@ -650,28 +799,39 @@ export class TokensService {
     charge: number | undefined,
   ): TokensService.BillingOperation {
     const parsed: TokensService.BillingOperation =
-      typeof operation === "string"
+      typeof operation === 'string'
         ? { operationId: operation, feature, charge: charge as number }
-        : { ...operation, feature: operation.feature ?? feature, charge: operation.charge ?? charge as number };
+        : {
+            ...operation,
+            feature: operation.feature ?? feature,
+            charge: operation.charge ?? (charge as number),
+          };
 
     if (
       !parsed.operationId ||
-      typeof parsed.operationId !== "string" ||
+      typeof parsed.operationId !== 'string' ||
       !parsed.feature ||
-      !Object.prototype.hasOwnProperty.call(TokensService.PRICING_CATALOG.costs, parsed.feature)
+      !Object.prototype.hasOwnProperty.call(
+        TokensService.PRICING_CATALOG.costs,
+        parsed.feature,
+      )
     ) {
-      throw new BadRequestException("A valid operationId and known feature are required for billing");
+      throw new BadRequestException(
+        'A valid operationId and known feature are required for billing',
+      );
     }
 
     if (
       !Number.isSafeInteger(parsed.charge) ||
       parsed.charge !== TokensService.PRICING_CATALOG.costs[parsed.feature]
     ) {
-      throw new BadRequestException("Server-side charge for the feature is required");
+      throw new BadRequestException(
+        'Server-side charge for the feature is required',
+      );
     }
 
     if (parsed.userId && (!parsed.user || parsed.user !== parsed.userId)) {
-      throw new BadRequestException("Billing operation user mismatch");
+      throw new BadRequestException('Billing operation user mismatch');
     }
 
     return { ...parsed, user: parsed.user ?? parsed.userId };
@@ -687,79 +847,111 @@ export class TokensService {
     operation: TokensService.BillingOperation,
     kind: (typeof TokensService.BILLING_ENTRY_KINDS)[number],
   ): string {
-    const user = operation.user ?? operation.userId ?? "unknown";
-    const prefix = kind === "refund"
-      ? "refund:aiop:"
-      : `op:${user}:${operation.operationId}:`;
-    const raw = kind === "refund"
-      ? `${prefix}${operation.operationId}`
-      : `${prefix}${kind}`;
+    const user = operation.user ?? operation.userId ?? 'unknown';
+    const prefix =
+      kind === 'refund'
+        ? 'refund:aiop:'
+        : `op:${user}:${operation.operationId}:`;
+    const raw =
+      kind === 'refund'
+        ? `${prefix}${operation.operationId}`
+        : `${prefix}${kind}`;
     if (raw.length <= TokensService.BILLING_LEDGER_MAX_KEY_LENGTH) return raw;
 
     // Long operation IDs must still produce a stable, collision-resistant key
     // that fits the VARCHAR(128) column.
-    const crypto = require("crypto") as typeof import("crypto");
-    const hash = crypto.createHash("sha256").update(raw).digest("hex");
-    const room = TokensService.BILLING_LEDGER_MAX_KEY_LENGTH - prefix.length - hash.length - 1;
-    return room > 0 ? `${prefix}${operation.operationId.slice(0, room)}..${hash}` : hash.slice(0, TokensService.BILLING_LEDGER_MAX_KEY_LENGTH);
+    const hash = createHash('sha256').update(raw).digest('hex');
+    const room =
+      TokensService.BILLING_LEDGER_MAX_KEY_LENGTH -
+      prefix.length -
+      hash.length -
+      1;
+    return room > 0
+      ? `${prefix}${operation.operationId.slice(0, room)}..${hash}`
+      : hash.slice(0, TokensService.BILLING_LEDGER_MAX_KEY_LENGTH);
   }
 
   private static isDuplicateKeyError(error: unknown): boolean {
     return (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      (error as { code?: string }).code === "P2002"
+      (error as { code?: string }).code === 'P2002'
     );
   }
 
   private static isSerializationConflict(error: unknown): boolean {
     return (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      (error as { code?: string }).code === "P2034"
+      (error as { code?: string }).code === 'P2034'
     );
   }
 
   /** Read back the ledger row so a replay returns the original result. */
-  private async readBillingEntry(
-    key: string,
-  ): Promise<{ user_id?: string; feature?: string; amount: number; balance_after: number } | null> {
+  private async readBillingEntry(key: string): Promise<{
+    user_id?: string;
+    feature?: string;
+    amount: number;
+    balance_after: number;
+  } | null> {
     const entry = await this.prisma.token_transactions.findUnique({
       where: { idempotency_key: key },
     });
-    return entry as { user_id?: string; feature?: string; amount: number; balance_after: number } | null;
+    return entry as {
+      user_id?: string;
+      feature?: string;
+      amount: number;
+      balance_after: number;
+    } | null;
   }
 
   private static assertReplayMatches(
-    entry: { user_id?: string; feature?: string; amount: number; balance_after: number },
+    entry: {
+      user_id?: string;
+      feature?: string;
+      amount: number;
+      balance_after: number;
+    },
     operation: TokensService.BillingOperation,
     expectedAmount: number,
   ): void {
     if (
-      (entry.user_id !== undefined && entry.user_id !== (operation.user ?? operation.userId)) ||
+      (entry.user_id !== undefined &&
+        entry.user_id !== (operation.user ?? operation.userId)) ||
       (entry.feature !== undefined && entry.feature !== operation.feature) ||
       entry.amount !== expectedAmount
     ) {
-      throw new ConflictException("Billing operation key already used for a different request");
+      throw new ConflictException(
+        'Billing operation key already used for a different request',
+      );
     }
   }
 
   /** Bounded retries with jitter for serialization conflicts only. */
   private async withBillingRetry<T>(work: () => Promise<T>): Promise<T> {
     let lastError: unknown;
-    for (let attempt = 0; attempt < TokensService.BILLING_RETRY_ATTEMPTS; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < TokensService.BILLING_RETRY_ATTEMPTS;
+      attempt += 1
+    ) {
       try {
         return await work();
       } catch (error: unknown) {
         lastError = error;
-        if (!TokensService.isSerializationConflict(error) || attempt === TokensService.BILLING_RETRY_ATTEMPTS - 1) {
+        if (
+          !TokensService.isSerializationConflict(error) ||
+          attempt === TokensService.BILLING_RETRY_ATTEMPTS - 1
+        ) {
           throw error;
         }
         const ceiling = Math.min(
           TokensService.BILLING_RETRY_BASE_MS * 2 ** attempt,
           TokensService.BILLING_RETRY_MAX_MS,
         );
-        await new Promise((resolve) => setTimeout(resolve, Math.random() * ceiling));
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.random() * ceiling),
+        );
       }
     }
     throw lastError;
@@ -777,22 +969,33 @@ export class TokensService {
     day: string,
     markerRetries = 0,
   ): Promise<{ balance: number; cost: number; duplicate: boolean }> {
-    const key = TokensService.billingKey(operation, "debit");
-    const user = operation.user ?? operation.userId as string;
+    const key = TokensService.billingKey(operation, 'debit');
+    const user = operation.user ?? (operation.userId as string);
     const cost = operation.charge as number;
 
     /** Distinguish a debit-key replay from a racing daily marker insert. */
-    const conflictSource = async (): Promise<"debit" | "marker" | "unknown"> => {
+    const conflictSource = async (): Promise<
+      'debit' | 'marker' | 'unknown'
+    > => {
       const existing = await this.readBillingEntry(key);
-      if (existing) return "debit";
-      const grant = await this.readDailyGrant(user, TokensService.GRANT_TYPES.DAILY_TOPUP, day);
-      if (grant) return "marker";
-      return "unknown";
+      if (existing) return 'debit';
+      const grant = await this.readDailyGrant(
+        user,
+        TokensService.GRANT_TYPES.DAILY_TOPUP,
+        day,
+      );
+      if (grant) return 'marker';
+      return 'unknown';
     };
 
-    const replay = async (): Promise<{ balance: number; cost: number; duplicate: boolean }> => {
+    const replay = async (): Promise<{
+      balance: number;
+      cost: number;
+      duplicate: boolean;
+    }> => {
       const existing = await this.readBillingEntry(key);
-      if (!existing) throw new ConflictException("Billing debit could not be confirmed");
+      if (!existing)
+        throw new ConflictException('Billing debit could not be confirmed');
       TokensService.assertReplayMatches(existing, operation, -cost);
       return { balance: existing.balance_after, cost, duplicate: true };
     };
@@ -805,7 +1008,12 @@ export class TokensService {
           });
           if (existing) {
             TokensService.assertReplayMatches(
-              existing as { user_id?: string; feature?: string; amount: number; balance_after: number },
+              existing as {
+                user_id?: string;
+                feature?: string;
+                amount: number;
+                balance_after: number;
+              },
               operation,
               -cost,
             );
@@ -844,7 +1052,7 @@ export class TokensService {
             data: {
               user_id: user,
               amount: -cost,
-              type: "consumption",
+              type: 'consumption',
               feature: operation.feature,
               balance_after: balance,
               idempotency_key: key,
@@ -856,13 +1064,13 @@ export class TokensService {
       } catch (error: unknown) {
         if (TokensService.isDuplicateKeyError(error)) {
           const source = await conflictSource();
-          if (source === "debit") return replay();
-          if (source === "marker" && markerRetries === 0) {
+          if (source === 'debit') return replay();
+          if (source === 'marker' && markerRetries === 0) {
             // A concurrent request committed the daily marker; re-read the
             // committed balance and retry the debit exactly once.
             return this.debitForOperation(operation, day, 1);
           }
-          throw new ConflictException("Billing debit could not be confirmed");
+          throw new ConflictException('Billing debit could not be confirmed');
         }
         throw error;
       }
@@ -876,16 +1084,30 @@ export class TokensService {
   private async settleOperation(
     operation: TokensService.BillingOperation,
   ): Promise<{ balance: number; cost: number; duplicate: boolean }> {
-    const key = TokensService.billingKey(operation, "settle");
-    const user = operation.user ?? operation.userId as string;
+    const key = TokensService.billingKey(operation, 'settle');
+    const user = operation.user ?? (operation.userId as string);
     const cost = operation.charge as number;
-    if (operation.status && !TokensService.SETTLE_FROM_STATUSES.includes(operation.status as TokensService.OperationStatus)) {
-      throw new ConflictException(`Operation cannot be settled from status ${operation.status}`);
+    if (
+      operation.status &&
+      !TokensService.SETTLE_FROM_STATUSES.includes(
+        operation.status as TokensService.OperationStatus,
+      )
+    ) {
+      throw new ConflictException(
+        `Operation cannot be settled from status ${operation.status}`,
+      );
     }
 
-    const replay = async (): Promise<{ balance: number; cost: number; duplicate: boolean }> => {
+    const replay = async (): Promise<{
+      balance: number;
+      cost: number;
+      duplicate: boolean;
+    }> => {
       const existing = await this.readBillingEntry(key);
-      if (!existing) throw new ConflictException("Billing settlement could not be confirmed");
+      if (!existing)
+        throw new ConflictException(
+          'Billing settlement could not be confirmed',
+        );
       TokensService.assertReplayMatches(existing, operation, 0);
       return { balance: existing.balance_after, cost, duplicate: true };
     };
@@ -898,7 +1120,12 @@ export class TokensService {
           });
           if (existing) {
             TokensService.assertReplayMatches(
-              existing as { user_id?: string; feature?: string; amount: number; balance_after: number },
+              existing as {
+                user_id?: string;
+                feature?: string;
+                amount: number;
+                balance_after: number;
+              },
               operation,
               0,
             );
@@ -906,25 +1133,40 @@ export class TokensService {
           }
 
           const debit = await tx.token_transactions.findUnique({
-            where: { idempotency_key: TokensService.billingKey(operation, "debit") },
+            where: {
+              idempotency_key: TokensService.billingKey(operation, 'debit'),
+            },
           });
-          if (!debit) throw new NotFoundException("Billing operation has no debit to settle");
+          if (!debit)
+            throw new NotFoundException(
+              'Billing operation has no debit to settle',
+            );
           TokensService.assertReplayMatches(
-            debit as { user_id?: string; feature?: string; amount: number; balance_after: number },
+            debit as {
+              user_id?: string;
+              feature?: string;
+              amount: number;
+              balance_after: number;
+            },
             operation,
             -cost,
           );
 
           const refund = await tx.token_transactions.findUnique({
-            where: { idempotency_key: TokensService.billingKey(operation, "refund") },
+            where: {
+              idempotency_key: TokensService.billingKey(operation, 'refund'),
+            },
           });
-          if (refund) throw new ConflictException("Refunded operations cannot be settled");
+          if (refund)
+            throw new ConflictException(
+              'Refunded operations cannot be settled',
+            );
 
           await tx.token_transactions.create({
             data: {
               user_id: user,
               amount: 0,
-              type: "consumption",
+              type: 'consumption',
               feature: operation.feature,
               balance_after: debit.balance_after,
               idempotency_key: key,
@@ -948,18 +1190,34 @@ export class TokensService {
   private async refundOperation(
     operation: TokensService.BillingOperation,
   ): Promise<{ balance: number; refunded: number; duplicate: boolean }> {
-    const key = TokensService.billingKey(operation, "refund");
-    const user = operation.user ?? operation.userId as string;
+    const key = TokensService.billingKey(operation, 'refund');
+    const user = operation.user ?? (operation.userId as string);
     const cost = operation.charge as number;
-    if (operation.status && !TokensService.REFUND_FROM_STATUSES.includes(operation.status as TokensService.OperationStatus)) {
-      throw new ConflictException(`Operation cannot be refunded from status ${operation.status}`);
+    if (
+      operation.status &&
+      !TokensService.REFUND_FROM_STATUSES.includes(
+        operation.status as TokensService.OperationStatus,
+      )
+    ) {
+      throw new ConflictException(
+        `Operation cannot be refunded from status ${operation.status}`,
+      );
     }
 
-    const replay = async (): Promise<{ balance: number; refunded: number; duplicate: boolean }> => {
+    const replay = async (): Promise<{
+      balance: number;
+      refunded: number;
+      duplicate: boolean;
+    }> => {
       const existing = await this.readBillingEntry(key);
-      if (!existing) throw new ConflictException("Billing refund could not be confirmed");
+      if (!existing)
+        throw new ConflictException('Billing refund could not be confirmed');
       TokensService.assertReplayMatches(existing, operation, cost);
-      return { balance: existing.balance_after, refunded: cost, duplicate: true };
+      return {
+        balance: existing.balance_after,
+        refunded: cost,
+        duplicate: true,
+      };
     };
 
     return this.withBillingRetry(async () => {
@@ -970,19 +1228,38 @@ export class TokensService {
           });
           if (existing) {
             TokensService.assertReplayMatches(
-              existing as { user_id?: string; feature?: string; amount: number; balance_after: number },
+              existing as {
+                user_id?: string;
+                feature?: string;
+                amount: number;
+                balance_after: number;
+              },
               operation,
               cost,
             );
-            return { balance: existing.balance_after, refunded: cost, duplicate: true };
+            return {
+              balance: existing.balance_after,
+              refunded: cost,
+              duplicate: true,
+            };
           }
 
           const debit = await tx.token_transactions.findUnique({
-            where: { idempotency_key: TokensService.billingKey(operation, "debit") },
+            where: {
+              idempotency_key: TokensService.billingKey(operation, 'debit'),
+            },
           });
-          if (!debit) throw new NotFoundException("Billing operation has no debit to refund");
+          if (!debit)
+            throw new NotFoundException(
+              'Billing operation has no debit to refund',
+            );
           TokensService.assertReplayMatches(
-            debit as { user_id?: string; feature?: string; amount: number; balance_after: number },
+            debit as {
+              user_id?: string;
+              feature?: string;
+              amount: number;
+              balance_after: number;
+            },
             operation,
             -cost,
           );
@@ -992,13 +1269,14 @@ export class TokensService {
             create: { user_id: user, balance: cost },
             update: { balance: { increment: cost } },
           });
-          const balance = typeof updated?.balance === "number" ? updated.balance : cost;
+          const balance =
+            typeof updated?.balance === 'number' ? updated.balance : cost;
 
           await tx.token_transactions.create({
             data: {
               user_id: user,
               amount: cost,
-              type: "refund",
+              type: 'refund',
               feature: operation.feature,
               balance_after: balance,
               idempotency_key: key,
@@ -1023,11 +1301,15 @@ export class TokensService {
   async reserveTokens(
     userId: string,
     operation: string | TokensService.BillingOperation,
-    feature = "ai_chat",
+    feature = 'ai_chat',
   ): Promise<{ balance: number; cost: number; duplicate: boolean }> {
-    const parsed = TokensService.resolveBillingOperation(operation, feature, undefined);
+    const parsed = TokensService.resolveBillingOperation(
+      operation,
+      feature,
+      undefined,
+    );
     if (parsed.userId && parsed.userId !== userId) {
-      throw new BadRequestException("Billing operation user mismatch");
+      throw new BadRequestException('Billing operation user mismatch');
     }
     parsed.user = userId;
     parsed.userId = userId;
@@ -1045,11 +1327,15 @@ export class TokensService {
   async settleTokens(
     userId: string,
     operation: string | TokensService.BillingOperation,
-    feature = "ai_chat",
+    feature = 'ai_chat',
   ): Promise<{ balance: number; cost: number; duplicate: boolean }> {
-    const parsed = TokensService.resolveBillingOperation(operation, feature, undefined);
+    const parsed = TokensService.resolveBillingOperation(
+      operation,
+      feature,
+      undefined,
+    );
     if (parsed.userId && parsed.userId !== userId) {
-      throw new BadRequestException("Billing operation user mismatch");
+      throw new BadRequestException('Billing operation user mismatch');
     }
     parsed.user = userId;
     parsed.userId = userId;
@@ -1063,11 +1349,15 @@ export class TokensService {
   async refundTokens(
     userId: string,
     operation: string | TokensService.BillingOperation,
-    feature = "ai_chat",
+    feature = 'ai_chat',
   ): Promise<{ balance: number; refunded: number; duplicate: boolean }> {
-    const parsed = TokensService.resolveBillingOperation(operation, feature, undefined);
+    const parsed = TokensService.resolveBillingOperation(
+      operation,
+      feature,
+      undefined,
+    );
     if (parsed.userId && parsed.userId !== userId) {
-      throw new BadRequestException("Billing operation user mismatch");
+      throw new BadRequestException('Billing operation user mismatch');
     }
     parsed.user = userId;
     parsed.userId = userId;

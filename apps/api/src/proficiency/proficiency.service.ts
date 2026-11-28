@@ -103,7 +103,10 @@ function validateScoreTotal(score: number, total: number): void {
   }
 }
 
-function clampLimit(value: number | string | undefined, fallback: number): number {
+function clampLimit(
+  value: number | string | undefined,
+  fallback: number,
+): number {
   if (value === undefined || value === null || value === '') return fallback;
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -213,7 +216,11 @@ export class ProficiencyService {
   }
 
   async submitPlacement(userId: string, dto: SubmitPlacementDto) {
-    const language = normalizeChoice(dto.language, PROFICIENCY_LANGUAGES, 'language');
+    const language = normalizeChoice(
+      dto.language,
+      PROFICIENCY_LANGUAGES,
+      'language',
+    );
     const skill = normalizeChoice(dto.skill, PROFICIENCY_SKILLS, 'skill');
     validateScoreTotal(dto.score, dto.total);
     const observedBand = CEFR_BANDS[cefrOrdinalForRatio(dto.score, dto.total)];
@@ -225,14 +232,27 @@ export class ProficiencyService {
         RETURNING language, skill, score, total, cefr_estimate, created_at
       `;
       const proficiency = await this.applyEvidence(
-        tx, userId, language, skill, dto.score, dto.total, 1.5,
+        tx,
+        userId,
+        language,
+        skill,
+        dto.score,
+        dto.total,
+        1.5,
       );
       return { attempt: toAttempt(attempts[0]), proficiency };
     });
   }
 
-  async recordEvidence(userId: string, evidence: SkillEvidence): Promise<ProficiencyItem> {
-    const language = normalizeChoice(evidence.language, PROFICIENCY_LANGUAGES, 'language');
+  async recordEvidence(
+    userId: string,
+    evidence: SkillEvidence,
+  ): Promise<ProficiencyItem> {
+    const language = normalizeChoice(
+      evidence.language,
+      PROFICIENCY_LANGUAGES,
+      'language',
+    );
     const skill = normalizeChoice(evidence.skill, PROFICIENCY_SKILLS, 'skill');
     validateScoreTotal(evidence.score, evidence.total);
     const weight =
@@ -240,7 +260,15 @@ export class ProficiencyService {
         ? clamp(evidence.weight, 0.25, 2)
         : 1;
     return this.prisma.$transaction((tx) =>
-      this.applyEvidence(tx, userId, language, skill, evidence.score, evidence.total, weight),
+      this.applyEvidence(
+        tx,
+        userId,
+        language,
+        skill,
+        evidence.score,
+        evidence.total,
+        weight,
+      ),
     );
   }
 
@@ -268,7 +296,11 @@ export class ProficiencyService {
     const observationOrdinal = cefrOrdinalForRatio(score, total);
     const alpha = clamp(weight / (currentCount + weight + 6), 0.05, 0.25);
     const nextOrdinal = Math.trunc(
-      clamp(Math.round((1 - alpha) * currentOrdinal + alpha * observationOrdinal), 0, 5),
+      clamp(
+        Math.round((1 - alpha) * currentOrdinal + alpha * observationOrdinal),
+        0,
+        5,
+      ),
     );
     const nextCount = currentCount + 1;
 

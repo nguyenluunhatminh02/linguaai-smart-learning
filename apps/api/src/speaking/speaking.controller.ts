@@ -1,10 +1,34 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBase64, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+  ApiProperty,
+  ApiPropertyOptional,
+} from '@nestjs/swagger';
+import {
+  IsBase64,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { SpeakingService } from './speaking.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { MAX_UPLOAD_BYTES, TRANSCRIBE_MIME_TYPES } from '../files/file-validation';
+import {
+  MAX_UPLOAD_BYTES,
+  TRANSCRIBE_MIME_TYPES,
+} from '../files/file-validation';
 
 /** Languages accepted by the Whisper language codes used by SpeakingService. */
 const TRANSCRIBE_LANGUAGES = [
@@ -34,7 +58,11 @@ class TranscribeDto {
   @MaxLength(Math.ceil(MAX_UPLOAD_BYTES / 3) * 4)
   audio!: string;
 
-  @ApiPropertyOptional({ required: false, example: 'audio/webm', enum: [...TRANSCRIBE_MIME_TYPES] })
+  @ApiPropertyOptional({
+    required: false,
+    example: 'audio/webm',
+    enum: [...TRANSCRIBE_MIME_TYPES],
+  })
   @IsOptional()
   @IsString()
   @IsIn([...TRANSCRIBE_MIME_TYPES])
@@ -60,12 +88,16 @@ export class SpeakingController {
   constructor(private readonly speakingService: SpeakingService) {}
 
   @Post('transcribe')
-  @ApiOperation({ summary: 'Transcribe user speaking audio file using Whisper' })
-  transcribe(
-    @CurrentUser('id') userId: string,
-    @Body() body: TranscribeDto,
-  ) {
-    return this.speakingService.transcribe(userId, body.audio, body.mimeType, body.language);
+  @ApiOperation({
+    summary: 'Transcribe user speaking audio file using Whisper',
+  })
+  transcribe(@CurrentUser('id') userId: string, @Body() body: TranscribeDto) {
+    return this.speakingService.transcribe(
+      userId,
+      body.audio,
+      body.mimeType,
+      body.language,
+    );
   }
 
   @Get('history')
@@ -77,7 +109,11 @@ export class SpeakingController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.speakingService.getHistory(userId, Number(page) || 1, Number(limit) || 10);
+    return this.speakingService.getHistory(
+      userId,
+      Number(page) || 1,
+      Number(limit) || 10,
+    );
   }
 
   @Get(':id')

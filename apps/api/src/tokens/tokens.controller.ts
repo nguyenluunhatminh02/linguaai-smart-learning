@@ -22,7 +22,12 @@ export class TokensController {
   @ApiOperation({ summary: 'Consume tokens for a feature' })
   async consumeTokens(@Req() req: Request, @Body() dto: ConsumeTokensDto) {
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    return this.tokensService.consumeTokens((req as any).user.id, dto.feature, dto.cost, idempotencyKey);
+    return this.tokensService.consumeTokens(
+      (req as any).user.id,
+      dto.feature,
+      dto.cost,
+      idempotencyKey,
+    );
   }
 
   @Get('history')

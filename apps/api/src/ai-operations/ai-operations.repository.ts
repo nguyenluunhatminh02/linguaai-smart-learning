@@ -67,7 +67,10 @@ export interface MarkTerminalInput {
   userId: string;
   expectedVersion: number;
   leaseToken: string;
-  status: Extract<AiOperationStatus, 'SUCCEEDED' | 'FAILED' | 'UNKNOWN' | 'CANCELLED'>;
+  status: Extract<
+    AiOperationStatus,
+    'SUCCEEDED' | 'FAILED' | 'UNKNOWN' | 'CANCELLED'
+  >;
   chargedCredits?: number;
   resultRef?: string | null;
   errorCode?: string | null;
@@ -90,10 +93,16 @@ function isPrismaClientKnownError(error: unknown): boolean {
 }
 
 /** Access `prisma.ai_operations` once the generated client includes the model. */
-function operationsDelegate(prisma: PrismaService): Record<string, (...args: any[]) => any> {
-  const delegate = (prisma as unknown as Record<string, unknown>)['ai_operations'];
+function operationsDelegate(
+  prisma: PrismaService,
+): Record<string, (...args: any[]) => any> {
+  const delegate = (prisma as unknown as Record<string, unknown>)[
+    'ai_operations'
+  ];
   if (!delegate) {
-    throw new Error('Prisma client is missing the ai_operations delegate; run db:generate after the schema migration');
+    throw new Error(
+      'Prisma client is missing the ai_operations delegate; run db:generate after the schema migration',
+    );
   }
   return delegate as Record<string, (...args: any[]) => any>;
 }
@@ -112,7 +121,10 @@ export class AiOperationsRepository {
     });
   }
 
-  findByIdForUser(id: string, userId: string): Promise<AiOperationRecord | null> {
+  findByIdForUser(
+    id: string,
+    userId: string,
+  ): Promise<AiOperationRecord | null> {
     return operationsDelegate(this.prisma).findFirst({
       where: { id, user_id: userId },
     });
@@ -122,7 +134,9 @@ export class AiOperationsRepository {
    * Insert a RESERVED operation. A concurrent replay that trips the unique
    * constraint is read back instead of retried, so no side effect is repeated.
    */
-  async create(input: CreateAiOperationInput): Promise<{ operation: AiOperationRecord; created: boolean }> {
+  async create(
+    input: CreateAiOperationInput,
+  ): Promise<{ operation: AiOperationRecord; created: boolean }> {
     try {
       const operation = await operationsDelegate(this.prisma).create({
         data: {
@@ -179,7 +193,9 @@ export class AiOperationsRepository {
     });
     if (updated.count !== 1) return null;
     const operation = await this.findByIdForUser(input.id, input.userId);
-    return operation && operation.version === input.expectedVersion + 1 ? operation : null;
+    return operation && operation.version === input.expectedVersion + 1
+      ? operation
+      : null;
   }
 
   /**
@@ -187,7 +203,9 @@ export class AiOperationsRepository {
    * and the update requires the exact lease token/version held by the worker,
    * so a stale worker cannot commit a result after its lease expired.
    */
-  async markTerminal(input: MarkTerminalInput): Promise<AiOperationRecord | null> {
+  async markTerminal(
+    input: MarkTerminalInput,
+  ): Promise<AiOperationRecord | null> {
     const now = input.finishedAt ?? new Date();
     const updated = await operationsDelegate(this.prisma).updateMany({
       where: {
@@ -213,7 +231,12 @@ export class AiOperationsRepository {
   }
 
   /** Return true only when this worker still owns the current lease. */
-  async hasActiveLease(id: string, userId: string, leaseToken: string, version: number): Promise<boolean> {
+  async hasActiveLease(
+    id: string,
+    userId: string,
+    leaseToken: string,
+    version: number,
+  ): Promise<boolean> {
     const operation = await this.findByIdForUser(id, userId);
     if (!operation) return false;
     return (
@@ -229,7 +252,12 @@ export class AiOperationsRepository {
    * Explicitly move RUNNING/UNKNOWN back to UNKNOWN for reconciliation.
    * Cancelled/succeeded/failed rows are never touched; terminal is immutable.
    */
-  async markUnknown(id: string, userId: string, version: number, leaseToken: string): Promise<AiOperationRecord | null> {
+  async markUnknown(
+    id: string,
+    userId: string,
+    version: number,
+    leaseToken: string,
+  ): Promise<AiOperationRecord | null> {
     const now = new Date();
     const updated = await operationsDelegate(this.prisma).updateMany({
       where: {

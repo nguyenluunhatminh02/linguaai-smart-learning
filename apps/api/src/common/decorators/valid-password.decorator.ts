@@ -79,7 +79,10 @@ export class ValidPasswordConstraint implements ValidatorConstraintInterface {
     }
 
     // Check special character
-    if (options.requireSpecialChar && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    if (
+      options.requireSpecialChar &&
+      !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    ) {
       return false;
     }
 
@@ -93,7 +96,7 @@ export class ValidPasswordConstraint implements ValidatorConstraintInterface {
     };
 
     const requirements: string[] = [];
-    
+
     if (options.minLength) {
       requirements.push(`at least ${options.minLength} characters`);
     }
@@ -116,20 +119,20 @@ export class ValidPasswordConstraint implements ValidatorConstraintInterface {
 
 /**
  * ValidPassword Decorator
- * 
+ *
  * Custom decorator for validating password strength.
  * Can be used on DTO fields to enforce password complexity requirements.
- * 
+ *
  * @example
  * // Default requirements (8-72 UTF-8 bytes, uppercase, lowercase, number, special char)
  * @ValidPassword()
  * password: string;
- * 
+ *
  * @example
  * // Custom requirements
  * @ValidPassword({ minLength: 12, requireSpecialChar: false })
  * password: string;
- * 
+ *
  * @param options - Password validation options
  * @param validationOptions - Additional class-validator options
  */
@@ -137,7 +140,7 @@ export function ValidPassword(
   options?: PasswordValidationOptions,
   validationOptions?: ValidationOptions,
 ): PropertyDecorator {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       target: object.constructor,
       propertyName: propertyName,

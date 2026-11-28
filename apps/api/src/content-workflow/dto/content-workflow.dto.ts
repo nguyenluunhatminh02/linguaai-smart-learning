@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
@@ -9,10 +9,10 @@ import {
   MaxLength,
   Min,
   MinLength,
-} from "class-validator";
+} from 'class-validator';
 
 /** Wire values for the teacher content-review queue. */
-export const REVIEW_STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const;
+export const REVIEW_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
 export class ListSubmissionsQueryDto {
@@ -35,7 +35,7 @@ export class ListSubmissionsQueryDto {
 }
 
 export class SubmitContentDto {
-  @IsUUID("4")
+  @IsUUID('4')
   contentItemId: string;
 }
 

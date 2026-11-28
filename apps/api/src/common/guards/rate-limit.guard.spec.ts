@@ -21,7 +21,7 @@ const makeContext = (headers: Record<string, unknown>): ExecutionContext =>
       }),
       getResponse: () => ({ setHeader: jest.fn() }),
     }),
-  } as any);
+  }) as any;
 
 describe('RateLimitGuard SEC-07 body pre-check', () => {
   let guard: RateLimitGuard;
@@ -51,7 +51,9 @@ describe('RateLimitGuard SEC-07 body pre-check', () => {
 
   it('rejects an oversized body before any Redis work', async () => {
     await expect(
-      guard.canActivate(makeContext({ 'content-length': String(64 * 1024 + 1) })),
+      guard.canActivate(
+        makeContext({ 'content-length': String(64 * 1024 + 1) }),
+      ),
     ).rejects.toMatchObject({ status: 413 });
     expect(limiter.checkRateLimit).not.toHaveBeenCalled();
   });

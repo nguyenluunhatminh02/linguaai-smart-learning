@@ -1,5 +1,14 @@
 'use client';
 
+/**
+ * Listening dashboard page (roadmap FE-28).
+ *
+ * UI composition, library filtering and player rendering live here. All paid
+ * generation calls go through the backend adapter below: the browser owns an
+ * idempotency key for the lifetime of a submission, submits it once, then
+ * polls a durable operation until a terminal status is observed. Provider
+ * keys, token reservation/refund and lesson ownership stay server-side.
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -85,6 +94,171 @@ function getLangCode(language: string): string {
     case 'vietnamese': return 'vi-VN';
     default: return 'en-US';
   }
+}
+
+// ─── Backend adapter & operation status ────────────────────────────────────
+type OperationStatus = 'PENDING' | 'RESERVED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'UNKNOWN';
+
+interface ListeningOperation {
+  operationId: string;
+  status: OperationStatus;
+  errorCode?: string | null;
+  reservedCredits?: number | null;
+  chargedCredits?: number | null;
+  refunded?: boolean;
+  data?: Record<string, unknown> | null;
+}
+
+/** Client-owned key: kept across retries so the server charges once. */
+function createOperationKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `listening-generate-${crypto.randomUUID()}`;
+  }
+  return `listening-generate-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const TERMINAL_STATUSES: ReadonlySet<OperationStatus> = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN']);
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const MAX_STATUS_POLLS = 60;
+const POLL_INTERVAL_MS = 1_000;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function unwrapData(value: unknown): Record<string, unknown> | null {
+  const record = asRecord(value);
+  return record && 'data' in record ? (asRecord(record.data) ?? record) : record;
+}
+
+function parseOperation(value: unknown): ListeningOperation | null {
+  const record = unwrapData(value);
+  if (!record) return null;
+  const id = record.operationId ?? record.operation_id;
+  const rawStatus = record.status;
+  if (typeof id !== 'string' || !id.trim() || typeof rawStatus !== 'string') return null;
+  const status = rawStatus.toUpperCase() as OperationStatus;
+  if (!['PENDING', 'RESERVED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN'].includes(status)) {
+    return null;
+  }
+  const numberOrNull = (input: unknown): number | null =>
+    typeof input === 'number' && Number.isFinite(input) ? input : null;
+  const reserved = numberOrNull(record.reservedCredits ?? record.reserved_credits);
+  const charged = numberOrNull(record.chargedCredits ?? record.charged_credits);
+  return {
+    operationId: id,
+    status,
+    ...(typeof record.errorCode === 'string' ? { errorCode: record.errorCode } : {}),
+    ...(reserved !== null ? { reservedCredits: reserved } : {}),
+    ...(charged !== null ? { chargedCredits: charged } : {}),
+    ...(record.refunded === true ? { refunded: true } : {}),
+    ...(asRecord(record.data) ? { data: asRecord(record.data) } : {}),
+  };
+}
+
+function operationErrorMessage(status: number, payload: unknown): string {
+  const record = asRecord(payload);
+  const code = typeof record?.code === 'string' ? record.code : '';
+  if (code === 'INSUFFICIENT_CREDITS' || status === 402) {
+    return 'Không đủ credits để tạo bài nghe.';
+  }
+  if (status === 401 || status === 403) return 'Vui lòng đăng nhập để tiếp tục.';
+  if (status === 409 || code === 'OPERATION_CONFLICT') {
+    return 'Yêu cầu này đã được gửi. Vui lòng đợi kết quả.';
+  }
+  if (status === 429) return 'Quá nhiều yêu cầu. Vui lòng thử lại sau.';
+  if (status === 502 || status === 503 || status === 504) {
+    return 'Dịch vụ tạo bài nghe đang tạm thời gián đoạn.';
+  }
+  return 'Tạo bài học thất bại. Vui lòng thử lại.';
+}
+
+async function submitListeningGeneration(
+  body: Record<string, unknown>,
+  file: File | null,
+  operationKey: string,
+  signal: AbortSignal,
+): Promise<ListeningOperation> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${getAccessToken() ?? ''}`,
+    'Idempotency-Key': operationKey,
+    'X-Client-Operation-Id': operationKey,
+  };
+  let response: Response;
+  try {
+    if (file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      Object.entries(body).forEach(([key, value]) => formData.append(key, String(value)));
+      response = await fetch('/api/listening/generate', {
+        method: 'POST', headers, body: formData, signal, cache: 'no-store',
+      });
+    } else {
+      response = await fetch('/api/listening/generate', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+        cache: 'no-store',
+      });
+    }
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new Error('Không thể kết nối tới dịch vụ tạo bài nghe.');
+  }
+
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(operationErrorMessage(response.status, payload));
+    const operation = parseOperation(payload);
+    if (operation) Object.assign(error, { operationId: operation.operationId });
+    throw error;
+  }
+  const operation = parseOperation(payload);
+  if (!operation) throw new Error('Phản hồi tạo bài học không hợp lệ.');
+  return operation;
+}
+
+/**
+ * Best-effort reconciliation from committed server state. It never starts a
+ * provider call or charges credits; an unavailable endpoint leaves the job
+ * non-terminal rather than pretending it succeeded.
+ */
+async function fetchOperationStatus(
+  operationId: string,
+  signal: AbortSignal,
+): Promise<ListeningOperation | null> {
+  const paths = [
+    `/listening/operations/${encodeURIComponent(operationId)}`,
+    `/chat/operations/${encodeURIComponent(operationId)}`,
+    `/ai-operations/${encodeURIComponent(operationId)}`,
+  ];
+  for (const path of paths) {
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${getAccessToken() ?? ''}` },
+        signal,
+        cache: 'no-store',
+      });
+      if (!response.ok) continue;
+      const operation = parseOperation(await response.json().catch(() => null));
+      if (operation) return operation;
+    } catch {
+      // Endpoint unavailable or aborted: try the next known status path.
+    }
+  }
+  return null;
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+    const onAbort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 // ─── TTS Audio Player Component ────────────────────────────────────────────
@@ -369,6 +543,9 @@ export default function ListeningPage() {
   const [uploadCategory, setUploadCategory] = useState('conversation');
   const [uploadTitle, setUploadTitle] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [operation, setOperation] = useState<ListeningOperation | null>(null);
+  const operationKeyRef = useRef<string | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
 
   const getLevelsForLanguage = (lang: string) => {
     switch (lang.toLowerCase()) {
@@ -438,7 +615,25 @@ export default function ListeningPage() {
     return url.includes('youtube.com') || url.includes('youtu.be');
   };
 
-  // ======= MODAL SUBMIT HANDLER =======
+  // ======= MODAL SUBMIT HANDLER (backend adapter + operation polling) =======
+  const applyOperationResult = useCallback((result: ListeningOperation) => {
+    const lessonData = result.data;
+    if (!lessonData) {
+      toast.error('Tạo bài học thất bại. Vui lòng thử lại.');
+      return false;
+    }
+    const newLesson = cmsToListeningLesson(lessonData);
+    setLessons(prev => [newLesson, ...prev.filter(item => item.id !== newLesson.id)]);
+    setActiveTab('user');
+    setIsModalOpen(false);
+    setYoutubeUrl('');
+    setYoutubeTranscript('');
+    setSelectedFile(null);
+    setUploadTitle('');
+    openLesson(newLesson);
+    return true;
+  }, []);
+
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sourceType === 'youtube' && !youtubeUrl) {
@@ -453,70 +648,82 @@ export default function ListeningPage() {
       toast.error('Vui lòng chọn hoặc kéo thả file âm thanh');
       return;
     }
+    if (isGenerating) return; // one intent at a time; retries reuse the key
 
     setIsGenerating(true);
-    const token = getAccessToken();
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    setOperation(null);
+    pollAbortRef.current?.abort();
+    const abort = new AbortController();
+    pollAbortRef.current = abort;
+    // One key per user intent: retries and status reads never re-bill.
+    const key = operationKeyRef.current ?? createOperationKey();
+    operationKeyRef.current = key;
+
+    const payload: Record<string, unknown> = {
+      sourceType,
+      language: uploadLanguage,
+      level: uploadLevel,
+      category: uploadCategory,
+      title: uploadTitle,
+      idempotencyKey: key,
+      clientOperationId: key,
+    };
+    if (sourceType === 'youtube') {
+      payload.youtubeUrl = youtubeUrl;
+      payload.transcript = youtubeTranscript.trim();
     }
 
     try {
-      let res;
-      if (sourceType === 'file' && selectedFile) {
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('language', uploadLanguage);
-        formData.append('level', uploadLevel);
-        formData.append('category', uploadCategory);
-        formData.append('title', uploadTitle);
+      let current = await submitListeningGeneration(
+        payload,
+        sourceType === 'file' ? selectedFile : null,
+        key,
+        abort.signal,
+      );
+      setOperation(current);
 
-        res = await fetch('/api/listening/upload-user', {
-          method: 'POST',
-          headers,
-          body: formData
-        });
+      for (let attempt = 0; attempt < MAX_STATUS_POLLS && !TERMINAL_STATUSES.has(current.status); attempt++) {
+        await sleep(POLL_INTERVAL_MS, abort.signal);
+        const next = await fetchOperationStatus(current.operationId, abort.signal);
+        if (next) {
+          current = next;
+          setOperation(current);
+        }
+      }
+
+      if (abort.signal.aborted) return;
+      if (current.status === 'SUCCEEDED') {
+        if (applyOperationResult(current)) {
+          operationKeyRef.current = null;
+          toast.success('Tạo bài học thành công!');
+        }
+      } else if (current.status === 'FAILED' || current.status === 'CANCELLED') {
+        toast.error(current.errorCode === 'INSUFFICIENT_CREDITS'
+          ? 'Không đủ credits để tạo bài nghe.'
+          : 'Tạo bài học thất bại. Vui lòng thử lại.');
       } else {
-        res = await fetch('/api/listening/upload-user', {
-          method: 'POST',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            youtubeUrl,
-            transcript: youtubeTranscript.trim(),
-            language: uploadLanguage,
-            level: uploadLevel,
-            category: uploadCategory,
-            title: uploadTitle
-          })
-        });
+        // UNKNOWN or still running: never claim success; keep the key so the
+        // user can reconcile the operation instead of paying for a retry.
+        toast.error(`Bài học đang được xử lý (${current.status}). Vui lòng đợi trước khi gửi lại.`);
       }
-
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error || 'Tạo bài học thất bại');
-      }
-
-      toast.success('Tạo bài học thành công!');
-      setIsModalOpen(false);
-      // Reset form
-      setYoutubeUrl('');
-      setYoutubeTranscript('');
-      setSelectedFile(null);
-      setUploadTitle('');
-      
-      // Refresh current tab
-      setActiveTab('user');
-      const newLesson = cmsToListeningLesson(json.data);
-      setLessons(prev => [newLesson, ...prev]);
-      openLesson(newLesson);
-
     } catch (err: unknown) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Có lỗi xảy ra trong quá trình xử lý');
+      if (!abort.signal.aborted) {
+        const errorWithOperation = asRecord(err);
+        const operationId = errorWithOperation?.operationId;
+        if (typeof operationId === 'string') {
+          // A conflict or timeout still carries a durable id: recover it.
+          const recovered = await fetchOperationStatus(operationId, abort.signal);
+          if (recovered && recovered.status === 'SUCCEEDED' && applyOperationResult(recovered)) {
+            operationKeyRef.current = null;
+            toast.success('Tạo bài học thành công!');
+            return;
+          }
+        }
+        console.error(err);
+        toast.error(err instanceof Error ? err.message : 'Có lỗi xảy ra trong quá trình xử lý');
+      }
     } finally {
+      if (pollAbortRef.current === abort) pollAbortRef.current = null;
       setIsGenerating(false);
     }
   };
@@ -1050,6 +1257,16 @@ export default function ListeningPage() {
                 <div className="mt-5 w-48 bg-muted h-1 rounded-full overflow-hidden relative">
                   <div className="bg-violet-600 h-full rounded-full animate-progress absolute left-0 top-0 w-1/3" />
                 </div>
+                <p role="status" aria-live="polite" className="mt-4 text-xs text-muted-foreground">
+                  {operation
+                    ? `Trạng thái máy chủ: ${operation.status}${operation.reservedCredits !== undefined ? ` · ${operation.reservedCredits} credits đã giữ` : ''}${operation.refunded ? ' · đã hoàn tiền' : ''}`
+                    : 'Đang gửi yêu cầu tới máy chủ...'}
+                </p>
+                {operation?.operationId && (
+                  <p className="mt-1 text-[10px] text-muted-foreground/70">
+                    Mã thao tác: {operation.operationId}
+                  </p>
+                )}
               </div>
             )}
           </div>

@@ -15,16 +15,23 @@ export class AdminService {
   ) {}
 
   async getOverview() {
-    const [totalUsers, totalDecks, totalQuizzes, totalSessions, totalContent] = await Promise.all([
-      this.prisma.users.count(),
-      this.prisma.decks.count(),
-      this.prisma.quizzes.count(),
-      this.prisma.review_sessions.count(),
-      this.prisma.content_items.count(),
-    ]);
+    const [totalUsers, totalDecks, totalQuizzes, totalSessions, totalContent] =
+      await Promise.all([
+        this.prisma.users.count(),
+        this.prisma.decks.count(),
+        this.prisma.quizzes.count(),
+        this.prisma.review_sessions.count(),
+        this.prisma.content_items.count(),
+      ]);
 
     const recentUsers = await this.prisma.users.findMany({
-      select: { id: true, email: true, first_name: true, last_name: true, created_at: true },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        created_at: true,
+      },
       orderBy: { created_at: 'desc' },
       take: 5,
     });
@@ -50,12 +57,14 @@ export class AdminService {
     // unbounded (which would let callers dump the whole users table).
     const requestedPage = Number(page);
     const requestedLimit = Number(limit);
-    const safePage = Number.isFinite(requestedPage) && requestedPage >= 1
-      ? Math.floor(requestedPage)
-      : 1;
-    const safeLimit = Number.isFinite(requestedLimit) && requestedLimit >= 1
-      ? Math.min(Math.floor(requestedLimit), MAX_PAGE_SIZE)
-      : 20;
+    const safePage =
+      Number.isFinite(requestedPage) && requestedPage >= 1
+        ? Math.floor(requestedPage)
+        : 1;
+    const safeLimit =
+      Number.isFinite(requestedLimit) && requestedLimit >= 1
+        ? Math.min(Math.floor(requestedLimit), MAX_PAGE_SIZE)
+        : 20;
     const skip = (safePage - 1) * safeLimit;
     const [users, total] = await Promise.all([
       this.prisma.users.findMany({
@@ -68,7 +77,7 @@ export class AdminService {
           streak_count: true,
           created_at: true,
           user_roles: { include: { roles: true } },
-          token_balance: { select: { balance: true } }
+          token_balance: { select: { balance: true } },
         },
         skip,
         take: safeLimit,
@@ -95,7 +104,17 @@ export class AdminService {
     };
   }
 
-  async updateUserRole(userId: string, role: Role | 'USER' | 'ADMIN' | 'MODERATOR' | 'user' | 'admin' | 'moderator') {
+  async updateUserRole(
+    userId: string,
+    role:
+      | Role
+      | 'USER'
+      | 'ADMIN'
+      | 'MODERATOR'
+      | 'user'
+      | 'admin'
+      | 'moderator',
+  ) {
     // Accept every role in the domain enum instead of collapsing MODERATOR to USER.
     const requested = String(role || '').toUpperCase();
     if (!Object.values(Role).includes(requested as Role)) {
@@ -111,7 +130,9 @@ export class AdminService {
           where: { users_id: userId },
           include: { roles: true },
         });
-        const isCurrentlyAdmin = currentRoles.some((ur) => ur.roles.name === Role.ADMIN);
+        const isCurrentlyAdmin = currentRoles.some(
+          (ur) => ur.roles.name === Role.ADMIN,
+        );
         if (isCurrentlyAdmin) {
           const adminCount = await tx.user_roles.count({
             where: { roles: { name: Role.ADMIN } },
@@ -124,16 +145,23 @@ export class AdminService {
         }
       }
 
-      const roleRecord = await tx.roles.findUnique({ where: { name: roleName as any } });
+      const roleRecord = await tx.roles.findUnique({
+        where: { name: roleName as any },
+      });
       if (!roleRecord) {
         throw new BadRequestException(`Role ${roleName} is not configured`);
       }
       // Replace the privileged role without destroying unrelated roles such as
       // MODERATOR. Keep the role set idempotent for repeat requests.
       await tx.user_roles.deleteMany({
-        where: { users_id: userId, roles: { name: { in: [Role.ADMIN, Role.USER, Role.MODERATOR] } } },
+        where: {
+          users_id: userId,
+          roles: { name: { in: [Role.ADMIN, Role.USER, Role.MODERATOR] } },
+        },
       });
-      await tx.user_roles.create({ data: { users_id: userId, roles_id: roleRecord.id } });
+      await tx.user_roles.create({
+        data: { users_id: userId, roles_id: roleRecord.id },
+      });
 
       return tx.users.findUnique({
         where: { id: userId },

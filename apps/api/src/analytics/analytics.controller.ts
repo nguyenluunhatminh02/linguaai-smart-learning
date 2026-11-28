@@ -1,5 +1,10 @@
 import { Controller, Get, Query, UseGuards, Headers } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -25,16 +30,24 @@ export class AnalyticsController {
   @Get('leaderboard')
   @ApiOperation({ summary: 'Get XP leaderboard' })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'period', required: false, enum: ['thisWeek', 'thisMonth', 'allTime'] })
+  @ApiQuery({
+    name: 'period',
+    required: false,
+    enum: ['thisWeek', 'thisMonth', 'allTime'],
+  })
   getLeaderboard(
     @Query('limit') limit?: number,
     @Query('period') period?: 'thisWeek' | 'thisMonth' | 'allTime',
   ) {
-    const rawLimit = typeof limit === 'number' && Number.isFinite(limit) ? Math.trunc(limit) : 10;
+    const rawLimit =
+      typeof limit === 'number' && Number.isFinite(limit)
+        ? Math.trunc(limit)
+        : 10;
     const clampedLimit = Math.min(Math.max(1, rawLimit), 100);
     const validPeriods = ['thisWeek', 'thisMonth', 'allTime'] as const;
     const clampedPeriod =
-      typeof period === 'string' && validPeriods.includes(period as 'thisWeek' | 'thisMonth' | 'allTime')
+      typeof period === 'string' &&
+      validPeriods.includes(period as 'thisWeek' | 'thisMonth' | 'allTime')
         ? (period as 'thisWeek' | 'thisMonth' | 'allTime')
         : 'allTime';
     return this.analyticsService.getLeaderboard(clampedLimit, clampedPeriod);

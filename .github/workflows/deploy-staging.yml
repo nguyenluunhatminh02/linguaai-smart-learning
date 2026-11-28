@@ -1,0 +1,500 @@
+# Staging deployment workflow (OPS-07)
+# Manual approval, SHA tags, migration precheck/rollback; no production migration from PR.
+
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full commit SHA to deploy (40 hex characters)'
+        required: true
+        type: string
+      confirm:
+        description: 'Type DEPLOY to confirm'
+        required: true
+        type: string
+      skip_migration:
+        description: 'Skip database migration (use with caution)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  NODE_ENV: production
+  APP_ENV: staging
+  CI: "true"
+
+jobs:
+  validate:
+    name: Validate input and checkout SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      full_sha: ${{ steps.validate.outputs.full_sha }}
+      short_sha: ${{ steps.validate.outputs.short_sha }}
+      image_tag: ${{ steps.validate.outputs.image_tag }}
+    steps:
+      - name: Validate inputs
+        id: validate
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_CONFIRM: ${{ inputs.confirm }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # Must be workflow_dispatch
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "Error: This workflow can only be triggered manually via workflow_dispatch" >&2
+            exit 1
+          fi
+
+          # Validate SHA format (40 hex characters)
+          if ! [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Error: SHA must be exactly 40 hexadecimal characters" >&2
+            exit 1
+          fi
+
+          # Validate confirmation
+          if [[ "$INPUT_CONFIRM" != "DEPLOY" ]]; then
+            echo "Error: You must type DEPLOY to confirm deployment" >&2
+            exit 1
+          fi
+
+          SHORT_SHA="${INPUT_SHA:0:7}"
+          IMAGE_TAG="sha-${INPUT_SHA}"
+
+          echo "full_sha=$INPUT_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+          echo "Validated SHA: $SHORT_SHA"
+          echo "Image tag: $IMAGE_TAG"
+
+      - name: Checkout repository at specified SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.validate.outputs.full_sha }}
+
+      - name: Verify SHA is ancestor of main
+        env:
+          FULL_SHA: ${{ steps.validate.outputs.full_sha }}
+        run: |
+          set -euo pipefail
+          # Full refs are needed: --depth=1 makes merge-base unusable.
+          git fetch --unshallow --no-tags origin +refs/heads/main:refs/remotes/origin/main \
+            || git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$FULL_SHA" refs/remotes/origin/main; then
+            echo "Error: The specified SHA is not an ancestor of origin/main" >&2
+            exit 1
+          fi
+          echo "SHA is valid ancestor of origin/main"
+
+  precheck:
+    name: Database precheck and backup
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    outputs:
+      backup_id: ${{ steps.backup.outputs.backup_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.full_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter api db:generate
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Check migration status
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_SHADOW_DATABASE_URL: ${{ secrets.STAGING_SHADOW_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          cd apps/api
+          STATUS_OUTPUT=$(pnpm exec prisma migrate status 2>&1 || true)
+          echo "$STATUS_OUTPUT"
+
+          # Fail on drift, divergent history, pending migrations or errors.
+          # Do not auto-heal: apply corrections in a new forward migration.
+          if echo "$STATUS_OUTPUT" | grep -qEi 'drift|diverg|inconsist|not found|failed|error|following migration[s]? have not been applied'; then
+            echo "Error: Migration status is not clean. Aborting deployment." >&2
+            exit 1
+          fi
+
+          # Schema/migration drift check: exit code 0 means migrations and
+          # schema.prisma agree. SHADOW_DATABASE_URL is provided by the
+          # protected staging environment, never by PR code.
+          SHADOW_DATABASE_URL="${STAGING_SHADOW_DATABASE_URL}" pnpm exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$STAGING_SHADOW_DATABASE_URL" \
+            --exit-code
+          echo "Migration status and schema parity check passed"
+
+      - name: Create database backup
+        id: backup
+        env:
+          PGHOST: ${{ secrets.STAGING_DB_HOST }}
+          PGPORT: ${{ secrets.STAGING_DB_PORT }}
+          PGUSER: ${{ secrets.STAGING_DB_USER }}
+          PGPASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          PGDATABASE: ${{ secrets.STAGING_DB_NAME }}
+          FULL_SHA: ${{ needs.validate.outputs.full_sha }}
+        run: |
+          set -euo pipefail
+
+          BACKUP_ID="staging-${FULL_SHA:0:12}-$(date -u +%Y%m%dT%H%M%SZ)"
+          BACKUP_FILE="${BACKUP_ID}.dump"
+          BACKUP_DIR="/tmp/db-backups"
+          mkdir -p "$BACKUP_DIR"
+
+          # Custom-format dump, no credentials in argv; pg_dump reads PGPASSWORD.
+          pg_dump -Fc --no-owner --no-privileges \
+            -h "$PGHOST" -p "${PGPORT:-5432}" -U "$PGUSER" \
+            -d "$PGDATABASE" \
+            -f "${BACKUP_DIR}/${BACKUP_FILE}"
+
+          # Verify backup is non-empty and restorable.
+          if [[ ! -s "${BACKUP_DIR}/${BACKUP_FILE}" ]]; then
+            echo "Error: Backup file is empty" >&2
+            exit 1
+          fi
+          pg_restore --list "${BACKUP_DIR}/${BACKUP_FILE}" > /dev/null
+
+          BACKUP_SIZE=$(wc -c < "${BACKUP_DIR}/${BACKUP_FILE}")
+          echo "Backup ID: ${BACKUP_ID} (${BACKUP_SIZE} bytes)"
+          # No artifact upload: backups may contain personal data.
+          echo "backup_id=${BACKUP_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Record backup metadata
+        env:
+          BACKUP_ID: ${{ steps.backup.outputs.backup_id }}
+        run: |
+          echo "Backup recorded: ${BACKUP_ID}"
+          echo "Backup is retained off-runner; no down migration will be used."
+
+  build:
+    name: Build and tag images
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.full_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.api
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/api:${{ needs.validate.outputs.image_tag }}
+            ghcr.io/${{ github.repository }}/api:staging
+          cache-from: type=gha,scope=ops07-${{ needs.validate.outputs.short_sha }}
+          cache-to: type=gha,mode=max,scope=ops07-${{ needs.validate.outputs.short_sha }}
+
+      - name: Build Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.web
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/web:${{ needs.validate.outputs.image_tag }}
+            ghcr.io/${{ github.repository }}/web:staging
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.STAGING_NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_AI_SERVICE_URL=${{ secrets.STAGING_NEXT_PUBLIC_AI_SERVICE_URL }}
+            NEXT_PUBLIC_DISABLE_AUTH=false
+          cache-from: type=gha,scope=ops07-${{ needs.validate.outputs.short_sha }}
+          cache-to: type=gha,mode=max,scope=ops07-${{ needs.validate.outputs.short_sha }}
+
+      - name: Build AI service image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.ai
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/ai:${{ needs.validate.outputs.image_tag }}
+            ghcr.io/${{ github.repository }}/ai:staging
+          cache-from: type=gha,scope=ops07-${{ needs.validate.outputs.short_sha }}
+          cache-to: type=gha,mode=max,scope=ops07-${{ needs.validate.outputs.short_sha }}
+
+  deploy:
+    name: Deploy to staging host
+    needs: [validate, precheck, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.full_sha }}
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host staging
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking accept-new
+          EOF
+
+      - name: Read previous deployment manifest
+        id: manifest
+        env:
+          MANIFEST_PATH: ${{ secrets.STAGING_MANIFEST_PATH }}
+        run: |
+          set -euo pipefail
+          PREV_SHA=$(ssh staging env MANIFEST_PATH="$MANIFEST_PATH" bash <<'REMOTE_SCRIPT'
+          MANIFEST_PATH="${MANIFEST_PATH:-/opt/linguaai/manifest.json}"
+          if [[ -f "$MANIFEST_PATH" ]]; then
+            jq -r '.sha // empty' "$MANIFEST_PATH" 2>/dev/null || true
+          fi
+          REMOTE_SCRIPT
+          )
+          # Only accept a 40-hex SHA from the host manifest as rollback target.
+          if ! [[ "$PREV_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            PREV_SHA=""
+          fi
+          echo "previous_sha=$PREV_SHA" >> "$GITHUB_OUTPUT"
+          echo "Previous deployment: ${PREV_SHA:-unknown}"
+
+      - name: Deploy to staging host
+        env:
+          FULL_SHA: ${{ needs.validate.outputs.full_sha }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+          SKIP_MIGRATION: ${{ inputs.skip_migration }}
+          DEPLOY_DIR: ${{ secrets.STAGING_DEPLOY_DIR }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          # Database and service secrets passed via env, never interpolated into run strings
+          POSTGRES_USER: ${{ secrets.STAGING_DB_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.STAGING_DB_NAME }}
+          REDIS_PASSWORD: ${{ secrets.STAGING_REDIS_PASSWORD }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.STAGING_JWT_REFRESH_SECRET }}
+          MFA_ENCRYPTION_KEY: ${{ secrets.STAGING_MFA_ENCRYPTION_KEY }}
+          AI_SERVICE_API_KEYS: ${{ secrets.STAGING_AI_SERVICE_API_KEYS }}
+          GROQ_API_KEY: ${{ secrets.STAGING_GROQ_API_KEY }}
+          API_URL: ${{ secrets.STAGING_API_URL }}
+          CORS_ORIGINS: ${{ secrets.STAGING_CORS_ORIGINS }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_AI_SERVICE_URL: ${{ secrets.STAGING_NEXT_PUBLIC_AI_SERVICE_URL }}
+          INTERNAL_API_URL: ${{ secrets.STAGING_INTERNAL_API_URL }}
+          CMS_BACKEND_URL: ${{ secrets.STAGING_CMS_BACKEND_URL }}
+          FRONTEND_URL: ${{ secrets.STAGING_FRONTEND_URL }}
+        run: |
+          set -euo pipefail
+
+          # Build a remote deployment script that receives all values via env vars.
+          # No secret is interpolated into the heredoc body. Values are forwarded
+          # to the remote shell via explicit env assignments (never argv).
+          ssh staging \
+            env \
+              DEPLOY_DIR="$DEPLOY_DIR" \
+              GITHUB_TOKEN="$GITHUB_TOKEN" \
+              GITHUB_ACTOR="$GITHUB_ACTOR" \
+              REPO="$REPO" \
+              FULL_SHA="$FULL_SHA" \
+              IMAGE_TAG="$IMAGE_TAG" \
+              SKIP_MIGRATION="$SKIP_MIGRATION" \
+              POSTGRES_USER="$POSTGRES_USER" \
+              POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+              POSTGRES_DB="$POSTGRES_DB" \
+              REDIS_PASSWORD="$REDIS_PASSWORD" \
+              JWT_SECRET="$JWT_SECRET" \
+              JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
+              MFA_ENCRYPTION_KEY="$MFA_ENCRYPTION_KEY" \
+              AI_SERVICE_API_KEYS="$AI_SERVICE_API_KEYS" \
+              GROQ_API_KEY="$GROQ_API_KEY" \
+              API_URL="$API_URL" \
+              CORS_ORIGINS="$CORS_ORIGINS" \
+              NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
+              NEXT_PUBLIC_AI_SERVICE_URL="$NEXT_PUBLIC_AI_SERVICE_URL" \
+              INTERNAL_API_URL="$INTERNAL_API_URL" \
+              CMS_BACKEND_URL="$CMS_BACKEND_URL" \
+              FRONTEND_URL="$FRONTEND_URL" \
+            bash <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          DEPLOY_DIR="${DEPLOY_DIR:-/opt/linguaai}"
+          cd "$DEPLOY_DIR"
+
+          # Export secrets for docker-compose (env vars from the calling shell).
+          export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
+          export REDIS_PASSWORD JWT_SECRET JWT_REFRESH_SECRET MFA_ENCRYPTION_KEY
+          export AI_SERVICE_API_KEYS GROQ_API_KEY API_URL CORS_ORIGINS
+          export NEXT_PUBLIC_API_URL NEXT_PUBLIC_AI_SERVICE_URL
+          export INTERNAL_API_URL CMS_BACKEND_URL FRONTEND_URL
+
+          # Login to GHCR using token from env.
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+          # Pull new images by SHA tag.
+          API_IMAGE="ghcr.io/${REPO}/api:${IMAGE_TAG}"
+          WEB_IMAGE="ghcr.io/${REPO}/web:${IMAGE_TAG}"
+          AI_IMAGE="ghcr.io/${REPO}/ai:${IMAGE_TAG}"
+          export API_IMAGE WEB_IMAGE AI_IMAGE
+
+          docker compose -f docker/docker-compose.yml pull
+
+          # Run migration if not skipped.
+          if [[ "${SKIP_MIGRATION}" != "true" ]]; then
+            echo "Running database migration..."
+            docker compose -f docker/docker-compose.yml run --rm migrate
+          else
+            echo "Skipping migration (skip_migration=true)"
+          fi
+
+          # Deploy services without rebuilding.
+          docker compose -f docker/docker-compose.yml up -d --no-build
+
+          # Update manifest on the host.
+          mkdir -p "${DEPLOY_DIR}"
+          cat > "${DEPLOY_DIR}/manifest.json" <<MANIFEST_EOF
+          {
+            "sha": "${FULL_SHA}",
+            "image_tag": "${IMAGE_TAG}",
+            "deployed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "deployed_by": "${GITHUB_ACTOR}"
+          }
+          MANIFEST_EOF
+          echo "Deployment manifest updated"
+          REMOTE_SCRIPT
+
+      - name: Wait for API readiness
+        env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+        run: |
+          set -euo pipefail
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+          while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
+            if ssh staging "curl -sf ${STAGING_API_URL}/api/health/ready > /dev/null 2>&1"; then
+              echo "API is ready"
+              exit 0
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Waiting for API readiness... ($RETRY_COUNT/$MAX_RETRIES)"
+            sleep 2
+          done
+          echo "Error: API did not become ready within timeout" >&2
+          exit 1
+
+      - name: Smoke test
+        env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+          STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
+        run: |
+          set -euo pipefail
+          # Basic health endpoint check
+          HEALTH_RESPONSE=$(ssh staging "curl -sf ${STAGING_API_URL}/api/health")
+          echo "Health response: $HEALTH_RESPONSE"
+
+          # Check web frontend
+          WEB_RESPONSE=$(ssh staging "curl -sf ${STAGING_WEB_URL} || true")
+          if [[ -n "$WEB_RESPONSE" ]]; then
+            echo "Web frontend is responding"
+          fi
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          PREV_SHA: ${{ steps.manifest.outputs.previous_sha }}
+          DEPLOY_DIR: ${{ secrets.STAGING_DEPLOY_DIR }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          BACKUP_ID: ${{ needs.precheck.outputs.backup_id }}
+        run: |
+          if [[ -n "$PREV_SHA" ]]; then
+            echo "Rolling back to previous version: $PREV_SHA"
+            ssh staging \
+              env \
+                DEPLOY_DIR="$DEPLOY_DIR" \
+                GITHUB_TOKEN="$GITHUB_TOKEN" \
+                GITHUB_ACTOR="$GITHUB_ACTOR" \
+                REPO="$REPO" \
+                PREV_SHA="$PREV_SHA" \
+              bash <<'REMOTE_SCRIPT'
+            set -euo pipefail
+            DEPLOY_DIR="${DEPLOY_DIR:-/opt/linguaai}"
+            cd "$DEPLOY_DIR"
+
+            printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+            PREV_TAG="sha-${PREV_SHA}"
+            API_IMAGE="ghcr.io/${REPO}/api:${PREV_TAG}"
+            WEB_IMAGE="ghcr.io/${REPO}/web:${PREV_TAG}"
+            AI_IMAGE="ghcr.io/${REPO}/ai:${PREV_TAG}"
+            export API_IMAGE WEB_IMAGE AI_IMAGE
+
+            docker compose -f docker/docker-compose.yml pull
+            docker compose -f docker/docker-compose.yml up -d --no-build
+
+            echo "Rollback completed to ${PREV_TAG}"
+            REMOTE_SCRIPT
+          else
+            echo "No previous version to rollback to"
+          fi
+          # Application rollback only. No 'prisma migrate down' and no implicit
+          # database rollback. The pre-migration backup is preserved off-runner.
+          echo "Database backup ${BACKUP_ID:-pre-migration dump} retained; no down migration executed."

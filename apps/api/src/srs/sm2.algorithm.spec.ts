@@ -100,37 +100,36 @@ describe('Sm2Algorithm', () => {
 
   // ─── getNextReviewDate ──────────────────────────────────────────────────
   describe('getNextReviewDate', () => {
-    it('should return a future date offset by interval days', () => {
-      const now = new Date();
-      const future = Sm2Algorithm.getNextReviewDate(7);
-      const diffMs = future.getTime() - now.getTime();
-      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      expect(diffDays).toBe(7);
-    });
-
-    it('should return today for zero interval', () => {
-      jest.useFakeTimers().setSystemTime(new Date('2026-03-08T12:00:00.000Z'));
+    // Scheduling is normalized to UTC midnight so the due date never depends
+    // on the review hour or on a local DST transition.
+    it('returns UTC midnight plus the interval', () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-08T12:34:56.000Z'));
       try {
-        const result = Sm2Algorithm.getNextReviewDate(0);
-        const now = new Date();
-        expect(result.getFullYear()).toBe(now.getFullYear());
-        expect(result.getMonth()).toBe(now.getMonth());
-        expect(result.getDate()).toBe(now.getDate());
-        expect(result.toISOString()).toBe(now.toISOString());
+        expect(Sm2Algorithm.getNextReviewDate(7).toISOString()).toBe(
+          '2026-03-15T00:00:00.000Z',
+        );
       } finally {
         jest.useRealTimers();
       }
     });
 
-    it('should preserve the wall-clock time across a DST boundary', () => {
-      // setDate keeps the local calendar date and time even when the UTC offset changes.
+    it('returns today at UTC midnight for zero interval', () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-08T12:00:00.000Z'));
+      try {
+        expect(Sm2Algorithm.getNextReviewDate(0).toISOString()).toBe(
+          '2026-03-08T00:00:00.000Z',
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('stays on UTC midnight across a DST boundary', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-03-07T17:00:00.000Z'));
       try {
         const result = Sm2Algorithm.getNextReviewDate(1);
-        expect(result.getFullYear()).toBe(2026);
-        expect(result.getMonth()).toBe(2);
-        expect(result.getDate()).toBe(8);
-        expect(result.getHours()).toBe(new Date('2026-03-07T17:00:00.000Z').getHours());
+        expect(result.toISOString()).toBe('2026-03-08T00:00:00.000Z');
+        expect(result.getUTCHours()).toBe(0);
       } finally {
         jest.useRealTimers();
       }

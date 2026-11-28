@@ -30,7 +30,10 @@ export class AnalyzeTextDto {
   @Max(10000)
   text: string;
 
-  @ApiPropertyOptional({ example: 'english', description: 'Language of the text' })
+  @ApiPropertyOptional({
+    example: 'english',
+    description: 'Language of the text',
+  })
   @IsString()
   @IsOptional()
   language?: string;

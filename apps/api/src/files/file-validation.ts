@@ -7,7 +7,12 @@ import * as path from 'path';
 /** One decoded-byte budget shared by REST uploads and speaking audio. */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
-export const VALIDATION_ERROR_MESSAGE = 'Invalid file type. Only standard images and audio are allowed.';
+/** Image uploads are small avatars/lesson media; audio may be longer recordings. */
+export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const MAX_AUDIO_UPLOAD_BYTES = MAX_UPLOAD_BYTES;
+
+export const VALIDATION_ERROR_MESSAGE =
+  'Invalid file type. Only standard images and audio are allowed.';
 
 export const IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -32,7 +37,10 @@ export const AUDIO_MIME_TYPES = [
   'audio/x-flac',
 ] as const;
 
-export const UPLOAD_MIME_TYPES: readonly string[] = [...IMAGE_MIME_TYPES, ...AUDIO_MIME_TYPES];
+export const UPLOAD_MIME_TYPES: readonly string[] = [
+  ...IMAGE_MIME_TYPES,
+  ...AUDIO_MIME_TYPES,
+];
 
 /** MIME types accepted for transcribed audio, including recorded-but-silent payloads. */
 export const TRANSCRIBE_MIME_TYPES: readonly string[] = [
@@ -110,11 +118,29 @@ export function isAllowedAudioMimeType(mimeType: string): boolean {
   return TRANSCRIBE_MIME_TYPES.includes(normalized);
 }
 
-export function uploadSizeLimitForMimeType(_mimeType?: string): number {
-  return MAX_UPLOAD_BYTES;
+/** Byte cap for a single decoded upload, keyed by normalized MIME type. */
+export function uploadSizeLimitForMimeType(mimeType?: string): number {
+  const normalized = normalizeMimeType(mimeType);
+  return IMAGE_MIME_TYPES.includes(
+    normalized as (typeof IMAGE_MIME_TYPES)[number],
+  )
+    ? MAX_IMAGE_UPLOAD_BYTES
+    : MAX_AUDIO_UPLOAD_BYTES;
 }
 
-export function validateMediaHeader(file: Express.Multer.File): ValidatedMediaHeader {
+/** Single size assertion shared by upload entry points and payload validators. */
+export function assertUploadSize(size: unknown, mimeType?: string): void {
+  const limit = uploadSizeLimitForMimeType(mimeType);
+  if (typeof size !== 'number' || !Number.isFinite(size) || size > limit) {
+    throw new BadRequestException(
+      `File size exceeds limit (${Math.floor(limit / 1024 / 1024)}MB).`,
+    );
+  }
+}
+
+export function validateMediaHeader(
+  file: Express.Multer.File,
+): ValidatedMediaHeader {
   const mimeType = normalizeMimeType(file?.mimetype);
   if (!isAllowedUploadMimeType(mimeType)) {
     throw new BadRequestException(VALIDATION_ERROR_MESSAGE);
@@ -124,22 +150,39 @@ export function validateMediaHeader(file: Express.Multer.File): ValidatedMediaHe
 
 function startsWith(buffer: Buffer, offset: number, ascii: string): boolean {
   const needle = Buffer.from(ascii, 'ascii');
-  return buffer.length >= offset + needle.length &&
-    needle.every((byte, i) => buffer[offset + i] === byte);
+  return (
+    buffer.length >= offset + needle.length &&
+    needle.every((byte, i) => buffer[offset + i] === byte)
+  );
 }
 
 function matchesImage(buffer: Buffer, mimeType: string): boolean {
   switch (mimeType) {
     case 'image/jpeg':
-      return buffer.length >= 3 &&
-        buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+      return (
+        buffer.length >= 3 &&
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[2] === 0xff
+      );
     case 'image/png':
-      return buffer.length >= 8 &&
-        buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      return (
+        buffer.length >= 8 &&
+        buffer
+          .subarray(0, 8)
+          .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+      );
     case 'image/gif':
       return startsWith(buffer, 0, 'GIF87a') || startsWith(buffer, 0, 'GIF89a');
     case 'image/webp':
-      return startsWith(buffer, 0, 'RIFF') && startsWith(buffer, 8, 'WEBP');
+      // RIFF/WAVE is audio despite a WAV file's "RIFF????WAVE"; require the
+      // declared RIFF size field too so an HTML/audio payload cannot pass as WebP.
+      return (
+        buffer.length >= 12 &&
+        startsWith(buffer, 0, 'RIFF') &&
+        startsWith(buffer, 8, 'WEBP') &&
+        buffer.readUInt32LE(4) === buffer.length - 8
+      );
     default:
       return false;
   }
@@ -148,7 +191,9 @@ function matchesImage(buffer: Buffer, mimeType: string): boolean {
 /** Shared audio signature check for REST uploads, REST transcription, and WS frames. */
 export function hasAudioSignature(buffer: Buffer, mimeType: string): boolean {
   const normalized = normalizeMimeType(mimeType);
-  return isAllowedAudioMimeType(normalized) ? matchesAudio(buffer, normalized) : false;
+  return isAllowedAudioMimeType(normalized)
+    ? matchesAudio(buffer, normalized)
+    : false;
 }
 
 function matchesAudio(buffer: Buffer, mimeType: string): boolean {
@@ -156,9 +201,14 @@ function matchesAudio(buffer: Buffer, mimeType: string): boolean {
     case 'audio/mpeg':
     case 'audio/mp3':
       // ID3 tag or MPEG frame sync with a valid layer/version combination.
-      return startsWith(buffer, 0, 'ID3') ||
-        (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0 &&
-          (buffer[1] & 0x06) !== 0x00 && (buffer[1] & 0x18) !== 0x08);
+      return (
+        startsWith(buffer, 0, 'ID3') ||
+        (buffer.length >= 2 &&
+          buffer[0] === 0xff &&
+          (buffer[1] & 0xe0) === 0xe0 &&
+          (buffer[1] & 0x06) !== 0x00 &&
+          (buffer[1] & 0x18) !== 0x08)
+      );
     case 'audio/wav':
     case 'audio/x-wav':
     case 'audio/wave':
@@ -173,12 +223,23 @@ function matchesAudio(buffer: Buffer, mimeType: string): boolean {
     case 'audio/mp4':
     case 'audio/m4a':
     case 'audio/x-m4a':
-      return buffer.length >= 12 && buffer[4] === 0x66 && buffer[5] === 0x74 &&
-        buffer[6] === 0x79 && buffer[7] === 0x70 &&
-        ['isom', 'iso2', 'mp41', 'mp42', 'M4A ', 'M4B ', 'dash'].includes(buffer.subarray(8, 12).toString('ascii'));
+      return (
+        buffer.length >= 12 &&
+        buffer[4] === 0x66 &&
+        buffer[5] === 0x74 &&
+        buffer[6] === 0x79 &&
+        buffer[7] === 0x70 &&
+        ['isom', 'iso2', 'mp41', 'mp42', 'M4A ', 'M4B ', 'dash'].includes(
+          buffer.subarray(8, 12).toString('ascii'),
+        )
+      );
     case 'audio/aac':
-      return startsWith(buffer, 0, 'ADIF') ||
-        (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0);
+      return (
+        startsWith(buffer, 0, 'ADIF') ||
+        (buffer.length >= 2 &&
+          buffer[0] === 0xff &&
+          (buffer[1] & 0xf6) === 0xf0)
+      );
     case 'audio/flac':
     case 'audio/x-flac':
       return startsWith(buffer, 0, 'fLaC');
@@ -192,20 +253,25 @@ function matchesAudio(buffer: Buffer, mimeType: string): boolean {
  * match that MIME's signature, and size must fit the shared decoded-byte budget.
  * The client filename is deliberately ignored.
  */
-export function validateUploadedFile(file: Express.Multer.File): ValidatedUpload {
+export function validateUploadedFile(
+  file: Express.Multer.File,
+): ValidatedUpload {
   const header = validateMediaHeader(file);
   const buffer = file?.buffer;
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new BadRequestException('File is empty');
   }
-  if (file.size > MAX_UPLOAD_BYTES || buffer.length > MAX_UPLOAD_BYTES) {
-    throw new BadRequestException(`File size exceeds limit (${MAX_UPLOAD_BYTES / 1024 / 1024}MB).`);
-  }
-  const matches = IMAGE_MIME_TYPES.includes(header.mimeType as (typeof IMAGE_MIME_TYPES)[number])
+  assertUploadSize(file.size, header.mimeType);
+  assertUploadSize(buffer.length, header.mimeType);
+  const matches = IMAGE_MIME_TYPES.includes(
+    header.mimeType as (typeof IMAGE_MIME_TYPES)[number],
+  )
     ? matchesImage(buffer, header.mimeType)
     : hasAudioSignature(buffer, header.mimeType);
   if (!matches) {
-    throw new BadRequestException('File content does not match its declared type');
+    throw new BadRequestException(
+      'File content does not match its declared type',
+    );
   }
   return {
     buffer,
@@ -218,36 +284,58 @@ export function validateUploadedFile(file: Express.Multer.File): ValidatedUpload
 
 /** Reject non-strict base64 before decoding so junk cannot bypass the byte budget. */
 export function decodeStrictBase64(value: unknown): Buffer | null {
-  if (typeof value !== 'string' || value.length === 0 || value.length > (MAX_UPLOAD_BYTES + 2) / 3 * 4 + 4) {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > Math.ceil(MAX_UPLOAD_BYTES / 3) * 4
+  ) {
     return null;
   }
   const candidate = value;
-  if (candidate.length === 0 || candidate.length % 4 !== 0 ||
-      !/^[A-Za-z0-9+/]+={0,2}$/.test(candidate)) {
+  if (
+    candidate.length === 0 ||
+    candidate.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(candidate)
+  ) {
     return null;
   }
   const buffer = Buffer.from(candidate, 'base64');
-  if (buffer.length === 0 || buffer.length > MAX_UPLOAD_BYTES ||
-      buffer.toString('base64') !== candidate) {
+  if (
+    buffer.length === 0 ||
+    buffer.length > MAX_UPLOAD_BYTES ||
+    buffer.toString('base64') !== candidate
+  ) {
     return null;
   }
   return buffer;
 }
 
 /** Validate and decode a base64 audio payload shared by REST and WebSocket. */
-export function validateAudioPayload(audio: unknown, mimeType: unknown): ValidatedAudioPayload {
+export function validateAudioPayload(
+  audio: unknown,
+  mimeType: unknown,
+): ValidatedAudioPayload {
   const mime = normalizeMimeType(mimeType);
   if (!isAllowedAudioMimeType(mime)) {
     throw new BadRequestException('Unsupported audio format');
   }
   const buffer = decodeStrictBase64(audio);
   if (!buffer) {
-    throw new BadRequestException('Audio payload is missing, malformed, or too large');
+    throw new BadRequestException(
+      'Audio payload is missing, malformed, or too large',
+    );
   }
   if (!hasAudioSignature(buffer, mime)) {
-    throw new BadRequestException('Audio content does not match its declared type');
+    throw new BadRequestException(
+      'Audio content does not match its declared type',
+    );
   }
-  return { buffer, mimeType: mime, extension: extensionForMimeType(mime)!, size: buffer.length };
+  return {
+    buffer,
+    mimeType: mime,
+    extension: extensionForMimeType(mime)!,
+    size: buffer.length,
+  };
 }
 
 /**
@@ -292,7 +380,12 @@ export class StorageAdapter {
 
   /** Server-generated, owner-scoped object name. Client input never selects a key. */
   generateKey(userId: string, extension: string): string {
-    if (!/^[A-Za-z0-9_-]+$/.test(userId) || !/^[a-z0-9]+$/.test(extension)) {
+    if (
+      typeof userId !== 'string' ||
+      typeof extension !== 'string' ||
+      !/^[A-Za-z0-9_-]+$/.test(userId) ||
+      !this.isValidExtension(extension)
+    ) {
       throw new BadRequestException('Invalid upload owner or extension');
     }
     return `${userId}/${randomUUID()}.${extension}`;
@@ -301,16 +394,35 @@ export class StorageAdapter {
   /** Verify a caller-supplied key stays inside its owner's prefix. */
   assertOwner(key: string, userId: string): string {
     const relativeKey = this.assertKey(key);
-    if (!relativeKey.startsWith(`${userId}/`) || relativeKey.slice(userId.length + 1).includes('/')) {
+    if (
+      typeof userId !== 'string' ||
+      !/^[A-Za-z0-9_-]+$/.test(userId) ||
+      !relativeKey.startsWith(`${userId}/`) ||
+      relativeKey.slice(userId.length + 1).includes('/')
+    ) {
       throw new BadRequestException('File not found or access denied');
     }
     return relativeKey;
   }
 
+  private isValidExtension(extension: string): boolean {
+    if (!/^[a-z0-9]+$/.test(extension)) return false;
+    // Only canonical MIME-derived extensions are accepted; no client alias can
+    // choose a storage key suffix or smuggle a second file type into it.
+    return new Set(Object.values(MIME_TO_EXTENSION)).has(extension);
+  }
+
   private assertKey(key: unknown): string {
-    if (typeof key !== 'string' ||
-        !/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/.test(key) ||
-        key.includes('..')) {
+    if (
+      typeof key !== 'string' ||
+      !/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]+$/.test(key) ||
+      key.includes('..')
+    ) {
+      throw new BadRequestException('Invalid object key');
+    }
+    // A key is only valid if it could have come from generateKey: the suffix is
+    // a MIME-derived extension, never arbitrary client text.
+    if (!this.isValidExtension(key.slice(key.lastIndexOf('.') + 1))) {
       throw new BadRequestException('Invalid object key');
     }
     return key;

@@ -23,9 +23,15 @@ export class RateLimitMiddleware implements NestMiddleware {
   private readonly maxRequests: number;
 
   constructor(private readonly rateLimiter: RateLimiterService) {
-    const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || (15 * 60 * 1000).toString(), 10);
+    const windowMs = parseInt(
+      process.env.RATE_LIMIT_WINDOW_MS || (15 * 60 * 1000).toString(),
+      10,
+    );
     this.windowSec = Math.max(1, Math.floor(windowMs / 1000));
-    this.maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10);
+    this.maxRequests = parseInt(
+      process.env.RATE_LIMIT_MAX_REQUESTS || '100',
+      10,
+    );
   }
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -46,14 +52,21 @@ export class RateLimitMiddleware implements NestMiddleware {
       // checkRateLimit throws 429 (quota) or 503 (closed-policy outage).
       // Expose the TTL-derived retry hint, then hand off to Nest's exception
       // filter. Never call next() here: a failed limiter must not pass traffic.
-      const payload = error instanceof HttpException
-        ? (error.getResponse() as { resetAt?: number; retryAfterSeconds?: number })
-        : undefined;
+      const payload =
+        error instanceof HttpException
+          ? (error.getResponse() as {
+              resetAt?: number;
+              retryAfterSeconds?: number;
+            })
+          : undefined;
       const retryAfter = payload?.retryAfterSeconds ?? this.windowSec;
       res.setHeader('Retry-After', String(retryAfter));
       res.setHeader('X-RateLimit-Limit', this.maxRequests);
       res.setHeader('X-RateLimit-Remaining', 0);
-      res.setHeader('X-RateLimit-Reset', payload?.resetAt ?? Math.floor(Date.now() / 1000) + retryAfter);
+      res.setHeader(
+        'X-RateLimit-Reset',
+        payload?.resetAt ?? Math.floor(Date.now() / 1000) + retryAfter,
+      );
       next(error);
     }
   }
@@ -75,7 +88,9 @@ export class RateLimitMiddleware implements NestMiddleware {
     let clientIp = normalizedSocketIp || 'unknown';
     if (isTrustedProxy(normalizedSocketIp, trustedProxies)) {
       const forwarded = req.headers['x-forwarded-for'];
-      const forwardedIps = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded || '')
+      const forwardedIps = (
+        Array.isArray(forwarded) ? forwarded.join(',') : forwarded || ''
+      )
         .split(',')
         .map((value) => value.trim())
         .map((value) => normalizeIp(value))
@@ -128,13 +143,15 @@ function isInCidr(ip: string, network: string, bits: number): boolean {
     }
     if (remainder) {
       const mask = 0xff << (8 - remainder);
-      if ((ipBytes[fullBytes] & mask) !== (netBytes[fullBytes] & mask)) return false;
+      if ((ipBytes[fullBytes] & mask) !== (netBytes[fullBytes] & mask))
+        return false;
     }
     return true;
   }
 
   const toInt = (address: string) =>
-    address.split('.').reduce((acc, part) => (acc << 8) | Number(part), 0) >>> 0;
+    address.split('.').reduce((acc, part) => (acc << 8) | Number(part), 0) >>>
+    0;
   const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
   return (toInt(ip) & mask) === (toInt(network) & mask);
 }
@@ -144,8 +161,17 @@ function expandIPv6(address: string): Uint8Array | null {
   const leftGroups = parts[0] ? parts[0].split(':') : [];
   const rightGroups = parts.length > 1 && parts[1] ? parts[1].split(':') : [];
   const missing = 8 - leftGroups.length - rightGroups.length;
-  if (parts.length > 1 ? missing < 0 : leftGroups.length + rightGroups.length !== 8) return null;
-  const groups = [...leftGroups, ...Array(Math.max(0, missing)).fill('0'), ...rightGroups];
+  if (
+    parts.length > 1
+      ? missing < 0
+      : leftGroups.length + rightGroups.length !== 8
+  )
+    return null;
+  const groups = [
+    ...leftGroups,
+    ...Array(Math.max(0, missing)).fill('0'),
+    ...rightGroups,
+  ];
   const bytes = new Uint8Array(16);
   for (let i = 0; i < 8; i++) {
     const value = parseInt(groups[i], 16);

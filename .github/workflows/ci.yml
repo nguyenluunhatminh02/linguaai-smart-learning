@@ -25,6 +25,8 @@ env:
   AI_SERVICE_API_KEYS: ci-only-ai-service-key-0123456789
   GROQ_API_KEY: ci-fake-groq-key
   GROQ_MODEL: llama-3.3-70b-versatile
+  DEBUG: "false"
+  CORS_ORIGINS: http://127.0.0.1:3000
   AI_SERVICE_URL: http://127.0.0.1:8000
   FRONTEND_URL: http://127.0.0.1:3000
 
@@ -49,6 +51,29 @@ jobs:
           node-version: 22.14.0
           cache: pnpm
 
+      - name: Backup script harness (stubbed tools, fake values only)
+        # ops-19/DB-05: exercises the Bash backup/verification/restore-guard/
+        # retention logic with PATH stubs. No DB, network, secrets or .env reads.
+        run: bash tests/scripts/backup_test.sh
+
+      - name: Verify fake CI environment
+        run: |
+          test "${APP_ENV}" = test
+          test "${NODE_ENV}" = test
+          test "${CI}" = true
+          test "${DEBUG}" = false
+          test "${GROQ_API_KEY}" = ci-fake-groq-key
+          test "${AI_SERVICE_API_KEYS}" = ci-only-ai-service-key-0123456789
+          test "${DATABASE_URL}" = postgresql://ci:ci@127.0.0.1:5432/linguaai_ci
+
+      - name: Reject tracked .env files
+        # Policy §6.1: CI uses workflow env vars only; never a developer .env.
+        run: |
+          if git ls-files --cached --others --exclude-standard | grep -E '(^|/)\.env$'; then
+            echo "::error::Refusing to run with .env files present in the checkout"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -68,10 +93,33 @@ jobs:
         run: pnpm --filter web lint
 
       - name: API unit tests
-        run: pnpm --filter api test -- --runInBand
+        # Unit suites assert no AI_SERVICE_API_KEYS is present; unset it for
+        # this process while other steps keep the fake value from env above.
+        run: env -u AI_SERVICE_API_KEYS pnpm --filter api test -- --runInBand
 
       - name: Web unit tests
         run: pnpm --filter web test:run
+
+      # OPS-15: benchmark harness unit tests and config smoke only. No load
+      # test, no server and no provider calls run in pull-request CI.
+      - name: Benchmark harness unit tests
+        continue-on-error: true
+        run: pnpm benchmark:test
+
+      - name: Benchmark harness dry run
+        continue-on-error: true
+        run: pnpm benchmark:dry
+
+      - name: Upload JS unit test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-logs
+          path: |
+            apps/api/coverage/
+            apps/web/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -86,11 +134,20 @@ jobs:
           python -m venv .venv
           . .venv/bin/activate
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt "pytest==8.3.5" "pytest-asyncio==0.25.3"
+          python -m pip install -r requirements.txt "pytest==8.3.4" "pytest-asyncio==0.25.2"
           python -m pip check
 
       - name: AI service unit tests
         working-directory: apps/ai-service
         run: |
           . .venv/bin/activate
-          python -m pytest -q
+          python -m pytest -q --junitxml=coverage/junit.xml
+
+      - name: Upload AI JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-junit
+          path: apps/ai-service/coverage/junit.xml
+          if-no-files-found: ignore
+          retention-days: 7

@@ -76,7 +76,8 @@ export class RefreshTokenService {
   }
 
   async revokeById(id: string, userId: string): Promise<boolean> {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) return false;
     const rt = await this.prisma.refresh_tokens.findFirst({
       where: { id, user_id: userId, is_revoked: false },

@@ -69,7 +69,10 @@ export class TokenBlacklistService {
    */
   async isBlacklisted(jti: string): Promise<boolean> {
     if (!this.redis.isAvailable()) {
-      return this.failClosedResult('token blacklist check', 'connection unavailable');
+      return this.failClosedResult(
+        'token blacklist check',
+        'connection unavailable',
+      );
     }
 
     try {
@@ -89,16 +92,22 @@ export class TokenBlacklistService {
    */
   async removeFromBlacklist(jti: string): Promise<void> {
     if (!this.redis.isAvailable()) {
-      this.logger.warn('Redis not available, skipping token removal from blacklist');
+      this.logger.warn(
+        'Redis not available, skipping token removal from blacklist',
+      );
       return;
     }
 
     try {
       const key = `${this.PREFIX}${jti}`;
       await this.redis.del(key);
-      this.logger.log(`Token removed from blacklist: ${jti.substring(0, 8)}...`);
+      this.logger.log(
+        `Token removed from blacklist: ${jti.substring(0, 8)}...`,
+      );
     } catch (err) {
-      this.logger.error(`Failed to remove token from blacklist: ${err.message}`);
+      this.logger.error(
+        `Failed to remove token from blacklist: ${err.message}`,
+      );
     }
   }
 
@@ -136,7 +145,10 @@ export class TokenBlacklistService {
    */
   async areAllUserTokensBlacklisted(userId: string): Promise<boolean> {
     if (!this.redis.isAvailable()) {
-      return this.failClosedResult('user token blacklist check', 'connection unavailable');
+      return this.failClosedResult(
+        'user token blacklist check',
+        'connection unavailable',
+      );
     }
 
     try {

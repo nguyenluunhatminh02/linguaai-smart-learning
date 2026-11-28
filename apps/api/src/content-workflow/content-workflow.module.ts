@@ -1,6 +1,6 @@
-import { Module } from "@nestjs/common";
-import { ContentWorkflowService } from "./content-workflow.service";
-import { ContentWorkflowController } from "./content-workflow.controller";
+import { Module } from '@nestjs/common';
+import { ContentWorkflowService } from './content-workflow.service';
+import { ContentWorkflowController } from './content-workflow.controller';
 
 @Module({
   controllers: [ContentWorkflowController],

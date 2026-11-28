@@ -4,9 +4,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { ReviewStatus } from "./dto/content-workflow.dto";
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { ReviewStatus } from './dto/content-workflow.dto';
 
 /** Shape of a row in the raw-SQL-only content_submissions table. */
 export interface SubmissionRow {
@@ -35,7 +35,7 @@ export interface SubmissionListResult {
   offset: number;
 }
 
-type ReviewDecision = "APPROVED" | "REJECTED";
+type ReviewDecision = 'APPROVED' | 'REJECTED';
 
 /**
  * Teacher/moderator content review workflow.
@@ -54,12 +54,15 @@ export class ContentWorkflowService {
    * Submit a content item for review. A resubmission supersedes any prior
    * decision and hides the item until a reviewer approves it again.
    */
-  async submit(contentItemId: string, authorId: string): Promise<SubmissionRow> {
+  async submit(
+    contentItemId: string,
+    authorId: string,
+  ): Promise<SubmissionRow> {
     const exists = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM content_items WHERE id = ${contentItemId}::uuid
     `;
     if (exists.length === 0) {
-      throw new NotFoundException("Content item not found");
+      throw new NotFoundException('Content item not found');
     }
 
     // Both writes share a transaction: a submission must never exist for
@@ -125,7 +128,7 @@ export class ContentWorkflowService {
     `;
     const submission = rows[0];
     if (!submission) {
-      throw new NotFoundException("Submission not found");
+      throw new NotFoundException('Submission not found');
     }
     return submission;
   }
@@ -142,9 +145,9 @@ export class ContentWorkflowService {
     expectedVersion?: number,
   ): Promise<SubmissionRow> {
     const notes = reviewNotes?.trim() || null;
-    if (decision === "REJECTED" && !notes) {
+    if (decision === 'REJECTED' && !notes) {
       throw new BadRequestException(
-        "Review notes are required when rejecting content",
+        'Review notes are required when rejecting content',
       );
     }
 
@@ -168,21 +171,23 @@ export class ContentWorkflowService {
 
       await tx.$executeRaw`
         UPDATE content_items
-        SET published = ${decision === "APPROVED"}, updated_at = CURRENT_TIMESTAMP
+        SET published = ${decision === 'APPROVED'}, updated_at = CURRENT_TIMESTAMP
         WHERE id = ${submission.content_item_id}::uuid
       `;
       return submission;
     });
 
     if (!updated) {
-      const existing = await this.prisma.$queryRaw<Array<{ status: ReviewStatus }>>`
+      const existing = await this.prisma.$queryRaw<
+        Array<{ status: ReviewStatus }>
+      >`
         SELECT status FROM content_submissions WHERE id = ${id}::uuid
       `;
       if (existing.length === 0) {
-        throw new NotFoundException("Submission not found");
+        throw new NotFoundException('Submission not found');
       }
       throw new ConflictException(
-        "Submission was already reviewed or its version changed",
+        'Submission was already reviewed or its version changed',
       );
     }
 
@@ -198,7 +203,13 @@ export class ContentWorkflowService {
     reviewNotes?: string,
     expectedVersion?: number,
   ): Promise<SubmissionRow> {
-    return this.review(id, reviewerId, "APPROVED", reviewNotes, expectedVersion);
+    return this.review(
+      id,
+      reviewerId,
+      'APPROVED',
+      reviewNotes,
+      expectedVersion,
+    );
   }
 
   reject(
@@ -207,6 +218,12 @@ export class ContentWorkflowService {
     reviewNotes: string,
     expectedVersion?: number,
   ): Promise<SubmissionRow> {
-    return this.review(id, reviewerId, "REJECTED", reviewNotes, expectedVersion);
+    return this.review(
+      id,
+      reviewerId,
+      'REJECTED',
+      reviewNotes,
+      expectedVersion,
+    );
   }
 }

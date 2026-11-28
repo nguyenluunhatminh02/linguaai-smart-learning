@@ -58,12 +58,6 @@ const nextConfig: NextConfig = {
   // Pin tracing root to this app to silence Next's "multiple lockfiles" warning
   // when a stray lockfile lives outside the workspace.
   outputFileTracingRoot: path.join(__dirname, '../..'),
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   experimental: {
     middlewareClientMaxBodySize: '50mb',
   },

@@ -1,5 +1,9 @@
 // @ts-nocheck
-import { ExecutionContext, ForbiddenException, RequestMethod } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  RequestMethod,
+} from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 
@@ -32,11 +36,21 @@ const USER_ID = '00000000-0000-4000-8000-000000000002';
 // Only used on the positive admin path, to prove the mocked dependencies can
 // actually be reached when the guard allows the request through.
 const sampleArgs: Record<string, any[]> = {
-  grantTokens: [USER_ID, { amount: 5, reason: 'test' }, { id: ADMIN_ID }, { headers: {}, socket: {} }],
+  grantTokens: [
+    USER_ID,
+    { amount: 5, reason: 'test' },
+    { id: ADMIN_ID },
+    { headers: {}, socket: {} },
+  ],
   getUserTokenHistory: [USER_ID],
   getOverview: [],
   getUsers: [1, 20],
-  updateRole: [USER_ID, { role: 'USER' }, { id: ADMIN_ID }, { headers: {}, socket: {} }],
+  updateRole: [
+    USER_ID,
+    { role: 'USER' },
+    { id: ADMIN_ID },
+    { headers: {}, socket: {} },
+  ],
   deleteUser: [USER_ID, { id: ADMIN_ID }, { headers: {}, socket: {} }],
   getContent: ['reading'],
   createContent: [{ type: 'reading', title: 'Test' }],
@@ -61,14 +75,21 @@ const routes: Route[] = Object.getOwnPropertyNames(AdminController.prototype)
   })
   .filter((route): route is Route => route !== null);
 
-const makeContext = (handler: (...args: any[]) => any, roles?: string[]): ExecutionContext => {
-  const request = roles === undefined ? {} : { user: { id: 'test-user', roles } };
+const makeContext = (
+  handler: (...args: any[]) => any,
+  roles?: string[],
+): ExecutionContext => {
+  const request =
+    roles === undefined ? {} : { user: { id: 'test-user', roles } };
   return {
     getHandler: () => handler,
     getClass: () => AdminController,
     getRequest: () => request,
     getResponse: () => ({}),
-    switchToHttp: () => ({ getRequest: () => request, getResponse: () => ({}) }),
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => ({}),
+    }),
   } as any;
 };
 
@@ -98,7 +119,11 @@ describe('AdminController authorization policy (SEC-01)', () => {
     };
     prisma = { audit_logs: { create: jest.fn() } };
     controller = new AdminController(adminService, tokensService, prisma);
-    serviceMocks = [...Object.values(adminService), ...Object.values(tokensService), prisma.audit_logs.create] as jest.Mock[];
+    serviceMocks = [
+      ...Object.values(adminService),
+      ...Object.values(tokensService),
+      prisma.audit_logs.create,
+    ] as jest.Mock[];
   });
 
   it('discovers every admin route from Nest metadata', () => {
@@ -116,26 +141,35 @@ describe('AdminController authorization policy (SEC-01)', () => {
     ]);
   });
 
-  it.each(routes)('$label declares JwtAuthGuard, RolesGuard and @Roles(ADMIN)', ({ handler }) => {
-    const classRoles = Reflect.getMetadata(ROLES_KEY, AdminController) ?? [];
-    const methodRoles = Reflect.getMetadata(ROLES_KEY, handler) ?? [];
-    const guards = [
-      ...(Reflect.getMetadata(GUARDS_METADATA, AdminController) ?? []),
-      ...(Reflect.getMetadata(GUARDS_METADATA, handler) ?? []),
-    ];
+  it.each(routes)(
+    '$label declares JwtAuthGuard, RolesGuard and @Roles(ADMIN)',
+    ({ handler }) => {
+      const classRoles = Reflect.getMetadata(ROLES_KEY, AdminController) ?? [];
+      const methodRoles = Reflect.getMetadata(ROLES_KEY, handler) ?? [];
+      const guards = [
+        ...(Reflect.getMetadata(GUARDS_METADATA, AdminController) ?? []),
+        ...(Reflect.getMetadata(GUARDS_METADATA, handler) ?? []),
+      ];
 
-    expect([...classRoles, ...methodRoles]).toContain(Role.ADMIN);
-    expect(guards).toEqual(expect.arrayContaining([JwtAuthGuard, RolesGuard]));
-    expect(Reflect.getMetadata(PUBLIC_KEY, handler)).toBeUndefined();
-    expect(Reflect.getMetadata(PUBLIC_KEY, AdminController)).toBeUndefined();
-  });
+      expect([...classRoles, ...methodRoles]).toContain(Role.ADMIN);
+      expect(guards).toEqual(
+        expect.arrayContaining([JwtAuthGuard, RolesGuard]),
+      );
+      expect(Reflect.getMetadata(PUBLIC_KEY, handler)).toBeUndefined();
+      expect(Reflect.getMetadata(PUBLIC_KEY, AdminController)).toBeUndefined();
+    },
+  );
 
   it.each(routes)(
     '$label invokes its service only after the guard allows an ADMIN',
     ({ handler, name }) => {
-      expect(() => guard.canActivate(makeContext(handler, [Role.ADMIN]))).not.toThrow();
+      expect(() =>
+        guard.canActivate(makeContext(handler, [Role.ADMIN])),
+      ).not.toThrow();
       expect(() => controller[name](...(sampleArgs[name] ?? []))).not.toThrow();
-      expect(serviceMocks.some((mock) => mock.mock.calls.length > 0)).toBe(true);
+      expect(serviceMocks.some((mock) => mock.mock.calls.length > 0)).toBe(
+        true,
+      );
     },
   );
 
@@ -145,18 +179,24 @@ describe('AdminController authorization policy (SEC-01)', () => {
       for (const route of routes) {
         // Guards run before parameter pipes and handlers in Nest's request
         // lifecycle, so even invalid UUID/body values must stop at 403.
-        expect(() => guard.canActivate(makeContext(route.handler, [role]))).toThrow(
-          ForbiddenException,
-        );
+        expect(() =>
+          guard.canActivate(makeContext(route.handler, [role])),
+        ).toThrow(ForbiddenException);
       }
-      expect(serviceMocks.every((mock) => mock.mock.calls.length === 0)).toBe(true);
+      expect(serviceMocks.every((mock) => mock.mock.calls.length === 0)).toBe(
+        true,
+      );
     },
   );
 
   it('rejects requests without an authenticated user on every admin route', () => {
     for (const route of routes) {
-      expect(() => guard.canActivate(makeContext(route.handler))).toThrow(ForbiddenException);
+      expect(() => guard.canActivate(makeContext(route.handler))).toThrow(
+        ForbiddenException,
+      );
     }
-    expect(serviceMocks.every((mock) => mock.mock.calls.length === 0)).toBe(true);
+    expect(serviceMocks.every((mock) => mock.mock.calls.length === 0)).toBe(
+      true,
+    );
   });
 });

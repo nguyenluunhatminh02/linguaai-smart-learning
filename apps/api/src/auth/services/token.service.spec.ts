@@ -41,7 +41,11 @@ describe('TokenService', () => {
         { provide: JwtService, useValue: mockJwt },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn((key: string, fallback?: string) => configValues[key] ?? fallback) },
+          useValue: {
+            get: jest.fn(
+              (key: string, fallback?: string) => configValues[key] ?? fallback,
+            ),
+          },
         },
         { provide: RedisService, useValue: mockRedis },
         { provide: PrismaService, useValue: mockPrisma },
@@ -94,7 +98,9 @@ describe('TokenService', () => {
 
     it('extends rememberMe refresh tokens to 28 days', () => {
       const result = service.generateRefreshToken(USER, 'dev-1', true);
-      expect(mockJwt.sign.mock.calls[0][1]).toEqual({ expiresIn: 28 * 24 * 3600 });
+      expect(mockJwt.sign.mock.calls[0][1]).toEqual({
+        expiresIn: 28 * 24 * 3600,
+      });
       expect(result.ttlSec).toBe(28 * 24 * 3600);
     });
 
@@ -146,7 +152,9 @@ describe('TokenService', () => {
         type: 'REFRESH',
       });
       mockRedis.get.mockResolvedValue('jti-1');
-      expect(await service.validateRefreshToken('rt')).toMatchObject({ roles: [] });
+      expect(await service.validateRefreshToken('rt')).toMatchObject({
+        roles: [],
+      });
     });
 
     it.each(['ACCESS', 'MFA_PENDING', undefined])(
@@ -161,7 +169,9 @@ describe('TokenService', () => {
         mockJwt.verify.mockReturnValue(payload);
         mockRedis.get.mockResolvedValue('jti-1');
 
-        expect(await service.validateRefreshToken('access-as-refresh')).toBeNull();
+        expect(
+          await service.validateRefreshToken('access-as-refresh'),
+        ).toBeNull();
         expect(mockRedis.get).not.toHaveBeenCalled();
       },
     );
@@ -207,7 +217,11 @@ describe('TokenService', () => {
 
     it('stores refresh JTI under the per-user per-device key', async () => {
       await service.storeRefreshToken('user-123', 'dev-1', 'jti-1', 3600);
-      expect(mockRedis.set).toHaveBeenCalledWith('refresh:user-123:dev-1', 'jti-1', 3600);
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'refresh:user-123:dev-1',
+        'jti-1',
+        3600,
+      );
     });
   });
 
@@ -218,7 +232,11 @@ describe('TokenService', () => {
       mockJwt.verify.mockReturnValue({ jti: 'jti-1', exp: futureExp() });
       await service.blacklistToken('access');
       expect(mockJwt.verify).toHaveBeenCalledWith('access');
-      expect(mockRedis.set).toHaveBeenCalledWith('blacklist:jti-1', '1', expect.any(Number));
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'blacklist:jti-1',
+        '1',
+        expect.any(Number),
+      );
     });
 
     it.each([
@@ -270,7 +288,9 @@ describe('TokenService', () => {
       mockRedis.isAvailable.mockReturnValue(false);
       mockJwt.verify.mockReturnValue({ jti: 'jti-1', exp: futureExp() });
 
-      await expect(testService.blacklistToken('access')).resolves.toBeUndefined();
+      await expect(
+        testService.blacklistToken('access'),
+      ).resolves.toBeUndefined();
       expect(mockRedis.set).not.toHaveBeenCalled();
     });
   });
@@ -301,7 +321,9 @@ describe('TokenService', () => {
         iatMs: revokedAt,
       });
       mockRedis.get.mockImplementation((key: string) =>
-        Promise.resolve(key === 'revoked-user:user-123' ? `${revokedAt}` : null),
+        Promise.resolve(
+          key === 'revoked-user:user-123' ? `${revokedAt}` : null,
+        ),
       );
       expect(await service.isTokenBlacklisted('old-access')).toBe(true);
     });
@@ -368,7 +390,9 @@ describe('TokenService', () => {
       const prodService = await buildService();
       mockJwt.verify.mockReturnValue({ jti: 'jti-1', sub: 'user-123' });
       mockRedis.exists.mockRejectedValue(new Error('redis down'));
-      await expect(prodService.isTokenBlacklisted('access')).resolves.toBe(true);
+      await expect(prodService.isTokenBlacklisted('access')).resolves.toBe(
+        true,
+      );
     });
   });
 
@@ -390,7 +414,9 @@ describe('TokenService', () => {
     it('revokes all sessions with a user-level marker', async () => {
       mockRedis.keys.mockResolvedValue(['refresh:user-123:dev-1']);
       await service.revokeAllSessions('user-123');
-      expect(mockRedis.delMany).toHaveBeenCalledWith(['refresh:user-123:dev-1']);
+      expect(mockRedis.delMany).toHaveBeenCalledWith([
+        'refresh:user-123:dev-1',
+      ]);
       expect(mockRedis.set).toHaveBeenCalledWith(
         'revoked-user:user-123',
         expect.any(String),
@@ -404,7 +430,9 @@ describe('TokenService', () => {
         'refresh:user-123:dev-2',
       ]);
       await service.revokeOtherSessions('user-123', 'dev-1');
-      expect(mockRedis.delMany).toHaveBeenCalledWith(['refresh:user-123:dev-2']);
+      expect(mockRedis.delMany).toHaveBeenCalledWith([
+        'refresh:user-123:dev-2',
+      ]);
       expect(mockRedis.set).toHaveBeenCalledWith(
         'revoked-device:user-123:dev-2',
         expect.any(String),

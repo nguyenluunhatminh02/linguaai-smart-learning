@@ -3,8 +3,21 @@ import { FsrsAlgorithm, FsrsGrade } from './fsrs.algorithm';
 describe('FsrsAlgorithm', () => {
   it('continues relearning after a lapse instead of treating the card as new', () => {
     const first = FsrsAlgorithm.calculate(3, 0.4, 5, 0, 0);
-    const forgotten = FsrsAlgorithm.calculate(1, first.stability, first.difficulty, first.repetitions, first.interval);
-    const recalled = FsrsAlgorithm.calculate(3, forgotten.stability, forgotten.difficulty, forgotten.repetitions, 1, true);
+    const forgotten = FsrsAlgorithm.calculate(
+      1,
+      first.stability,
+      first.difficulty,
+      first.repetitions,
+      first.interval,
+    );
+    const recalled = FsrsAlgorithm.calculate(
+      3,
+      forgotten.stability,
+      forgotten.difficulty,
+      forgotten.repetitions,
+      1,
+      true,
+    );
 
     expect(forgotten.repetitions).toBe(0);
     expect(recalled.repetitions).toBe(1);
@@ -41,9 +54,9 @@ describe('FsrsAlgorithm', () => {
   // ─── initialStability ────────────────────────────────────────────────────
   describe('initialStability', () => {
     const grades: [FsrsGrade, number][] = [
-      [1, 0.4072],  // Again  → W[0]
-      [2, 1.1829],  // Hard   → W[1]
-      [3, 3.1262],  // Good   → W[2]
+      [1, 0.4072], // Again  → W[0]
+      [2, 1.1829], // Hard   → W[1]
+      [3, 3.1262], // Good   → W[2]
       [4, 15.4722], // Easy   → W[3]
     ];
 
@@ -146,15 +159,33 @@ describe('FsrsAlgorithm', () => {
     describe('subsequent reviews', () => {
       it('should increase stability with repeated Good grades', () => {
         const r1 = FsrsAlgorithm.calculate(3, 0, 0, 0, 0);
-        const r2 = FsrsAlgorithm.calculate(3, r1.stability, r1.difficulty, 1, r1.interval);
-        const r3 = FsrsAlgorithm.calculate(3, r2.stability, r2.difficulty, 2, r2.interval);
+        const r2 = FsrsAlgorithm.calculate(
+          3,
+          r1.stability,
+          r1.difficulty,
+          1,
+          r1.interval,
+        );
+        const r3 = FsrsAlgorithm.calculate(
+          3,
+          r2.stability,
+          r2.difficulty,
+          2,
+          r2.interval,
+        );
         expect(r2.stability).toBeGreaterThan(r1.stability);
         expect(r3.stability).toBeGreaterThan(r2.stability);
       });
 
       it('should reset repetitions on Again (forgetting)', () => {
         const r1 = FsrsAlgorithm.calculate(3, 0, 0, 0, 0);
-        const r2 = FsrsAlgorithm.calculate(1, r1.stability, r1.difficulty, 1, 5);
+        const r2 = FsrsAlgorithm.calculate(
+          1,
+          r1.stability,
+          r1.difficulty,
+          1,
+          5,
+        );
         expect(r2.repetitions).toBe(0);
         expect(r2.interval).toBe(1);
       });
@@ -166,9 +197,9 @@ describe('FsrsAlgorithm', () => {
           D = FsrsAlgorithm.nextDifficulty(D, 3);
         }
         // Should converge towards D0(Good)
-        expect(Math.abs(D - d0_good)).toBeLessThanOrEqual(Math.abs(
-          FsrsAlgorithm.initialDifficulty(1) - d0_good
-        ));
+        expect(Math.abs(D - d0_good)).toBeLessThanOrEqual(
+          Math.abs(FsrsAlgorithm.initialDifficulty(1) - d0_good),
+        );
       });
     });
 

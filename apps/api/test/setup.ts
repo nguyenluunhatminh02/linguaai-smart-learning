@@ -3,7 +3,9 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 
-const url = process.env.DATABASE_URL || 'postgresql://linguaai:linguaai_secret@localhost:5432/linguaai_test';
+const url =
+  process.env.DATABASE_URL ||
+  'postgresql://linguaai:linguaai_secret@localhost:5432/linguaai_test';
 const pool = new Pool({ connectionString: url });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });

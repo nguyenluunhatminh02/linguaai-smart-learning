@@ -72,9 +72,7 @@ export class RateLimiterService {
   private readonly logger = new Logger(RateLimiterService.name);
   private readonly DEFAULT_PREFIX = 'rate_limit:';
 
-  constructor(
-    private redis: RedisService,
-  ) {}
+  constructor(private redis: RedisService) {}
 
   /**
    * Check if a request should be rate limited.
@@ -83,7 +81,10 @@ export class RateLimiterService {
    * @throws HttpException(429) when the shared quota is exhausted
    * @throws HttpException(503) when the backend fails under a closed policy
    */
-  async checkRateLimit(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
+  async checkRateLimit(
+    key: string,
+    config: RateLimitConfig,
+  ): Promise<RateLimitResult> {
     const limit = this.validateConfig(config);
     const redisKey = this.buildKey(key, config.keyPrefix);
     const now = Date.now();
@@ -95,7 +96,14 @@ export class RateLimiterService {
         throw new Error(`invalid counter value: ${String(newCount)}`);
       }
     } catch (error) {
-      return this.handleBackendFailure(error, key, redisKey, config, now, limit);
+      return this.handleBackendFailure(
+        error,
+        key,
+        redisKey,
+        config,
+        now,
+        limit,
+      );
     }
 
     // Only quota exhaustion is a 429; the TTL comes from the same Redis key.
@@ -127,7 +135,14 @@ export class RateLimiterService {
     try {
       ttl = await this.readTtl(redisKey, key);
     } catch (error) {
-      return this.handleBackendFailure(error, key, redisKey, config, now, limit);
+      return this.handleBackendFailure(
+        error,
+        key,
+        redisKey,
+        config,
+        now,
+        limit,
+      );
     }
 
     return this.result(limit, limit - newCount, ttl, now);
@@ -144,7 +159,10 @@ export class RateLimiterService {
   /**
    * Get current rate limit status without incrementing.
    */
-  async getRateLimitStatus(key: string, config: RateLimitConfig): Promise<{
+  async getRateLimitStatus(
+    key: string,
+    config: RateLimitConfig,
+  ): Promise<{
     current: number;
     remaining: number;
     resetTime: Date | null;
@@ -188,7 +206,8 @@ export class RateLimiterService {
     );
     throw new HttpException(
       {
-        message: 'Rate limiting is temporarily unavailable. Please try again shortly.',
+        message:
+          'Rate limiting is temporarily unavailable. Please try again shortly.',
         ...this.windowFields(limit, config.window, now),
       } satisfies RateLimitUnavailablePayload,
       HttpStatus.SERVICE_UNAVAILABLE,
@@ -227,10 +246,14 @@ export class RateLimiterService {
   private validateConfig(config: RateLimitConfig): number {
     const { limit, window } = config;
     if (!Number.isInteger(limit) || limit < 1) {
-      throw new Error(`Invalid rate limit: limit must be a positive integer (got ${String(limit)})`);
+      throw new Error(
+        `Invalid rate limit: limit must be a positive integer (got ${String(limit)})`,
+      );
     }
     if (!Number.isInteger(window) || window < 1) {
-      throw new Error(`Invalid rate limit: window must be a positive integer number of seconds (got ${String(window)})`);
+      throw new Error(
+        `Invalid rate limit: window must be a positive integer number of seconds (got ${String(window)})`,
+      );
     }
     const policy = this.failurePolicy(config);
     if (policy !== 'closed' && policy !== 'open') {
@@ -250,7 +273,12 @@ export class RateLimiterService {
     };
   }
 
-  private result(limit: number, remaining: number, ttlSeconds: number, now: number): RateLimitResult {
+  private result(
+    limit: number,
+    remaining: number,
+    ttlSeconds: number,
+    now: number,
+  ): RateLimitResult {
     const fields = this.windowFields(limit, ttlSeconds, now);
     return {
       remaining,
@@ -266,7 +294,9 @@ export class RateLimiterService {
    * Build Redis key for rate limiting
    */
   private buildKey(key: string, customPrefix?: string): string {
-    const prefix = customPrefix ? `${this.DEFAULT_PREFIX}${customPrefix}:` : this.DEFAULT_PREFIX;
+    const prefix = customPrefix
+      ? `${this.DEFAULT_PREFIX}${customPrefix}:`
+      : this.DEFAULT_PREFIX;
     return `${prefix}${key}`;
   }
 

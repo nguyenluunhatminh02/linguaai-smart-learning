@@ -1,11 +1,11 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { PassportStrategy } from "@nestjs/passport";
-import { ExtractJwt, Strategy } from "passport-jwt";
-import { ConfigService } from "@nestjs/config";
-import { TokenService } from "../services/token.service";
-import { PrismaService } from "../../prisma/prisma.service";
-import { RedisService } from "../../common/services/redis.service";
-import { toAppUser } from "../../common/mappers/user.mapper";
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ConfigService } from '@nestjs/config';
+import { TokenService } from '../services/token.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../common/services/redis.service';
+import { toAppUser } from '../../common/mappers/user.mapper';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -19,10 +19,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: (() => {
-        const secret = config.get<string>("JWT_SECRET");
+        const secret = config.get<string>('JWT_SECRET');
         if (!secret) {
           throw new Error(
-            "JWT_SECRET must be defined. Set it in your .env file.",
+            'JWT_SECRET must be defined. Set it in your .env file.',
           );
         }
         return secret;
@@ -35,15 +35,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // 1. Only explicitly-typed ACCESS tokens are accepted. Tokens signed with
     //    the same secret but without a type claim (REFRESH/MFA_PENDING fallbacks
     //    or forged tokens) must not be usable as access tokens.
-    if (payload.type !== "ACCESS") {
-      throw new UnauthorizedException("Invalid token type");
+    if (payload.type !== 'ACCESS') {
+      throw new UnauthorizedException('Invalid token type');
     }
 
     // Every access token is issued with a jti. Requiring it keeps the
     // blacklist check below effective: without a jti a token could never be
     // revoked.
     if (!payload.jti) {
-      throw new UnauthorizedException("Invalid token");
+      throw new UnauthorizedException('Invalid token');
     }
 
     // 2. Kiá»ƒm tra blacklist theo JTI
@@ -51,7 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (token) {
       const isBlacklisted = await this.tokenService.isTokenBlacklisted(token);
       if (isBlacklisted)
-        throw new UnauthorizedException("Token has been revoked");
+        throw new UnauthorizedException('Token has been revoked');
     }
 
     // 3. Load user tá»« DB vá»›i roles + permissions (cache 60s in Redis)
@@ -124,13 +124,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
     }
 
-    if (!userRecord) throw new UnauthorizedException("User not found");
+    if (!userRecord) throw new UnauthorizedException('User not found');
     if (!userRecord.is_active)
-      throw new UnauthorizedException("Account is disabled");
+      throw new UnauthorizedException('Account is disabled');
     if (userRecord.is_deleted)
-      throw new UnauthorizedException("User not found");
-    if (userRecord.is_locked && userRecord.lock_time && new Date(userRecord.lock_time) > new Date())
-      throw new UnauthorizedException("Account is locked");
+      throw new UnauthorizedException('User not found');
+    if (
+      userRecord.is_locked &&
+      userRecord.lock_time &&
+      new Date(userRecord.lock_time) > new Date()
+    )
+      throw new UnauthorizedException('Account is locked');
 
     const appUser = toAppUser(userRecord);
     const roles =
@@ -151,7 +155,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         select: { device_id: true },
       });
       if (!deviceSession)
-        throw new UnauthorizedException("Device session is no longer active");
+        throw new UnauthorizedException('Device session is no longer active');
       deviceId = deviceSession.device_id;
     }
 

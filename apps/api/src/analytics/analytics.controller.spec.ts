@@ -31,14 +31,20 @@ const routes = Object.getOwnPropertyNames(AnalyticsController.prototype)
   })
   .filter((route) => route !== null);
 
-const makeContext = (handler: (...args: any[]) => any, roles: string[]): ExecutionContext => {
+const makeContext = (
+  handler: (...args: any[]) => any,
+  roles: string[],
+): ExecutionContext => {
   const request = { user: { id: 'learner-1', roles } };
   return {
     getHandler: () => handler,
     getClass: () => AnalyticsController,
     getRequest: () => request,
     getResponse: () => ({}),
-    switchToHttp: () => ({ getRequest: () => request, getResponse: () => ({}) }),
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => ({}),
+    }),
   } as any;
 };
 
@@ -73,13 +79,19 @@ describe('AnalyticsController authorization policy (SEC-01)', () => {
 
       expect(guards).toContain(JwtAuthGuard);
       expect(guards).not.toContain(RolesGuard);
-      expect(reflector.getAllAndOverride(ROLES_KEY, [handler, AnalyticsController])).toBeUndefined();
-      expect(reflector.getAllAndOverride(PUBLIC_KEY, [handler, AnalyticsController])).toBeFalsy();
+      expect(
+        reflector.getAllAndOverride(ROLES_KEY, [handler, AnalyticsController]),
+      ).toBeUndefined();
+      expect(
+        reflector.getAllAndOverride(PUBLIC_KEY, [handler, AnalyticsController]),
+      ).toBeFalsy();
 
       // A wrong-role test against an admin-only policy is intentionally absent:
       // USER and MODERATOR are valid callers for these routes. The only
       // unauthenticated case is handled by JwtAuthGuard at the HTTP boundary.
-      expect(makeContext(handler, ['USER']).switchToHttp().getRequest().user.roles).toEqual(['USER']);
+      expect(
+        makeContext(handler, ['USER']).switchToHttp().getRequest().user.roles,
+      ).toEqual(['USER']);
     },
   );
 });

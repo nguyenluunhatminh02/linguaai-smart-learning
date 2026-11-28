@@ -7,7 +7,7 @@
     "build": "nest build",
     "start": "node dist/main",
     "start:prod": "prisma migrate deploy && node dist/main",
-    "lint": "eslint \"{src,test}/**/*.ts\"",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"{src,test}/**/*.ts\"",
     "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.spec.json",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -16,6 +16,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:prod": "prisma migrate deploy",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "db:seed:bench": "ts-node --transpile-only prisma/seed-bench.ts",
     "db:studio": "prisma studio",
     "clean": "rimraf dist"
   },

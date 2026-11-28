@@ -157,6 +157,7 @@ model users {
   user_card_progress             user_card_progress[]
   srs_review_events              srs_review_events[]
   learning_completions           learning_completions[]
+  learning_attempts             learning_attempts[]
   review_sessions                review_sessions[]
   user_streaks                   user_streaks[]
   user_badges                    user_badges[]
@@ -165,6 +166,11 @@ model users {
   token_transactions             token_transactions[]
   ai_operations                  ai_operations[]
   daily_credit_grants            daily_credit_grants[]
+  daily_plans                   daily_plans[]
+  // PRODUCT-02/03: mastery evidence (additive; migration 20261129002000_knowledge_map).
+  learner_mastery               learner_mastery[]
+  mastery_events                mastery_events[]
+  learner_errors                learner_errors[]
 
   @@index([email_verification_token], map: "idx_users_email_verification_token")
   @@index([password_reset_token], map: "idx_users_password_reset_token")
@@ -374,6 +380,10 @@ model cards {
   @@unique([deck_id, learning_phrase_key])
 }
 
+// DB-02/DB-04: one summary row per (user, activity_type, activity_id).
+// The unique key intentionally stays unchanged: existing activity IDs are not
+// proven to be language-scoped, and adding `language` would require a separate
+// duplicate-safe migration. Per-language attempt history lives in learning_attempts.
 model learning_completions {
   id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id       String   @db.Uuid
@@ -384,10 +394,44 @@ model learning_completions {
   total         Int?
   duration_seconds Int  @default(0)
   completed_at  DateTime @default(now()) @db.Timestamp(6)
+  // Additive summary fields. Nulls mark legacy rows with no recorded history;
+  // no attempt rows are fabricated when these are backfilled.
+  first_completed_at     DateTime? @db.Timestamp(6)
+  last_completed_at      DateTime? @db.Timestamp(6)
+  attempt_count          Int       @default(0)
+  best_score             Int?
+  latest_score           Int?
+  total_duration_seconds Int       @default(0)
+  is_legacy              Boolean   @default(false)
   users         users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, activity_type, activity_id])
   @@index([user_id, language, completed_at])
+}
+
+// DB-02/DB-04: append-only learning attempt history. client_attempt_id is
+// client-generated so retries of the same intent reuse one row instead of
+// inflating attempt_count or re-crediting XP.
+model learning_attempts {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id           String    @db.Uuid
+  language          String?   @db.VarChar(30)
+  activity_type     String?   @db.VarChar(20)
+  activity_id       String?   @db.VarChar(160)
+  content_version   String?   @db.VarChar(50)
+  client_attempt_id String    @db.Uuid
+  raw_score         Float?
+  score_scale       String?   @db.VarChar(20)
+  normalized_score  Float?
+  total             Int?
+  duration_seconds  Int       @default(0)
+  started_at        DateTime? @db.Timestamp(6)
+  completed_at      DateTime  @default(now()) @db.Timestamp(6)
+  feedback_ref      String?   @db.VarChar(160)
+  users             users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, client_attempt_id], map: "learning_attempts_user_id_client_attempt_id_key")
+  @@index([user_id, language, completed_at], map: "learning_attempts_user_id_language_completed_at_idx")
 }
 
 model srs_review_events {
@@ -696,4 +740,155 @@ model daily_credit_grants {
 enum daily_credit_grant_type {
   DAILY_TOPUP
   DAILY_CHECKIN
+}
+
+// PRODUCT-02: curated knowledge map and PRODUCT-03 mastery evidence.
+// All tables are additive; canonical shapes follow the 20261129* raw SQL.
+model knowledge_items {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  language    String   @db.VarChar(30)
+  skill       String   @db.VarChar(50)
+  code        String   @db.VarChar(160)
+  level       String?  @db.VarChar(30)
+  title       String   @db.VarChar(255)
+  description String?
+  version     Int      @default(1)
+  created_at  DateTime @default(now()) @db.Timestamp(6)
+  updated_at  DateTime @default(now()) @db.Timestamp(6)
+
+  prerequisites    knowledge_prerequisites[]  @relation("KnowledgePrerequisites")
+  prerequisite_for knowledge_prerequisites[]  @relation("KnowledgePrerequisiteFor")
+  activity_links   activity_knowledge_items[]
+  learner_mastery  learner_mastery[]
+  mastery_events   mastery_events[]
+  learner_errors   learner_errors[]
+
+  @@unique([language, code, version], map: "knowledge_items_language_code_version_key")
+  @@index([language, skill, level], map: "knowledge_items_language_skill_level_idx")
+  @@index([code, version], map: "knowledge_items_code_version_idx")
+  @@index([language, skill], map: "knowledge_items_language_skill_idx")
+}
+
+model knowledge_prerequisites {
+  knowledge_id    String          @db.Uuid
+  prerequisite_id String          @db.Uuid
+  knowledge       knowledge_items @relation("KnowledgePrerequisites", fields: [knowledge_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  prerequisite    knowledge_items @relation("KnowledgePrerequisiteFor", fields: [prerequisite_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([knowledge_id, prerequisite_id], map: "knowledge_prerequisites_pkey")
+  @@index([prerequisite_id], map: "knowledge_prerequisites_prerequisite_id_idx")
+}
+
+model activity_knowledge_items {
+  activity_type   String          @db.VarChar(50)
+  activity_id     String          @db.VarChar(160)
+  content_version String          @default("1") @db.VarChar(50)
+  knowledge_id    String          @db.Uuid
+  weight          Float           @default(1)
+  created_at      DateTime        @default(now()) @db.Timestamp(6)
+  knowledge       knowledge_items @relation(fields: [knowledge_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([activity_type, activity_id, content_version, knowledge_id], map: "activity_knowledge_items_pkey")
+  @@index([knowledge_id], map: "activity_knowledge_items_knowledge_id_idx")
+}
+
+// PRODUCT-04: idempotent daily learning plans. Shape and column names follow
+// the 20261129004000_daily_plans raw SQL. Status columns are plain VARCHAR,
+// matching the migration rather than native PostgreSQL enums.
+model daily_plans {
+  id           String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id      String             @db.Uuid
+  day          DateTime           @db.Date
+  version      Int                @default(1)
+  timezone     String             @default("UTC") @db.VarChar(50)
+  status       String             @default("ACTIVE") @db.VarChar(20)
+  generated_at DateTime           @default(now()) @db.Timestamp(6)
+  updated_at   DateTime           @default(now()) @db.Timestamp(6)
+  users        users              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items        daily_plan_items[]
+
+  @@unique([user_id, day, version], map: "daily_plans_user_id_day_version_key")
+  @@index([user_id, day], map: "daily_plans_user_id_day_idx")
+}
+
+model daily_plan_items {
+  id                String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  plan_id           String      @db.Uuid
+  order_index       Int
+  activity_type     String      @db.VarChar(50)
+  activity_id       String      @db.VarChar(160)
+  estimated_minutes Int         @default(10)
+  reason            String?
+  status            String      @default("PENDING") @db.VarChar(20)
+  knowledge_tags    Json        @db.Json @default("[]")
+  created_at        DateTime    @default(now()) @db.Timestamp(6)
+  updated_at        DateTime    @default(now()) @db.Timestamp(6)
+  daily_plan        daily_plans @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([plan_id, order_index], map: "daily_plan_items_plan_id_order_index_key")
+  @@index([plan_id, status], map: "daily_plan_items_plan_id_status_idx")
+}
+
+// PRODUCT-02/03: per-learner mastery derived from append-only evidence.
+// Additive models mirroring the raw-SQL tables created by
+// 20261129002000_knowledge_map. No existing table or column is changed.
+model learner_mastery {
+  user_id           String          @db.Uuid
+  knowledge_id      String          @db.Uuid
+  success_weight    Float           @default(0)
+  failure_weight    Float           @default(0)
+  evidence_count    Int             @default(0)
+  last_practiced_at DateTime?       @db.Timestamp(6)
+  updated_at        DateTime        @default(now()) @db.Timestamp(6)
+  users             users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge         knowledge_items @relation(fields: [knowledge_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, knowledge_id], map: "learner_mastery_pkey")
+  @@index([user_id, last_practiced_at], map: "learner_mastery_user_id_last_practiced_at_idx")
+  @@index([knowledge_id], map: "learner_mastery_knowledge_id_idx")
+  @@index([user_id, evidence_count, last_practiced_at], map: "learner_mastery_user_id_evidence_count_last_practiced_at_idx")
+}
+
+// Append-only evidence log. The unique key on (attempt_id, knowledge_id,
+// evidence_type) is the durable idempotency guard: a retried attempt cannot
+// apply the same evidence twice. attempt_id is deliberately VARCHAR so it can
+// hold external/legacy identifiers without a FK to learning_attempts.
+model mastery_events {
+  id            String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id       String          @db.Uuid
+  attempt_id    String          @db.VarChar(160)
+  knowledge_id  String          @db.Uuid
+  evidence_type String          @db.VarChar(50)
+  score         Float
+  weight        Float           @default(1)
+  created_at    DateTime        @default(now()) @db.Timestamp(6)
+  users         users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge     knowledge_items @relation(fields: [knowledge_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([attempt_id, knowledge_id, evidence_type], map: "mastery_events_attempt_id_knowledge_id_evidence_type_key")
+  @@index([user_id, created_at, id], map: "mastery_events_user_id_created_at_id_idx")
+  @@index([user_id, created_at], map: "mastery_events_user_id_created_at_idx")
+  @@index([attempt_id], map: "mastery_events_attempt_id_idx")
+  @@index([knowledge_id, created_at], map: "mastery_events_knowledge_id_created_at_idx")
+}
+
+// Error log for the error-to-flashcard pipeline. Excerpt is intentionally
+// minimal (no raw audio/full text); status and confidence are app-owned.
+model learner_errors {
+  id           String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id      String           @db.Uuid
+  attempt_id   String?          @db.VarChar(160)
+  knowledge_id String?          @db.Uuid
+  error_type   String           @db.VarChar(80)
+  excerpt      String?
+  correction   String?
+  confidence   Float?
+  status       String           @default("OPEN") @db.VarChar(30)
+  created_at   DateTime         @default(now()) @db.Timestamp(6)
+  users        users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge    knowledge_items? @relation(fields: [knowledge_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([user_id, created_at, id], map: "learner_errors_user_id_created_at_id_idx")
+  @@index([user_id, knowledge_id], map: "learner_errors_user_id_knowledge_id_idx")
+  @@index([attempt_id], map: "learner_errors_attempt_id_idx")
 }

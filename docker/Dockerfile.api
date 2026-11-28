@@ -41,11 +41,23 @@ COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=builder /app/packages/shared/src ./packages/shared/src
+# The app writes rotated logs (Winston DailyRotateFile) and uploaded assets
+# relative to its working directory. Create them as root so the non-root
+# runtime user can write immediately, even when no volume is mounted. The
+# migrate job never writes here, so this is safe for that one-shot service.
+RUN install -d -o 1001 -g 1001 -m 0755 \
+    /app/apps/api/logs /app/apps/api/uploads
 USER appuser
 WORKDIR /app/apps/api
+# Docker stops PID 1 with SIGTERM, then SIGKILL after the orchestrator's grace
+# period (Compose: stop_grace_period; see docker/README.md). Node is PID 1 via
+# the exec-form CMD below, so it receives the signal directly and the app's
+# shutdown handler can drain HTTP/SSE and close Prisma/Redis before exit.
+STOPSIGNAL SIGTERM
 EXPOSE 3001
 # Liveness only. Readiness (/api/health/ready) must be checked by the
-# orchestrator with 200/503 semantics; see docker/README.md.
+# orchestrator with 200/503 semantics; see docker/README.md. Keep these probe
+# parameters in sync with the `api` healthcheck in docker-compose.yml.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
   CMD wget -qO- http://localhost:3001/api/health >/dev/null || exit 1
 # Schema migrations are applied by the one-shot `migrate` compose service,

@@ -1,29 +1,75 @@
-node_modules
-.next
-dist
-.turbo
-.git
-*.md
-.env
-.env.*
-!.env.example
-__pycache__
-*.pyc
-.venv
-apps/ai-service/.venv
-coverage
-*.log
-public/uploads
-plans/
-docs/
+# Docker build context (context: .. in docker/docker-compose.yml).
+# Rules apply at every depth; the last matching rule wins.
+
+# Dependency trees and build/cache output
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/.turbo/
+**/.pytest_cache/
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/coverage/
+**/*.tsbuildinfo
+
+# VCS / local tooling
+.git/
+.claude/
 .vscode/
-# screenshots & test artifacts
-*.png
-test-*.js
-test-*.png
 .playwright-mcp/
+
+# Never ship secrets or private keys. .env.example files are documentation.
+**/.env
+**/.env.*
+!**/.env.example
+!**/*.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
+# Logs and report output
+**/*.log
+apps/ai-service/logs/
+apps/web/playwright-report/
+apps/web/test-results/
+
+# Uploaded runtime data and generated sources (recreated at build/runtime)
+apps/api/uploads/
+**/public/uploads/
+apps/api/src/generated/
+packages/shared/src/generated/
+
+# Local-only trees and scratch artifacts
+docs/
 baocao/
-# ad-hoc admin scripts (not part of the app build)
+plans/
+test-screenshots/
+tests-manual/
+tts/
+apps/ai-service/test.html
+apps/ai-service/evals/
+apps/ai-service/docs/
+apps/api/test/
+apps/web/e2e/
+apps/web/cms-data/
+tests/
+_audit_*.txt
+_test.txt
+_run_*.bat
+_start_*.bat
+tmp_*.bat
+**/nul
+**/.DS_Store
+
+# Narrowed from blanket *.png / test-*.js so real public assets survive
+apps/web/public/test-lesson.png
+apps/api/test-*.js
+apps/web/test-*.js
+
+# Ad-hoc admin/debug scripts (not part of any build)
 apps/api/clear-devices.js
 apps/api/clear-sessions.mjs
 apps/api/create-admin.js
@@ -31,9 +77,24 @@ apps/api/fix.js
 apps/api/reset-password.js
 apps/api/seed-roles.js
 apps/api/wstest.js
-apps/api/server.log
-apps/api/server.err.log
-apps/api/api-dev.log
-apps/api/nul
-apps/api/tsconfig.tsbuildinfo
-apps/web/tsconfig.tsbuildinfo
+apps/api/check_submissions.js
+apps/api/print_cards_temp.js
+apps/api/test_mfa.js
+
+# Root-level and ad-hoc scratch files from earlier development
+*.md
+*.ai
+*.bat
+*.sh
+a/
+and/
+Integrated/
+Language/
+Large/
+Learning/
+Models/
+Platform/
+Repetition/
+Smart/
+Spaced/
+with/

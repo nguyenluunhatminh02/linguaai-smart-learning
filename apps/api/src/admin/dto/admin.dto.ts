@@ -11,14 +11,14 @@ import {
   IsInt,
   Min,
   Max,
-} from "class-validator";
+} from 'class-validator';
 
 export enum ContentType {
-  READING = "reading",
-  GRAMMAR = "grammar",
-  LISTENING = "listening",
-  VOCABULARY = "vocabulary",
-  TRANSLATION = "translation",
+  READING = 'reading',
+  GRAMMAR = 'grammar',
+  LISTENING = 'listening',
+  VOCABULARY = 'vocabulary',
+  TRANSLATION = 'translation',
 }
 
 export class CreateContentDto {
@@ -130,9 +130,9 @@ export class UpdateContentDto {
 }
 
 export class UpdateUserRoleDto {
-  @IsIn(["USER", "ADMIN", "user", "admin"])
+  @IsIn(['USER', 'ADMIN', 'user', 'admin'])
   @IsNotEmpty()
-  role: "USER" | "ADMIN" | "user" | "admin";
+  role: 'USER' | 'ADMIN' | 'user' | 'admin';
 }
 
 export class GrantTokensDto {
@@ -149,4 +149,3 @@ export class GrantTokensDto {
   @IsOptional()
   reason?: string;
 }
-

@@ -58,6 +58,28 @@ interface Word {
 // Single source of truth for status, used both when loading cards and after a review.
 // FSRS sets repetitions=1 for a first "Easy" review and only grows the interval
 // over subsequent successful reviews, so repetitions alone cannot mean "known".
+interface DeckSummary {
+  id: string;
+  title?: string;
+  name?: string;
+  language?: string;
+}
+
+interface CardResponse {
+  id: string;
+  frontText?: string;
+  front_text?: string;
+  front?: string;
+  backText?: string;
+  back_text?: string;
+  back?: string;
+  exampleSentence?: string;
+  example_sentence?: string;
+  createdAt?: string;
+  created_at?: string;
+  progress?: { repetitionCount?: number; intervalDays?: number } | null;
+}
+
 function statusFromProgress(progress?: { repetitionCount?: number; intervalDays?: number } | null): Word['status'] {
   const repetitions = progress?.repetitionCount ?? 0;
   const intervalDays = progress?.intervalDays ?? 0;
@@ -88,7 +110,7 @@ export default function JapaneseVocabularyPage() {
       const decks = Array.isArray(decksRes.data) ? decksRes.data : [];
       
       const vocabDeck = decks.find(
-        (d: any) =>
+        (d: DeckSummary) =>
           d.language === 'japanese' ||
           d.title === 'Từ vựng tiếng Nhật của tôi' ||
           d.title === 'Từ vựng tiếng Nhật' ||
@@ -100,7 +122,7 @@ export default function JapaneseVocabularyPage() {
         const cardsRes = await apiClient.get(`/decks/${vocabDeck.id}/cards`);
         const cardsData = Array.isArray(cardsRes.data) ? cardsRes.data : [];
         
-        const mappedWords: Word[] = cardsData.map((c: any) => ({
+        const mappedWords: Word[] = cardsData.map((c: CardResponse) => ({
           id: c.id,
           word: c.frontText || c.frontText || c.front_text || c.front || '',
           meaning: c.backText || c.backText || c.back_text || c.back || '',
@@ -243,7 +265,7 @@ export default function JapaneseVocabularyPage() {
       try {
         const cardsRes = await apiClient.get(`/decks/${deckId}/cards`);
         const cardsData = Array.isArray(cardsRes.data) ? cardsRes.data : [];
-        const updated = cardsData.find((c: any) => c.id === id);
+        const updated = cardsData.find((c: CardResponse) => c.id === id);
         if (updated) nextStatus = statusFromProgress(updated.progress);
         setWords(prev => prev.map(w => w.id === id ? { ...w, status: nextStatus } : w));
       } catch (refreshErr) {

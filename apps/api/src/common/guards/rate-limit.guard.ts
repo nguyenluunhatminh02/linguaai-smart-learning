@@ -27,7 +27,8 @@ function parseContentLength(value: unknown): number | undefined {
   if (typeof value === 'number') {
     return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
   }
-  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) return undefined;
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim()))
+    return undefined;
   const parsed = Number(value.trim());
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
@@ -85,10 +86,10 @@ export class RateLimitGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const config = this.reflector.getAllAndOverride<GuardConfig | undefined>(RATE_LIMIT_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const config = this.reflector.getAllAndOverride<GuardConfig | undefined>(
+      RATE_LIMIT_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     // Routes without a @RateLimit() decorator are outside this guard's scope.
     if (!config) return true;
@@ -98,9 +99,17 @@ export class RateLimitGuard implements CanActivate {
 
     // Reject an oversized body before hashing an email, touching Redis, or
     // consuming a rate-limit token. Never log the header value itself.
-    const declaredLength = parseContentLength(request?.headers?.['content-length']);
-    if (declaredLength !== undefined && declaredLength > MAX_RATE_LIMIT_BODY_BYTES) {
-      throw new HttpException('Request body is too large', HttpStatus.PAYLOAD_TOO_LARGE);
+    const declaredLength = parseContentLength(
+      request?.headers?.['content-length'],
+    );
+    if (
+      declaredLength !== undefined &&
+      declaredLength > MAX_RATE_LIMIT_BODY_BYTES
+    ) {
+      throw new HttpException(
+        'Request body is too large',
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
     }
 
     const key = this.buildRateLimitKey(request, config);
@@ -114,15 +123,27 @@ export class RateLimitGuard implements CanActivate {
     }
   }
 
-  private applyHeaders(response: any, config: GuardConfig, result: AllowedResult): void {
+  private applyHeaders(
+    response: any,
+    config: GuardConfig,
+    result: AllowedResult,
+  ): void {
     response.setHeader('X-RateLimit-Limit', config.limit);
     response.setHeader('X-RateLimit-Remaining', result.remaining);
     // HTTP convention for X-RateLimit-Reset is epoch seconds, not ISO text.
     response.setHeader('X-RateLimit-Reset', result.resetAt);
   }
 
-  private handleFailure(error: unknown, response: any, config: GuardConfig, key: string): never {
-    if (error instanceof HttpException && error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) {
+  private handleFailure(
+    error: unknown,
+    response: any,
+    config: GuardConfig,
+    key: string,
+  ): never {
+    if (
+      error instanceof HttpException &&
+      error.getStatus() === HttpStatus.TOO_MANY_REQUESTS
+    ) {
       const payload = error.getResponse() as DeniedPayload;
       this.applyHeaders(response, config, {
         remaining: 0,
@@ -131,15 +152,22 @@ export class RateLimitGuard implements CanActivate {
         retryAfterSeconds: payload.retryAfterSeconds ?? 1,
       } as AllowedResult);
       response.setHeader('Retry-After', String(payload.retryAfterSeconds ?? 1));
-      this.logger.warn(`Rate limit exceeded for key: ${this.safeIdentity(key)}`);
+      this.logger.warn(
+        `Rate limit exceeded for key: ${this.safeIdentity(key)}`,
+      );
       throw error;
     }
 
-    if (error instanceof HttpException && error.getStatus() === HttpStatus.SERVICE_UNAVAILABLE) {
+    if (
+      error instanceof HttpException &&
+      error.getStatus() === HttpStatus.SERVICE_UNAVAILABLE
+    ) {
       // The service already classified this as a closed-policy outage.
       const payload = error.getResponse() as DeniedPayload;
       this.applyOutageHeaders(response, config, payload);
-      this.logger.error(`Rate limiter unavailable for key: ${this.safeIdentity(key)}`);
+      this.logger.error(
+        `Rate limiter unavailable for key: ${this.safeIdentity(key)}`,
+      );
       throw error;
     }
 
@@ -148,7 +176,9 @@ export class RateLimitGuard implements CanActivate {
       `Rate limiter error for key ${this.safeIdentity(key)}: ${error instanceof Error ? error.message : String(error)}`,
     );
     const nowFields = {
-      resetTime: new Date(Date.now() + Math.max(1, config.window || 1) * 1000).toISOString(),
+      resetTime: new Date(
+        Date.now() + Math.max(1, config.window || 1) * 1000,
+      ).toISOString(),
       limit: config.limit,
       resetAt: Math.floor(Date.now() / 1000) + Math.max(1, config.window || 1),
       retryAfterSeconds: Math.max(1, config.window || 1),
@@ -163,7 +193,11 @@ export class RateLimitGuard implements CanActivate {
     );
   }
 
-  private applyOutageHeaders(response: any, config: GuardConfig, payload: DeniedPayload): void {
+  private applyOutageHeaders(
+    response: any,
+    config: GuardConfig,
+    payload: DeniedPayload,
+  ): void {
     this.applyHeaders(response, config, {
       remaining: 0,
       limit: config.limit,
@@ -176,7 +210,9 @@ export class RateLimitGuard implements CanActivate {
   private toEpochSeconds(resetTime?: string): number {
     if (!resetTime) return Math.floor(Date.now() / 1000) + 1;
     const parsed = new Date(resetTime).getTime();
-    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : Math.floor(Date.now() / 1000) + 1;
+    return Number.isFinite(parsed)
+      ? Math.floor(parsed / 1000)
+      : Math.floor(Date.now() / 1000) + 1;
   }
 
   /** Hash identity before logging: emails and tokens never reach log lines. */
@@ -197,12 +233,18 @@ export class RateLimitGuard implements CanActivate {
 
     if (request.body?.email) {
       // Hash the email so PII doesn't appear in Redis keys or log lines
-      const emailHash = createHash('sha256').update(request.body.email.toLowerCase()).digest('hex').substring(0, 16);
+      const emailHash = createHash('sha256')
+        .update(request.body.email.toLowerCase())
+        .digest('hex')
+        .substring(0, 16);
       return `${keyPrefix}:email:${emailHash}`;
     }
 
     if (request.query?.email) {
-      const emailHash = createHash('sha256').update((request.query.email as string).toLowerCase()).digest('hex').substring(0, 16);
+      const emailHash = createHash('sha256')
+        .update((request.query.email as string).toLowerCase())
+        .digest('hex')
+        .substring(0, 16);
       return `${keyPrefix}:email:${emailHash}`;
     }
 
@@ -220,7 +262,10 @@ export class RateLimitGuard implements CanActivate {
   private getClientIp(request: any): string {
     const socketIp = request.socket?.remoteAddress || request.ip || 'unknown';
 
-    if (this.trustedProxies.length === 0 || !this.trustedProxies.includes(socketIp)) {
+    if (
+      this.trustedProxies.length === 0 ||
+      !this.trustedProxies.includes(socketIp)
+    ) {
       return socketIp;
     }
 
@@ -230,7 +275,9 @@ export class RateLimitGuard implements CanActivate {
     // Select a fixed hop from the right so leftmost (client-controlled)
     // entries cannot be used to switch buckets. `trust proxy` hop count is
     // expressed by the number of configured trusted proxies.
-    const hops = (Array.isArray(forwarded) ? forwarded : String(forwarded).split(','))
+    const hops = (
+      Array.isArray(forwarded) ? forwarded : String(forwarded).split(',')
+    )
       .flatMap((value) => String(value).split(','))
       .map((value) => value.trim())
       .filter(Boolean);

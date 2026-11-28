@@ -24,7 +24,9 @@ import { SpeakingGateway } from './speaking.gateway';
 const USER_A = '00000000-0000-4000-8000-000000000001';
 const USER_B = '00000000-0000-4000-8000-000000000002';
 // Minimal EBML header required by the shared audio signature validator.
-const VALID_WEBM_BASE64 = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]).toString('base64');
+const VALID_WEBM_BASE64 = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]).toString(
+  'base64',
+);
 
 const makeClient = () => {
   const client: any = {
@@ -65,8 +67,12 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
   beforeEach(() => {
     (Groq as unknown as jest.Mock).mockClear();
     prisma = {
-      users: { findFirst: jest.fn().mockResolvedValue({ id: USER_A, is_active: true }) },
-      speaking_submissions: { create: jest.fn().mockResolvedValue({ id: 'row' }) },
+      users: {
+        findFirst: jest.fn().mockResolvedValue({ id: USER_A, is_active: true }),
+      },
+      speaking_submissions: {
+        create: jest.fn().mockResolvedValue({ id: 'row' }),
+      },
     };
     tokens = { consumeTokens: jest.fn().mockResolvedValue(undefined) };
     config = {
@@ -76,12 +82,28 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
         return fallback;
       }),
     };
-    gateway = new SpeakingGateway(config, { verify: jest.fn() } as any, prisma, tokens);
+    gateway = new SpeakingGateway(
+      config,
+      { verify: jest.fn() } as any,
+      prisma,
+      tokens,
+    );
     groq = (Groq as unknown as jest.Mock).mock.results[0].value;
-    groq.audio.transcriptions.create = jest.fn().mockResolvedValue('hello world');
+    groq.audio.transcriptions.create = jest
+      .fn()
+      .mockResolvedValue('hello world');
     groq.chat.completions.create = jest.fn().mockResolvedValue(
       (async function* () {
-        yield { choices: [{ delta: { content: 'Feedback [SCORES]{"overall":80,"grammar":70,"vocabulary":90}[/SCORES]' } }] };
+        yield {
+          choices: [
+            {
+              delta: {
+                content:
+                  'Feedback [SCORES]{"overall":80,"grammar":70,"vocabulary":90}[/SCORES]',
+              },
+            },
+          ],
+        };
       })(),
     );
   });
@@ -112,17 +134,30 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
   it('never writes a submission for another user when user A sends audio', async () => {
     const client = makeClient();
     await connect(gateway, client, 'token', USER_A);
-    gateway.onStartSession(client, { topic: 'travel', level: 'B1', language: 'english' });
+    gateway.onStartSession(client, {
+      topic: 'travel',
+      level: 'B1',
+      language: 'english',
+    });
 
-    await gateway.onAudioData(client, { audio: VALID_WEBM_BASE64, mimeType: 'audio/webm' });
+    await gateway.onAudioData(client, {
+      audio: VALID_WEBM_BASE64,
+      mimeType: 'audio/webm',
+    });
 
     expect(tokens.consumeTokens).toHaveBeenCalledWith(
-      USER_A, 'speaking_feedback', undefined, expect.stringContaining('speaking-ws-'),
+      USER_A,
+      'speaking_feedback',
+      undefined,
+      expect.stringContaining('speaking-ws-'),
     );
     expect(prisma.speaking_submissions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ user_id: USER_A }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ user_id: USER_A }),
+      }),
     );
-    const writtenUser = prisma.speaking_submissions.create.mock.calls[0][0].data.user_id;
+    const writtenUser =
+      prisma.speaking_submissions.create.mock.calls[0][0].data.user_id;
     expect(writtenUser).not.toBe(USER_B);
   });
 
@@ -130,7 +165,11 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
     const client = makeClient();
     await connect(gateway, client, 'token', USER_B);
     prisma.users.findFirst.mockResolvedValue({ id: USER_B, is_active: true });
-    gateway.onStartSession(client, { topic: 'travel', level: 'B1', language: 'english' });
+    gateway.onStartSession(client, {
+      topic: 'travel',
+      level: 'B1',
+      language: 'english',
+    });
 
     await gateway.onAudioData(client, {
       audio: VALID_WEBM_BASE64,
@@ -144,14 +183,21 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
   it('aborts persistence when the token is revoked mid-request', async () => {
     const client = makeClient();
     await connect(gateway, client, 'token', USER_A);
-    gateway.onStartSession(client, { topic: 'travel', level: 'B1', language: 'english' });
+    gateway.onStartSession(client, {
+      topic: 'travel',
+      level: 'B1',
+      language: 'english',
+    });
 
     // onAudioData re-verifies the token after marking the socket busy.
     gateway.jwt.verify = jest.fn().mockImplementation(() => {
       throw new Error('revoked');
     });
 
-    await gateway.onAudioData(client, { audio: VALID_WEBM_BASE64, mimeType: 'audio/webm' });
+    await gateway.onAudioData(client, {
+      audio: VALID_WEBM_BASE64,
+      mimeType: 'audio/webm',
+    });
 
     expect(client._rejected).toBe(true);
     expect(groq.audio.transcriptions.create).not.toHaveBeenCalled();
@@ -161,10 +207,17 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
   it('does not persist a submission after disconnect aborted the request', async () => {
     const client = makeClient();
     await connect(gateway, client, 'token', USER_A);
-    gateway.onStartSession(client, { topic: 'travel', level: 'B1', language: 'english' });
+    gateway.onStartSession(client, {
+      topic: 'travel',
+      level: 'B1',
+      language: 'english',
+    });
 
     gateway.handleDisconnect(client);
-    await gateway.onAudioData(client, { audio: VALID_WEBM_BASE64, mimeType: 'audio/webm' });
+    await gateway.onAudioData(client, {
+      audio: VALID_WEBM_BASE64,
+      mimeType: 'audio/webm',
+    });
 
     expect(client._abort.signal.aborted).toBe(true);
     expect(groq.audio.transcriptions.create).not.toHaveBeenCalled();
@@ -175,9 +228,15 @@ describe('SpeakingGateway ownership (SEC-02)', () => {
     const client = makeClient();
     await gateway.handleConnection(client, makeRequest(undefined));
 
-    gateway.onStartSession(client, { topic: 'travel', level: 'B1', language: 'english' });
+    gateway.onStartSession(client, {
+      topic: 'travel',
+      level: 'B1',
+      language: 'english',
+    });
 
     expect(client._sid).toBeUndefined();
-    expect(client.send).not.toHaveBeenCalledWith(expect.stringContaining('session_ready'));
+    expect(client.send).not.toHaveBeenCalledWith(
+      expect.stringContaining('session_ready'),
+    );
   });
 });

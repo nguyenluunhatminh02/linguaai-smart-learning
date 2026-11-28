@@ -12,7 +12,10 @@ const RESOURCE_ID_MAX = 255;
 const DEVICE_ID_MAX = 255;
 const IP_ADDRESS_MAX = 50;
 
-function truncate(value: string | null | undefined, maxLength: number): string | null {
+function truncate(
+  value: string | null | undefined,
+  maxLength: number,
+): string | null {
   if (value === null || value === undefined) return null;
   return value.length > maxLength ? value.slice(0, maxLength) : value;
 }
@@ -46,7 +49,9 @@ export class AuditLogService {
       // Auditing is best-effort by design (callers deliberately keep working
       // when Redis/DB logging is unavailable), but a dropped security event
       // must be loud enough for operators/monitoring to detect the gap.
-      this.logger.error(`Failed to record login history for user ${user.id}: ${err.message}`);
+      this.logger.error(
+        `Failed to record login history for user ${user.id}: ${err.message}`,
+      );
       throw err;
     }
   }
@@ -82,7 +87,9 @@ export class AuditLogService {
         },
       });
     } catch (err) {
-      this.logger.error(`Failed to record audit log for user ${userId ?? 'unknown'}: ${err.message}`);
+      this.logger.error(
+        `Failed to record audit log for user ${userId ?? 'unknown'}: ${err.message}`,
+      );
       throw err;
     }
   }
@@ -96,11 +103,16 @@ export class AuditLogService {
     // The controller forwards raw `+page`/`+size` query values; reject anything
     // that is not a small positive integer before it reaches Prisma.
     if (
-      !Number.isSafeInteger(page) || !Number.isSafeInteger(size) ||
-      page < 1 || size < 1 || size > 100 ||
+      !Number.isSafeInteger(page) ||
+      !Number.isSafeInteger(size) ||
+      page < 1 ||
+      size < 1 ||
+      size > 100 ||
       !Number.isSafeInteger((page - 1) * size)
     ) {
-      throw new BadRequestException('Invalid pagination: page must be >= 1 and size must be between 1 and 100');
+      throw new BadRequestException(
+        'Invalid pagination: page must be >= 1 and size must be between 1 and 100',
+      );
     }
 
     const skip = (page - 1) * size;

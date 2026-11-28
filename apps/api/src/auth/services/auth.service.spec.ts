@@ -14,71 +14,72 @@
 // RateLimiterService is only loaded transitively (via EmailVerificationService)
 // and has a missing Nest import outside this change's scope. Stub that module
 // here so this spec exercises AuthService itself without changing production code.
-jest.mock("../../common/services/rate-limiter.service", () => ({
+jest.mock('../../common/services/rate-limiter.service', () => ({
   RateLimiterService: class {},
 }));
-jest.mock("otplib", () => ({
+jest.mock('otplib', () => ({
   authenticator: {
-    generateSecret: jest.fn().mockReturnValue("MOCK_SECRET"),
-    keyuri: jest.fn().mockReturnValue("otpauth://totp/mock"),
+    generateSecret: jest.fn().mockReturnValue('MOCK_SECRET'),
+    keyuri: jest.fn().mockReturnValue('otpauth://totp/mock'),
     verify: jest.fn().mockReturnValue(true),
   },
 }));
-jest.mock("qrcode", () => ({
-  toDataURL: jest.fn().mockResolvedValue("data:image/png;base64,qr"),
+jest.mock('qrcode', () => ({
+  toDataURL: jest.fn().mockResolvedValue('data:image/png;base64,qr'),
 }));
 // Keep auth.spec independent of bcrypt's native binding (the repo's Linux build
 // cannot be loaded from other host platforms in CI containers). Login tests
 // assert orchestration, not the hash implementation itself.
-jest.mock("bcrypt", () => ({
+jest.mock('bcrypt', () => ({
   hash: jest.fn(async (value: string) => `hashed:${value}`),
-  compare: jest.fn(async (value: string, hash: string) => hash === `hashed:${value}`),
+  compare: jest.fn(
+    async (value: string, hash: string) => hash === `hashed:${value}`,
+  ),
 }));
 
-import { Test, TestingModule } from "@nestjs/testing";
+import { Test, TestingModule } from '@nestjs/testing';
 import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
-  NotFoundException,
-} from "@nestjs/common";
-import * as bcrypt from "bcrypt";
+} from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 
-import { AuthService } from "./auth.service";
-import { PrismaService } from "../../prisma/prisma.service";
-import { TokenService } from "./token.service";
-import { TokenBlacklistService } from "./token-blacklist.service";
-import { LoginAttemptService } from "./login-attempt.service";
-import { DeviceService } from "./device.service";
-import { MfaService } from "./mfa.service";
-import { EmailService } from "../../email/email.service";
-import { SessionService } from "./session.service";
-import { EmailVerificationService } from "./email-verification.service";
-import { PasswordService } from "./password.service";
-import { AuditLogService } from "../../common/services/audit-log.service";
+import { AuthService } from './auth.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { TokenService } from './token.service';
+import { TokenBlacklistService } from './token-blacklist.service';
+import { LoginAttemptService } from './login-attempt.service';
+import { DeviceService } from './device.service';
+import { MfaService } from './mfa.service';
+import { EmailService } from '../../email/email.service';
+import { SessionService } from './session.service';
+import { EmailVerificationService } from './email-verification.service';
+import { PasswordService } from './password.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import {
   BadCredentialsException,
   EmailNotVerifiedException,
   AccountLockedException,
-} from "../../common/exceptions";
+} from '../../common/exceptions';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
 
 const mockReq = (overrides: any = {}) =>
   ({
     headers: {},
-    socket: { remoteAddress: "127.0.0.1" },
+    socket: { remoteAddress: '127.0.0.1' },
     get: jest.fn(),
     ...overrides,
   }) as any;
 
 const makeDbUser = (o: any = {}) => ({
-  id: "user-123",
-  email: "john@example.com",
-  first_name: "John",
-  last_name: "Doe",
+  id: 'user-123',
+  email: 'john@example.com',
+  first_name: 'John',
+  last_name: 'Doe',
   password: null,
-  provider: "LOCAL",
+  provider: 'LOCAL',
   is_active: true,
   is_locked: false,
   is_deleted: false,
@@ -93,10 +94,10 @@ const makeDbUser = (o: any = {}) => ({
   last_login_at: null,
   last_login_ip: null,
   deleted_at: null,
-  delete_status: "ACTIVE",
+  delete_status: 'ACTIVE',
   delete_requested_at: null,
-  language: "en",
-  timezone: "UTC",
+  language: 'en',
+  timezone: 'UTC',
   notification_email_enabled: true,
   notification_push_enabled: true,
   notification_in_app_enabled: true,
@@ -111,19 +112,19 @@ const makeDbUser = (o: any = {}) => ({
   phone: null,
   provider_id: null,
   fcm_token: null,
-  created_at: new Date("2024-01-01"),
-  updated_at: new Date("2024-01-01"),
-  user_roles: [{ roles: { name: "ROLE_CUSTOMER" } }],
+  created_at: new Date('2024-01-01'),
+  updated_at: new Date('2024-01-01'),
+  user_roles: [{ roles: { name: 'ROLE_CUSTOMER' } }],
   ...o,
 });
 
 const makeAppUser = (o: any = {}) => ({
-  id: "user-123",
-  email: "john@example.com",
-  firstName: "John",
-  lastName: "Doe",
+  id: 'user-123',
+  email: 'john@example.com',
+  firstName: 'John',
+  lastName: 'Doe',
   password: null,
-  provider: "LOCAL",
+  provider: 'LOCAL',
   isActive: true,
   isLocked: false,
   isDeleted: false,
@@ -132,16 +133,16 @@ const makeAppUser = (o: any = {}) => ({
   twoFactorSecret: null,
   failedLoginAttempts: 0,
   lockTime: null,
-  deleteStatus: "ACTIVE",
-  roles: ["ROLE_CUSTOMER"],
-  createdAt: new Date("2024-01-01"),
-  updatedAt: new Date("2024-01-01"),
+  deleteStatus: 'ACTIVE',
+  roles: ['ROLE_CUSTOMER'],
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
   ...o,
 });
 
 // ─── Test Suite ────────────────────────────────────────────────────────────────
 
-describe("AuthService", () => {
+describe('AuthService', () => {
   let service: AuthService;
 
   const mockPrisma = {
@@ -162,10 +163,10 @@ describe("AuthService", () => {
   };
 
   const mockTokenService = {
-    generateAccessToken: jest.fn().mockReturnValue("mock.access.token"),
+    generateAccessToken: jest.fn().mockReturnValue('mock.access.token'),
     generateRefreshToken: jest.fn().mockReturnValue({
-      token: "mock.refresh.token",
-      jti: "jti-1",
+      token: 'mock.refresh.token',
+      jti: 'jti-1',
       ttlSec: 3600,
     }),
     storeRefreshToken: jest.fn().mockResolvedValue(undefined),
@@ -173,8 +174,8 @@ describe("AuthService", () => {
     validateRefreshToken: jest.fn(),
     revokeDeviceSession: jest.fn().mockResolvedValue(undefined),
     revokeAllSessions: jest.fn().mockResolvedValue(undefined),
-    generateMfaToken: jest.fn().mockReturnValue("mock.mfa.token"),
-    decodeMfaToken: jest.fn().mockReturnValue({ userId: "user-123" }),
+    generateMfaToken: jest.fn().mockReturnValue('mock.mfa.token'),
+    decodeMfaToken: jest.fn().mockReturnValue({ userId: 'user-123' }),
     getAccessTtlMs: jest.fn().mockReturnValue(900_000),
   };
 
@@ -191,7 +192,7 @@ describe("AuthService", () => {
 
   const mockDevice = {
     isDeviceTrusted: jest.fn().mockResolvedValue(false),
-    registerDevice: jest.fn().mockResolvedValue({ device_id: "dev-1" }),
+    registerDevice: jest.fn().mockResolvedValue({ device_id: 'dev-1' }),
   };
 
   const mockMfa = {
@@ -251,15 +252,15 @@ describe("AuthService", () => {
 
   // ─── register ────────────────────────────────────────────────────────────────
 
-  describe("register", () => {
+  describe('register', () => {
     const dto = {
-      firstName: "John",
-      lastName: "Doe",
-      email: "john@example.com",
-      password: "Password123!",
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
+      password: 'Password123!',
     } as any;
 
-    it("creates user, persists verification token, and returns success message", async () => {
+    it('creates user, persists verification token, and returns success message', async () => {
       mockPrisma.users.create.mockResolvedValue(makeDbUser());
 
       const result = await service.register(dto, mockReq());
@@ -271,25 +272,25 @@ describe("AuthService", () => {
       });
     });
 
-    it("fires verification + welcome emails asynchronously after register", async () => {
+    it('fires verification + welcome emails asynchronously after register', async () => {
       mockPrisma.users.create.mockResolvedValue(makeDbUser());
 
       await service.register(dto, mockReq());
       await new Promise((r) => setTimeout(r, 10));
 
       expect(mockEmail.sendVerificationEmail).toHaveBeenCalledWith(
-        "john@example.com",
-        "John",
+        'john@example.com',
+        'John',
         expect.any(String),
       );
       expect(mockEmail.sendWelcomeEmail).toHaveBeenCalledWith(
-        "john@example.com",
-        "John",
+        'john@example.com',
+        'John',
       );
     });
 
-    it("throws ConflictException when email already in use (P2002)", async () => {
-      const p2002 = Object.assign(new Error("Unique"), { code: "P2002" });
+    it('throws ConflictException when email already in use (P2002)', async () => {
+      const p2002 = Object.assign(new Error('Unique'), { code: 'P2002' });
       mockPrisma.users.create.mockRejectedValue(p2002);
       await expect(service.register(dto, mockReq())).rejects.toThrow(
         ConflictException,
@@ -299,46 +300,46 @@ describe("AuthService", () => {
 
   // ─── verifyEmail / resendVerificationEmail ───────────────────────────────────
 
-  describe("verifyEmail", () => {
-    it("delegates to emailVerificationService.verifyEmail", async () => {
-      mockEmailVerification.verifyEmail.mockResolvedValue({ message: "ok" });
-      await expect(service.verifyEmail("tok")).resolves.toEqual({
-        message: "ok",
+  describe('verifyEmail', () => {
+    it('delegates to emailVerificationService.verifyEmail', async () => {
+      mockEmailVerification.verifyEmail.mockResolvedValue({ message: 'ok' });
+      await expect(service.verifyEmail('tok')).resolves.toEqual({
+        message: 'ok',
       });
-      expect(mockEmailVerification.verifyEmail).toHaveBeenCalledWith("tok");
+      expect(mockEmailVerification.verifyEmail).toHaveBeenCalledWith('tok');
     });
   });
 
-  describe("resendVerificationEmail", () => {
-    it("delegates to emailVerificationService.resendVerificationEmail", async () => {
+  describe('resendVerificationEmail', () => {
+    it('delegates to emailVerificationService.resendVerificationEmail', async () => {
       mockEmailVerification.resendVerificationEmail.mockResolvedValue({
-        message: "ok",
+        message: 'ok',
       });
-      await expect(service.resendVerificationEmail("a@b.com")).resolves.toEqual(
-        { message: "ok" },
+      await expect(service.resendVerificationEmail('a@b.com')).resolves.toEqual(
+        { message: 'ok' },
       );
       expect(
         mockEmailVerification.resendVerificationEmail,
-      ).toHaveBeenCalledWith("a@b.com");
+      ).toHaveBeenCalledWith('a@b.com');
     });
   });
 
   // ─── login ───────────────────────────────────────────────────────────────────
 
-  describe("login", () => {
-    const rawPw = "Password123!";
+  describe('login', () => {
+    const rawPw = 'Password123!';
     let hashed: string;
     beforeAll(async () => {
       hashed = await bcrypt.hash(rawPw, 4);
     });
 
     const dto = (over: any = {}) => ({
-      email: "john@example.com",
+      email: 'john@example.com',
       password: rawPw,
       ...over,
     });
 
-    it("issues access + refresh tokens for valid credentials", async () => {
+    it('issues access + refresh tokens for valid credentials', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed }),
       );
@@ -346,53 +347,53 @@ describe("AuthService", () => {
       const result = await service.login(dto(), mockReq());
 
       expect(result).toMatchObject({
-        accessToken: "mock.access.token",
-        refreshToken: "mock.refresh.token",
-        tokenType: "Bearer",
-        user: expect.objectContaining({ id: "user-123", emailVerified: true }),
+        accessToken: 'mock.access.token',
+        refreshToken: 'mock.refresh.token',
+        tokenType: 'Bearer',
+        user: expect.objectContaining({ id: 'user-123', emailVerified: true }),
       });
       expect(mockTokenService.storeRefreshToken).toHaveBeenCalled();
       expect(mockLoginAttempt.recordSuccessfulLogin).toHaveBeenCalled();
       expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
-        "user-123",
-        "LOGIN",
+        'user-123',
+        'LOGIN',
         expect.anything(),
       );
     });
 
-    it("throws BadCredentialsException for unknown user", async () => {
+    it('throws BadCredentialsException for unknown user', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(null);
       await expect(
-        service.login(dto({ email: "x@x.com" }), mockReq()),
+        service.login(dto({ email: 'x@x.com' }), mockReq()),
       ).rejects.toThrow(BadCredentialsException);
       expect(mockLoginAttempt.recordFailedLogin).toHaveBeenCalled();
     });
 
-    it("throws BadCredentialsException for wrong password", async () => {
+    it('throws BadCredentialsException for wrong password', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed }),
       );
       await expect(
-        service.login(dto({ password: "WrongPass1!" }), mockReq()),
+        service.login(dto({ password: 'WrongPass1!' }), mockReq()),
       ).rejects.toThrow(BadCredentialsException);
       expect(mockLoginAttempt.recordFailedLogin).toHaveBeenCalledWith(
-        "john@example.com",
+        'john@example.com',
         expect.any(String),
-        "user-123",
+        'user-123',
         expect.any(String),
       );
     });
 
-    it("propagates brute force throw from loginAttemptService", async () => {
+    it('propagates brute force throw from loginAttemptService', async () => {
       mockLoginAttempt.checkBruteForce.mockRejectedValueOnce(
-        new UnauthorizedException("locked"),
+        new UnauthorizedException('locked'),
       );
       await expect(service.login(dto(), mockReq())).rejects.toThrow(
         UnauthorizedException,
       );
     });
 
-    it("throws EmailNotVerifiedException when email not verified", async () => {
+    it('throws EmailNotVerifiedException when email not verified', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed, email_verified: false }),
       );
@@ -401,7 +402,7 @@ describe("AuthService", () => {
       );
     });
 
-    it("throws UnauthorizedException for inactive account", async () => {
+    it('throws UnauthorizedException for inactive account', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed, is_active: false }),
       );
@@ -410,7 +411,7 @@ describe("AuthService", () => {
       );
     });
 
-    it("throws AccountLockedException for locked account", async () => {
+    it('throws AccountLockedException for locked account', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed, is_locked: true }),
       );
@@ -419,200 +420,208 @@ describe("AuthService", () => {
       );
     });
 
-    it("returns mfaRequired + mfaToken when 2FA enabled and device not trusted", async () => {
+    it('returns mfaRequired + mfaToken when 2FA enabled and device not trusted', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed, two_factor_enabled: true }),
       );
       mockDevice.isDeviceTrusted.mockResolvedValue(false);
 
       const result = await service.login(
-        dto({ deviceId: "untrusted" }),
+        dto({ deviceId: 'untrusted' }),
         mockReq(),
       );
 
-      expect(result).toEqual({ mfaRequired: true, mfaToken: "mock.mfa.token" });
+      expect(result).toEqual({ mfaRequired: true, mfaToken: 'mock.mfa.token' });
       expect(mockTokenService.generateAccessToken).not.toHaveBeenCalled();
     });
 
-    it("skips MFA when device is trusted", async () => {
+    it('skips MFA when device is trusted', async () => {
       mockPrisma.users.findFirst.mockResolvedValue(
         makeDbUser({ password: hashed, two_factor_enabled: true }),
       );
       mockDevice.isDeviceTrusted.mockResolvedValue(true);
 
       const result = await service.login(
-        dto({ deviceId: "trusted" }),
+        dto({ deviceId: 'trusted' }),
         mockReq(),
       );
 
-      expect(result).toMatchObject({ accessToken: "mock.access.token" });
+      expect(result).toMatchObject({ accessToken: 'mock.access.token' });
     });
   });
 
   // ─── validateMfaLogin ────────────────────────────────────────────────────────
 
-  describe("validateMfaLogin", () => {
-    it("issues tokens after a valid TOTP code", async () => {
-      mockTokenService.decodeMfaToken.mockReturnValue({ userId: "user-123" });
+  describe('validateMfaLogin', () => {
+    it('issues tokens after a valid TOTP code', async () => {
+      mockTokenService.decodeMfaToken.mockReturnValue({ userId: 'user-123' });
       mockPrisma.users.findFirst.mockResolvedValue(makeDbUser());
       mockMfa.verifyCodeOrBackup.mockResolvedValue(true);
 
       const result = await service.validateMfaLogin(
-        "mfa.tok",
-        "123456",
+        'mfa.tok',
+        '123456',
         mockReq(),
       );
 
-      expect(result).toMatchObject({ accessToken: "mock.access.token" });
+      expect(result).toMatchObject({ accessToken: 'mock.access.token' });
       expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
-        "user-123",
-        "MFA_LOGIN",
+        'user-123',
+        'MFA_LOGIN',
         expect.anything(),
       );
     });
 
-    it("throws UnauthorizedException when MFA token is invalid", async () => {
+    it('throws UnauthorizedException when MFA token is invalid', async () => {
       mockTokenService.decodeMfaToken.mockReturnValue(null);
       await expect(
-        service.validateMfaLogin("bad", "000000", mockReq()),
+        service.validateMfaLogin('bad', '000000', mockReq()),
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it("throws UnauthorizedException for wrong TOTP code", async () => {
-      mockTokenService.decodeMfaToken.mockReturnValue({ userId: "user-123" });
+    it('throws UnauthorizedException for wrong TOTP code', async () => {
+      mockTokenService.decodeMfaToken.mockReturnValue({ userId: 'user-123' });
       mockPrisma.users.findFirst.mockResolvedValue(makeDbUser());
       mockMfa.verifyCodeOrBackup.mockResolvedValue(false);
 
       await expect(
-        service.validateMfaLogin("mfa.tok", "999999", mockReq()),
+        service.validateMfaLogin('mfa.tok', '999999', mockReq()),
       ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   // ─── refreshToken ─────────────────────────────────────────────────────────────
 
-  describe("refreshToken", () => {
+  describe('refreshToken', () => {
     beforeEach(() => {
       mockTokenService.validateRefreshToken.mockResolvedValue({
-        userId: "user-123",
-        deviceId: "dev-1",
-        roles: ["ROLE_CUSTOMER"],
+        userId: 'user-123',
+        deviceId: 'dev-1',
+        roles: ['ROLE_CUSTOMER'],
       });
       mockPrisma.users.findFirst.mockResolvedValue(makeDbUser());
     });
 
-    it("rotates tokens for valid refresh token", async () => {
-      const result = await service.refreshToken("valid.rt", mockReq());
+    it('rotates tokens for valid refresh token', async () => {
+      const result = await service.refreshToken('valid.rt', mockReq());
 
       expect(result).toMatchObject({
-        accessToken: "mock.access.token",
-        refreshToken: "mock.refresh.token",
+        accessToken: 'mock.access.token',
+        refreshToken: 'mock.refresh.token',
       });
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("valid.rt");
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith('valid.rt');
       expect(mockTokenService.storeRefreshToken).toHaveBeenCalledWith(
-        "user-123",
-        "dev-1",
-        "jti-1",
+        'user-123',
+        'dev-1',
+        'jti-1',
         3600,
       );
     });
 
-    it("rejects replay of the pre-rotation token after the session JTI was replaced", async () => {
+    it('rejects replay of the pre-rotation token after the session JTI was replaced', async () => {
       // Real validation returns null once storeRefreshToken has overwritten
       // the session JTI; the old token's signature alone must not be enough.
       mockTokenService.validateRefreshToken
         .mockResolvedValueOnce({
-          userId: "user-123",
-          deviceId: "dev-1",
-          roles: ["ROLE_CUSTOMER"],
+          userId: 'user-123',
+          deviceId: 'dev-1',
+          roles: ['ROLE_CUSTOMER'],
         })
         .mockImplementationOnce(async (token: string) => {
           // Couple the mock to the rotation write: a replayed JTI no longer
           // matches the stored session marker.
-          return token === "new.rt"
-            ? { userId: "user-123", deviceId: "dev-1", roles: ["ROLE_CUSTOMER"] }
+          return token === 'new.rt'
+            ? {
+                userId: 'user-123',
+                deviceId: 'dev-1',
+                roles: ['ROLE_CUSTOMER'],
+              }
             : null;
         });
       mockTokenService.generateRefreshToken.mockReturnValueOnce({
-        token: "new.rt",
-        jti: "jti-2",
+        token: 'new.rt',
+        jti: 'jti-2',
         ttlSec: 3600,
       });
 
-      await expect(service.refreshToken("old.rt", mockReq())).resolves.toMatchObject({
-        accessToken: "mock.access.token",
-        refreshToken: "new.rt",
+      await expect(
+        service.refreshToken('old.rt', mockReq()),
+      ).resolves.toMatchObject({
+        accessToken: 'mock.access.token',
+        refreshToken: 'new.rt',
       });
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("old.rt");
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith('old.rt');
       expect(mockTokenService.storeRefreshToken).toHaveBeenCalledWith(
-        "user-123",
-        "dev-1",
-        "jti-2",
+        'user-123',
+        'dev-1',
+        'jti-2',
         3600,
       );
 
-      await expect(service.refreshToken("old.rt", mockReq())).rejects.toThrow(
+      await expect(service.refreshToken('old.rt', mockReq())).rejects.toThrow(
         UnauthorizedException,
       );
       expect(mockTokenService.storeRefreshToken).toHaveBeenCalledTimes(1);
       expect(mockTokenService.generateRefreshToken).toHaveBeenCalledTimes(1);
     });
 
-    it("characterizes concurrent refresh: both callers may pass validation before the single JTI slot is overwritten", async () => {
+    it('characterizes concurrent refresh: both callers may pass validation before the single JTI slot is overwritten', async () => {
       // Two requests can both observe the old JTI before either write lands.
       // The service serializes neither validateRefreshToken nor
       // storeRefreshToken, so both receive a new token pair; only the last
       // stored JTI remains valid for subsequent refreshes. This test records
       // that behaviour rather than changing business logic.
       mockTokenService.validateRefreshToken.mockResolvedValue({
-        userId: "user-123",
-        deviceId: "dev-1",
-        roles: ["ROLE_CUSTOMER"],
+        userId: 'user-123',
+        deviceId: 'dev-1',
+        roles: ['ROLE_CUSTOMER'],
       });
       mockTokenService.generateRefreshToken
-        .mockReturnValueOnce({ token: "rt-A", jti: "jti-A", ttlSec: 3600 })
-        .mockReturnValueOnce({ token: "rt-B", jti: "jti-B", ttlSec: 3600 });
+        .mockReturnValueOnce({ token: 'rt-A', jti: 'jti-A', ttlSec: 3600 })
+        .mockReturnValueOnce({ token: 'rt-B', jti: 'jti-B', ttlSec: 3600 });
 
       const results = await Promise.all([
-        service.refreshToken("shared.rt", mockReq()),
-        service.refreshToken("shared.rt", mockReq()),
+        service.refreshToken('shared.rt', mockReq()),
+        service.refreshToken('shared.rt', mockReq()),
       ]);
 
-      expect(results.map((r) => r.refreshToken)).toEqual(["rt-A", "rt-B"]);
+      expect(results.map((r) => r.refreshToken)).toEqual(['rt-A', 'rt-B']);
       expect(mockTokenService.blacklistToken).toHaveBeenCalledTimes(2);
       expect(mockTokenService.storeRefreshToken).toHaveBeenCalledTimes(2);
       expect(mockTokenService.storeRefreshToken).toHaveBeenLastCalledWith(
-        "user-123",
-        "dev-1",
-        "jti-B",
+        'user-123',
+        'dev-1',
+        'jti-B',
         3600,
       );
     });
 
-    it("does not issue tokens for a locked user even with a valid refresh JTI", async () => {
-      mockPrisma.users.findFirst.mockResolvedValue(makeDbUser({ is_locked: true }));
+    it('does not issue tokens for a locked user even with a valid refresh JTI', async () => {
+      mockPrisma.users.findFirst.mockResolvedValue(
+        makeDbUser({ is_locked: true }),
+      );
 
-      await expect(
-        service.refreshToken("valid.rt", mockReq()),
-      ).rejects.toThrow(AccountLockedException);
+      await expect(service.refreshToken('valid.rt', mockReq())).rejects.toThrow(
+        AccountLockedException,
+      );
       expect(mockTokenService.blacklistToken).not.toHaveBeenCalled();
       expect(mockTokenService.generateAccessToken).not.toHaveBeenCalled();
     });
 
-    it("throws UnauthorizedException for invalid refresh token", async () => {
+    it('throws UnauthorizedException for invalid refresh token', async () => {
       mockTokenService.validateRefreshToken.mockResolvedValue(null);
-      await expect(service.refreshToken("bad", mockReq())).rejects.toThrow(
+      await expect(service.refreshToken('bad', mockReq())).rejects.toThrow(
         UnauthorizedException,
       );
     });
 
-    it("throws UnauthorizedException when user is not found / inactive", async () => {
+    it('throws UnauthorizedException when user is not found / inactive', async () => {
       mockTokenService.validateRefreshToken.mockResolvedValue({
-        userId: "user-123",
-        deviceId: "dev-1",
+        userId: 'user-123',
+        deviceId: 'dev-1',
       });
       mockPrisma.users.findFirst.mockResolvedValue(null);
-      await expect(service.refreshToken("valid.rt", mockReq())).rejects.toThrow(
+      await expect(service.refreshToken('valid.rt', mockReq())).rejects.toThrow(
         UnauthorizedException,
       );
     });
@@ -620,90 +629,90 @@ describe("AuthService", () => {
 
   // ─── logout / logoutAll / logoutSession ──────────────────────────────────────
 
-  describe("logout", () => {
-    it("blacklists access token and revokes the refresh-token device session", async () => {
+  describe('logout', () => {
+    it('blacklists access token and revokes the refresh-token device session', async () => {
       mockTokenService.validateRefreshToken.mockResolvedValue({
-        userId: "user-123",
-        deviceId: "dev-1",
+        userId: 'user-123',
+        deviceId: 'dev-1',
       });
-      await service.logout("at", "rt", makeAppUser() as any, mockReq());
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
+      await service.logout('at', 'rt', makeAppUser() as any, mockReq());
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith('at');
       expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledWith(
-        "user-123",
-        "dev-1",
+        'user-123',
+        'dev-1',
       );
       expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
-        "user-123",
-        "LOGOUT",
+        'user-123',
+        'LOGOUT',
         expect.anything(),
       );
     });
   });
 
-  describe("logout", () => {
-    it("still blacklists the access token and records LOGOUT when refresh validation fails", async () => {
+  describe('logout', () => {
+    it('still blacklists the access token and records LOGOUT when refresh validation fails', async () => {
       mockTokenService.validateRefreshToken.mockResolvedValue(null);
 
-      await service.logout("at", "expired.rt", makeAppUser() as any, mockReq());
+      await service.logout('at', 'expired.rt', makeAppUser() as any, mockReq());
 
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith('at');
       expect(mockTokenService.revokeDeviceSession).not.toHaveBeenCalled();
       expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
-        "user-123",
-        "LOGOUT",
+        'user-123',
+        'LOGOUT',
         expect.anything(),
       );
     });
   });
 
-  describe("logoutAll", () => {
-    it("blacklists current access token and revokes all sessions", async () => {
-      await service.logoutAll("at", makeAppUser() as any, mockReq());
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
+  describe('logoutAll', () => {
+    it('blacklists current access token and revokes all sessions', async () => {
+      await service.logoutAll('at', makeAppUser() as any, mockReq());
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith('at');
       expect(mockTokenService.revokeAllSessions).toHaveBeenCalledWith(
-        "user-123",
+        'user-123',
       );
     });
 
-    it("records LOGOUT_ALL after the revocations", async () => {
+    it('records LOGOUT_ALL after the revocations', async () => {
       const order: string[] = [];
       mockTokenService.blacklistToken.mockImplementationOnce(async () => {
-        order.push("blacklist");
+        order.push('blacklist');
       });
       mockTokenService.revokeAllSessions.mockImplementationOnce(async () => {
-        order.push("revokeAll");
+        order.push('revokeAll');
       });
       mockAuditLog.recordAuditLog.mockImplementationOnce(async () => {
-        order.push("audit");
+        order.push('audit');
       });
 
-      await service.logoutAll("at", makeAppUser() as any, mockReq());
+      await service.logoutAll('at', makeAppUser() as any, mockReq());
 
-      expect(order).toEqual(["blacklist", "revokeAll", "audit"]);
+      expect(order).toEqual(['blacklist', 'revokeAll', 'audit']);
       expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
-        "user-123",
-        "LOGOUT_ALL",
+        'user-123',
+        'LOGOUT_ALL',
         expect.anything(),
       );
     });
   });
 
-  describe("logoutSession", () => {
-    it("revokes the targeted device session", async () => {
+  describe('logoutSession', () => {
+    it('revokes the targeted device session', async () => {
       await service.logoutSession(
-        "at",
-        "dev-9",
+        'at',
+        'dev-9',
         makeAppUser() as any,
         mockReq(),
       );
       expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledWith(
-        "user-123",
-        "dev-9",
+        'user-123',
+        'dev-9',
       );
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith("at");
+      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith('at');
       expect(mockAuditLog.recordAuditLog).toHaveBeenCalledWith(
-        "user-123",
-        "LOGOUT_SESSION",
+        'user-123',
+        'LOGOUT_SESSION',
         expect.anything(),
       );
     });
@@ -711,40 +720,40 @@ describe("AuthService", () => {
 
   // ─── delegated wrappers ──────────────────────────────────────────────────────
 
-  describe("password delegation", () => {
-    it("forgotPassword → passwordService.forgotPassword", async () => {
-      mockPasswordService.forgotPassword.mockResolvedValue({ message: "sent" });
+  describe('password delegation', () => {
+    it('forgotPassword → passwordService.forgotPassword', async () => {
+      mockPasswordService.forgotPassword.mockResolvedValue({ message: 'sent' });
       await expect(
-        service.forgotPassword({ email: "a@b.com" }),
+        service.forgotPassword({ email: 'a@b.com' }),
       ).resolves.toEqual({
-        message: "sent",
+        message: 'sent',
       });
       expect(mockPasswordService.forgotPassword).toHaveBeenCalledWith({
-        email: "a@b.com",
+        email: 'a@b.com',
       });
     });
 
-    it("resetPassword → passwordService.resetPassword", async () => {
-      mockPasswordService.resetPassword.mockResolvedValue({ message: "ok" });
+    it('resetPassword → passwordService.resetPassword', async () => {
+      mockPasswordService.resetPassword.mockResolvedValue({ message: 'ok' });
       await expect(
-        service.resetPassword({ token: "tok", newPassword: "NewPass1!" }),
-      ).resolves.toEqual({ message: "ok" });
+        service.resetPassword({ token: 'tok', newPassword: 'NewPass1!' }),
+      ).resolves.toEqual({ message: 'ok' });
     });
 
-    it("resetPassword propagates BadRequestException", async () => {
+    it('resetPassword propagates BadRequestException', async () => {
       mockPasswordService.resetPassword.mockRejectedValue(
-        new BadRequestException("bad"),
+        new BadRequestException('bad'),
       );
       await expect(
-        service.resetPassword({ token: "bad", newPassword: "New1!" }),
+        service.resetPassword({ token: 'bad', newPassword: 'New1!' }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it("changePassword → passwordService.changePassword", async () => {
+    it('changePassword → passwordService.changePassword', async () => {
       const user = makeAppUser();
       const req = mockReq();
-      const dto = { currentPassword: "OldPass1!", newPassword: "NewPass1!" };
-      mockPasswordService.changePassword.mockResolvedValue({ message: "ok" });
+      const dto = { currentPassword: 'OldPass1!', newPassword: 'NewPass1!' };
+      mockPasswordService.changePassword.mockResolvedValue({ message: 'ok' });
 
       await service.changePassword(dto, user as any, req);
 
@@ -756,11 +765,11 @@ describe("AuthService", () => {
     });
   });
 
-  describe("mfa delegation", () => {
-    it("setupMfa → mfaService.setupMfa", async () => {
+  describe('mfa delegation', () => {
+    it('setupMfa → mfaService.setupMfa', async () => {
       mockMfa.setupMfa.mockResolvedValue({
-        secret: "S",
-        qrCodeUri: "q",
+        secret: 'S',
+        qrCodeUri: 'q',
         backupCodes: [],
       });
       const user = makeAppUser();
@@ -768,39 +777,39 @@ describe("AuthService", () => {
       expect(mockMfa.setupMfa).toHaveBeenCalledWith(user);
     });
 
-    it("verifyAndEnableMfa → mfaService.verifyAndEnableMfa", async () => {
-      mockMfa.verifyAndEnableMfa.mockResolvedValue({ message: "enabled" });
+    it('verifyAndEnableMfa → mfaService.verifyAndEnableMfa', async () => {
+      mockMfa.verifyAndEnableMfa.mockResolvedValue({ message: 'enabled' });
       const user = makeAppUser();
       const req = mockReq();
-      await service.verifyAndEnableMfa({ code: "123456" }, user as any, req);
+      await service.verifyAndEnableMfa({ code: '123456' }, user as any, req);
       expect(mockMfa.verifyAndEnableMfa).toHaveBeenCalledWith(
-        { code: "123456" },
+        { code: '123456' },
         user,
         req,
       );
     });
 
-    it("disableMfa propagates BadRequestException", async () => {
+    it('disableMfa propagates BadRequestException', async () => {
       mockMfa.disableMfa.mockRejectedValue(
-        new BadRequestException("not enabled"),
+        new BadRequestException('not enabled'),
       );
       await expect(
-        service.disableMfa({ code: "000000" }, makeAppUser() as any, mockReq()),
+        service.disableMfa({ code: '000000' }, makeAppUser() as any, mockReq()),
       ).rejects.toThrow(BadRequestException);
     });
   });
 
-  describe("account delegation", () => {
-    it("deleteAccount → sessionService.deleteAccount", async () => {
+  describe('account delegation', () => {
+    it('deleteAccount → sessionService.deleteAccount', async () => {
       const user = makeAppUser();
       const req = mockReq();
-      await service.deleteAccount(user as any, "at", req);
-      expect(mockSession.deleteAccount).toHaveBeenCalledWith(user, "at", req);
+      await service.deleteAccount(user as any, 'at', req);
+      expect(mockSession.deleteAccount).toHaveBeenCalledWith(user, 'at', req);
     });
 
-    it("cancelDeleteAccount propagates BadRequestException", async () => {
+    it('cancelDeleteAccount propagates BadRequestException', async () => {
       mockSession.cancelDeleteAccount.mockRejectedValue(
-        new BadRequestException("No pending delete request"),
+        new BadRequestException('No pending delete request'),
       );
       await expect(
         service.cancelDeleteAccount(makeAppUser() as any),
@@ -810,49 +819,49 @@ describe("AuthService", () => {
 
   // ─── handleOAuthLogin ─────────────────────────────────────────────────────────
 
-  describe("handleOAuthLogin", () => {
+  describe('handleOAuthLogin', () => {
     const profile = {
-      provider: "GOOGLE",
-      providerId: "goog-1",
-      email: "g@example.com",
-      firstName: "G",
-      lastName: "L",
+      provider: 'GOOGLE',
+      providerId: 'goog-1',
+      email: 'g@example.com',
+      firstName: 'G',
+      lastName: 'L',
       avatarUrl: null,
     } as any;
 
-    it("creates a new user + oauth_account when neither exists", async () => {
+    it('creates a new user + oauth_account when neither exists', async () => {
       mockPrisma.oauth_accounts.findUnique.mockResolvedValue(null);
       mockPrisma.users.findUnique
         .mockResolvedValueOnce(null) // first lookup by email
         .mockResolvedValueOnce(
-          makeDbUser({ id: "user-new", email: "g@example.com" }),
+          makeDbUser({ id: 'user-new', email: 'g@example.com' }),
         ); // re-load
       mockPrisma.users.create.mockResolvedValue(
-        makeDbUser({ id: "user-new", email: "g@example.com" }),
+        makeDbUser({ id: 'user-new', email: 'g@example.com' }),
       );
 
       const result = await service.handleOAuthLogin(profile, mockReq());
 
       expect(mockPrisma.users.create).toHaveBeenCalled();
       expect(mockPrisma.oauth_accounts.create).toHaveBeenCalled();
-      expect(result).toMatchObject({ accessToken: "mock.access.token" });
+      expect(result).toMatchObject({ accessToken: 'mock.access.token' });
     });
 
-    it("reuses linked OAuth account on subsequent logins", async () => {
+    it('reuses linked OAuth account on subsequent logins', async () => {
       mockPrisma.oauth_accounts.findUnique.mockResolvedValue({
-        users: makeDbUser({ id: "user-existing" }),
+        users: makeDbUser({ id: 'user-existing' }),
       });
 
       const result = await service.handleOAuthLogin(profile, mockReq());
 
       expect(mockPrisma.users.create).not.toHaveBeenCalled();
-      expect(result).toMatchObject({ accessToken: "mock.access.token" });
+      expect(result).toMatchObject({ accessToken: 'mock.access.token' });
     });
 
-    it("refuses to auto-link when an active LOCAL account exists with the same email", async () => {
+    it('refuses to auto-link when an active LOCAL account exists with the same email', async () => {
       mockPrisma.oauth_accounts.findUnique.mockResolvedValue(null);
       mockPrisma.users.findUnique.mockResolvedValueOnce(
-        makeDbUser({ provider: "LOCAL", email: "g@example.com" }),
+        makeDbUser({ provider: 'LOCAL', email: 'g@example.com' }),
       );
 
       await expect(
@@ -860,7 +869,7 @@ describe("AuthService", () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it("refuses login for inactive / deleted accounts", async () => {
+    it('refuses login for inactive / deleted accounts', async () => {
       mockPrisma.oauth_accounts.findUnique.mockResolvedValue({
         users: makeDbUser({ is_active: false }),
       });

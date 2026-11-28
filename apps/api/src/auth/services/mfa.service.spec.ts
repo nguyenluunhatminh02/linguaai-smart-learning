@@ -56,7 +56,12 @@ const makeUser = (over: any = {}) => ({
 });
 
 const mockReq = (over: any = {}) =>
-  ({ headers: {}, socket: { remoteAddress: '127.0.0.1' }, get: jest.fn(), ...over } as any);
+  ({
+    headers: {},
+    socket: { remoteAddress: '127.0.0.1' },
+    get: jest.fn(),
+    ...over,
+  }) as any;
 
 describe('MfaService', () => {
   let service: MfaService;
@@ -152,7 +157,10 @@ describe('MfaService', () => {
     it('uses MFA_ISSUER from config in the otpauth URI', async () => {
       await service.setupMfa(makeUser() as any);
       expect(mockGenerateURI).toHaveBeenCalledWith(
-        expect.objectContaining({ issuer: 'TestApp', label: 'john@example.com' }),
+        expect.objectContaining({
+          issuer: 'TestApp',
+          label: 'john@example.com',
+        }),
       );
     });
 
@@ -200,7 +208,11 @@ describe('MfaService', () => {
     it('throws BadRequestException when no setup row exists', async () => {
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue(null);
       await expect(
-        service.verifyAndEnableMfa({ code: '123456' }, makeUser() as any, mockReq()),
+        service.verifyAndEnableMfa(
+          { code: '123456' },
+          makeUser() as any,
+          mockReq(),
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -210,7 +222,11 @@ describe('MfaService', () => {
       });
       mockOtpVerify.mockResolvedValue({ valid: false });
       await expect(
-        service.verifyAndEnableMfa({ code: '000000' }, makeUser() as any, mockReq()),
+        service.verifyAndEnableMfa(
+          { code: '000000' },
+          makeUser() as any,
+          mockReq(),
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -229,7 +245,9 @@ describe('MfaService', () => {
 
     it('returns false when no MFA secret is configured', async () => {
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue(null);
-      expect(await service.verifyCodeOrBackup(makeUser() as any, '000000')).toBe(false);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, '000000'),
+      ).toBe(false);
     });
 
     it('returns true on a valid TOTP code', async () => {
@@ -239,7 +257,9 @@ describe('MfaService', () => {
         backup_codes: null,
       });
       mockOtpVerify.mockResolvedValue({ valid: true });
-      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(true);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, '123456'),
+      ).toBe(true);
     });
 
     it('falls back to backup code and consumes it when TOTP fails', async () => {
@@ -269,7 +289,9 @@ describe('MfaService', () => {
         backup_codes: JSON.stringify(['some-other-hash']),
       });
       mockOtpVerify.mockResolvedValue({ valid: false });
-      expect(await service.verifyCodeOrBackup(makeUser() as any, 'wrong-code')).toBe(false);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, 'wrong-code'),
+      ).toBe(false);
     });
   });
 
@@ -287,15 +309,25 @@ describe('MfaService', () => {
       // no secret row is found.
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue(null);
       await expect(
-        service.disableMfa({ code: '000000' }, makeUser({ twoFactorEnabled: true }) as any, mockReq()),
+        service.disableMfa(
+          { code: '000000' },
+          makeUser({ twoFactorEnabled: true }) as any,
+          mockReq(),
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('clears two_factor_enabled and deletes the mfa_secrets row on success', async () => {
-      const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+      const encKey = crypto
+        .createHash('sha256')
+        .update(TEST_JWT_SECRET)
+        .digest();
       const iv = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
-      const enc = Buffer.concat([cipher.update('SECRET', 'utf8'), cipher.final()]);
+      const enc = Buffer.concat([
+        cipher.update('SECRET', 'utf8'),
+        cipher.final(),
+      ]);
       const tag = cipher.getAuthTag();
       const secret_encrypted = `${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
 
@@ -329,11 +361,15 @@ describe('MfaService', () => {
   describe('getMfaStatus', () => {
     it('returns enabled=false when user not found', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(null);
-      expect(await service.getMfaStatus('user-123')).toEqual({ enabled: false });
+      expect(await service.getMfaStatus('user-123')).toEqual({
+        enabled: false,
+      });
     });
 
     it('returns the user.two_factor_enabled flag', async () => {
-      mockPrisma.users.findUnique.mockResolvedValue({ two_factor_enabled: true });
+      mockPrisma.users.findUnique.mockResolvedValue({
+        two_factor_enabled: true,
+      });
       expect(await service.getMfaStatus('user-123')).toEqual({ enabled: true });
     });
   });
@@ -342,15 +378,21 @@ describe('MfaService', () => {
 
   describe('getBackupCodesCount', () => {
     it('returns 0 when no backup codes stored', async () => {
-      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({ backup_codes: null });
-      expect(await service.getBackupCodesCount('user-123')).toEqual({ remaining: 0 });
+      mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
+        backup_codes: null,
+      });
+      expect(await service.getBackupCodesCount('user-123')).toEqual({
+        remaining: 0,
+      });
     });
 
     it('returns the remaining count from JSON column', async () => {
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
         backup_codes: JSON.stringify(['a', 'b', 'c']),
       });
-      expect(await service.getBackupCodesCount('user-123')).toEqual({ remaining: 3 });
+      expect(await service.getBackupCodesCount('user-123')).toEqual({
+        remaining: 3,
+      });
     });
   });
 
@@ -376,7 +418,11 @@ describe('MfaService', () => {
       });
 
       await expect(
-        service.verifyAndEnableMfa({ code: '123456' }, makeUser() as any, mockReq()),
+        service.verifyAndEnableMfa(
+          { code: '123456' },
+          makeUser() as any,
+          mockReq(),
+        ),
       ).rejects.toThrow(BadRequestException);
       expect(mockOtpVerify).not.toHaveBeenCalled();
     });
@@ -423,7 +469,10 @@ describe('MfaService', () => {
       // validateMfaLogin does not check the user's twoFactorEnabled flag;
       // the service must fail closed based on the secret row alone.
       expect(
-        await service.verifyCodeOrBackup(makeUser({ twoFactorEnabled: true }) as any, '123456'),
+        await service.verifyCodeOrBackup(
+          makeUser({ twoFactorEnabled: true }) as any,
+          '123456',
+        ),
       ).toBe(false);
     });
 
@@ -438,7 +487,10 @@ describe('MfaService', () => {
       mockOtpVerify.mockResolvedValue({ valid: false });
 
       expect(
-        await service.verifyCodeOrBackup(makeUser({ twoFactorEnabled: true }) as any, code),
+        await service.verifyCodeOrBackup(
+          makeUser({ twoFactorEnabled: true }) as any,
+          code,
+        ),
       ).toBe(false);
       expect(mockPrisma.mfa_secrets.update).not.toHaveBeenCalled();
     });
@@ -450,7 +502,9 @@ describe('MfaService', () => {
         backup_codes: null,
       });
 
-      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(false);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, '123456'),
+      ).toBe(false);
       expect(mockOtpVerify).not.toHaveBeenCalled();
       // A failed decrypt must still be recorded as a failed attempt.
       expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
@@ -485,7 +539,9 @@ describe('MfaService', () => {
       mockPrisma.mfa_secrets.updateMany.mockResolvedValue({ count: 0 });
       mockOtpVerify.mockResolvedValue({ valid: false });
 
-      expect(await service.verifyCodeOrBackup(makeUser() as any, code)).toBe(false);
+      expect(await service.verifyCodeOrBackup(makeUser() as any, code)).toBe(
+        false,
+      );
       expect(mockPrisma.mfa_secrets.updateMany).toHaveBeenCalledWith({
         where: { user_id: 'user-123', backup_codes: storedCodes },
         data: { backup_codes: JSON.stringify(['other-hash']) },
@@ -522,7 +578,9 @@ describe('MfaService', () => {
         Promise.resolve(key === 'mfa:laststep:user-123' ? '100' : null),
       );
 
-      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(false);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, '123456'),
+      ).toBe(false);
       expect(mockRedis.set).not.toHaveBeenCalled();
       expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
         'mfa:fail:verify:user-123',
@@ -541,8 +599,14 @@ describe('MfaService', () => {
         Promise.resolve(key === 'mfa:laststep:user-123' ? '100' : null),
       );
 
-      expect(await service.verifyCodeOrBackup(makeUser() as any, '123456')).toBe(true);
-      expect(mockRedis.set).toHaveBeenCalledWith('mfa:laststep:user-123', '101', 60);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, '123456'),
+      ).toBe(true);
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'mfa:laststep:user-123',
+        '101',
+        60,
+      );
     });
   });
 
@@ -559,10 +623,16 @@ describe('MfaService', () => {
     });
 
     it('records a failed attempt with the lockout TTL after an invalid code', async () => {
-      const encKey = crypto.createHash('sha256').update(TEST_JWT_SECRET).digest();
+      const encKey = crypto
+        .createHash('sha256')
+        .update(TEST_JWT_SECRET)
+        .digest();
       const iv = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
-      const enc = Buffer.concat([cipher.update('SECRET', 'utf8'), cipher.final()]);
+      const enc = Buffer.concat([
+        cipher.update('SECRET', 'utf8'),
+        cipher.final(),
+      ]);
       const tag = cipher.getAuthTag();
       mockPrisma.mfa_secrets.findUnique.mockResolvedValue({
         ...ACTIVE_SECRET,
@@ -572,7 +642,9 @@ describe('MfaService', () => {
       // Valid ciphertext but wrong TOTP code → falls through to recordFailedAttempt.
       mockOtpVerify.mockResolvedValue({ valid: false });
 
-      expect(await service.verifyCodeOrBackup(makeUser() as any, '000000')).toBe(false);
+      expect(
+        await service.verifyCodeOrBackup(makeUser() as any, '000000'),
+      ).toBe(false);
       expect(mockRedis.incrWithExpiry).toHaveBeenCalledWith(
         'mfa:fail:verify:user-123',
         900,
@@ -616,7 +688,9 @@ describe('MfaService', () => {
       expect(stored).toHaveLength(10);
       expect(stored).not.toContain(oldHash);
       result.backupCodes.forEach((code: string) => {
-        expect(stored).toContain(crypto.createHash('sha256').update(code).digest('hex'));
+        expect(stored).toContain(
+          crypto.createHash('sha256').update(code).digest('hex'),
+        );
       });
     });
 

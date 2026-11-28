@@ -73,17 +73,17 @@ export const DateUtil = {
     value: string | number | null | undefined,
     fallbackMs?: number,
   ): number {
-    if (value === null || value === undefined || value === "") {
+    if (value === null || value === undefined || value === '') {
       if (fallbackMs !== undefined) {
         console.warn(
           `parseDurationMs: missing duration; falling back to ${fallbackMs}ms`,
         );
         return fallbackMs;
       }
-      throw new Error("parseDurationMs: a duration value is required");
+      throw new Error('parseDurationMs: a duration value is required');
     }
     // Numeric values supplied directly from code are already milliseconds.
-    if (typeof value === "number") {
+    if (typeof value === 'number') {
       if (!Number.isFinite(value) || value < 0) {
         throw new Error(`parseDurationMs: invalid duration ${value}`);
       }

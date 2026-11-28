@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import { useLanguageStore } from '@/stores/language-store';
 import dynamic from 'next/dynamic';
 import { getAccessToken } from '@/stores/auth-store';
 import { normalizeLessonQuestions, type LessonQuestion } from '@/lib/lesson-questions';
+import { toAppError, type AppErrorCode } from '@/lib/errors';
 import { useSkillCompletion, type SkillCompletion } from '@/hooks/use-skill-completion';
 import { SkillSaveStatus } from '@/components/learning/skill-save-status';
 import { useActivityDuration } from '@/hooks/use-activity-duration';
@@ -24,50 +26,6 @@ const VocabCard = dynamic(() => import('@/components/reading/vocab-card').then(m
   ssr: false,
   loading: () => <div className="h-24 rounded-xl bg-muted/40 animate-pulse" />
 });
-
-export interface ReadingLesson {
-  id: string;
-  activityId: string;
-  title: string;
-  titleVi: string;
-  level: string;
-  category: string;
-  wordCount: number;
-  content: string;
-  vocabulary: { word: string; definition: string; definitionVi: string; partOfSpeech: string; example: string }[];
-  questions: LessonQuestion[];
-  invalidQuestionCount: number;
-}
-
-const readingCategories = [
-  { id: 'daily-life', label: 'Daily Life', labelVi: 'Cuộc sống hàng ngày' },
-  { id: 'culture', label: 'Culture & Travel', labelVi: 'Văn hóa & Du lịch' },
-  { id: 'science', label: 'Science & Nature', labelVi: 'Khoa học & Thiên nhiên' },
-  { id: 'society', label: 'Society & People', labelVi: 'Xã hội & Con người' },
-  { id: 'technology', label: 'Technology', labelVi: 'Công nghệ' },
-];
-
-function cmsToReadingLesson(lesson: Record<string, unknown>): ReadingLesson {
-  const c = (lesson.content ?? {}) as Record<string, unknown>;
-  return {
-    id: (lesson.slug as string) || (lesson.id as string),
-    activityId: (lesson.id as string) || (lesson.slug as string),
-    title: lesson.title as string,
-    titleVi: (lesson.titleVi ?? lesson.title_vi) as string,
-    level: lesson.level as string,
-    category: lesson.category as string,
-    wordCount: (c.wordCount as number) ?? 0,
-    content: (c.text as string) ?? (c.content as string) ?? '',
-    vocabulary: (c.vocabulary as ReadingLesson['vocabulary']) ?? [],
-    ...normalizeLessonQuestions(c.questions),
-  };
-}
-
-type Tab = 'library' | 'ai' | 'nlp';
-
-function QuestionNotice() {
-  return <p role="status" className="rounded-lg border border-border p-3 text-sm">Một số câu hỏi thiếu đáp án hợp lệ nên đã được bỏ qua.</p>;
-}
 
 interface NlpResult {
   wordCount: number;
@@ -107,11 +65,385 @@ interface SavedPassage {
   createdAt: string;
 }
 
+interface GenerateReadingInput {
+  topic: string;
+  level: string;
+  language: string;
+}
+
+interface AnalyzeTextInput {
+  text: string;
+  language: string;
+}
+
+// ---------------------------------------------------------------------------
+// Reading feature boundary (roadmap fe-25)
+// ---------------------------------------------------------------------------
+// The feature's API client, typed errors and TanStack Query hooks live next to
+// the page for this slice. Only this file is in scope, so the usual
+// `src/features/reading/{types,errors,api,hooks}` modules are kept as clearly
+// separated sections here rather than as new files. The wire contract is
+// unchanged: generation posts {topic, level, language} and returns
+// {id, passage, vocabulary, questions}; history reads ?limit=20; analysis posts
+// {text, language}. Generated operations are billed server-side, so none of
+// these hooks auto-retry.
+
+interface ReadingLesson {
+  id: string;
+  activityId: string;
+  title: string;
+  titleVi: string;
+  level: string;
+  category: string;
+  wordCount: number;
+  content: string;
+  vocabulary: { word: string; definition: string; definitionVi: string; partOfSpeech: string; example: string }[];
+  questions: LessonQuestion[];
+  invalidQuestionCount: number;
+}
+
+type ReadingErrorCode = AppErrorCode | 'NETWORK_ERROR' | 'TIMEOUT';
+
+type ReadingOperationKey =
+  | 'lessons'
+  | 'history'
+  | 'generate'
+  | 'analyze-text';
+
+/**
+ * Stable, UI-safe failure. Provider messages are classified at the boundary
+ * but never stored or rendered; the page shows a fixed Vietnamese message.
+ */
+class ReadingApiError extends Error {
+  readonly code: ReadingErrorCode;
+  readonly operationKey: ReadingOperationKey;
+  readonly status?: number;
+  readonly retryable: boolean;
+
+  constructor(
+    code: ReadingErrorCode,
+    operationKey: ReadingOperationKey,
+    options: { status?: number; retryable?: boolean; cause?: unknown } = {},
+  ) {
+    super(`READING_${code}`);
+    this.name = 'ReadingApiError';
+    this.code = code;
+    this.operationKey = operationKey;
+    if (typeof options.status === 'number' && Number.isFinite(options.status)) {
+      this.status = options.status;
+    }
+    this.retryable = options.retryable ?? false;
+    if (options.cause !== undefined) this.cause = options.cause;
+    Object.setPrototypeOf(this, ReadingApiError.prototype);
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function statusOf(error: unknown): number | undefined {
+  const response = asRecord(asRecord(error)?.response);
+  const status = response?.status;
+  return typeof status === 'number' && Number.isFinite(status) ? status : undefined;
+}
+
+function errorPayload(error: unknown): Record<string, unknown> | null {
+  const response = asRecord(asRecord(error)?.response);
+  const data = asRecord(response?.data);
+  if (!data) return null;
+  return asRecord(data.data) ?? data;
+}
+
+/** Normalize any transport failure into a bounded, classified ReadingApiError. */
+function toReadingError(
+  error: unknown,
+  operationKey: ReadingOperationKey,
+): ReadingApiError {
+  if (error instanceof ReadingApiError) return error;
+
+  const raw = asRecord(error);
+  const code = raw?.code;
+  const status = statusOf(error);
+  const transportTimeout =
+    code === 'ECONNABORTED' || code === 'ETIMEDOUT' || status === 504;
+  const transportNetwork = code === 'ERR_NETWORK' || status === undefined;
+
+  // toAppError understands the server envelope (including retryable hints) and
+  // axios transport codes. It never exposes raw provider text to this layer.
+  const appError = toAppError(error);
+  let normalizedCode: ReadingErrorCode = appError.code;
+  if (transportTimeout) normalizedCode = 'TIMEOUT';
+  else if (transportNetwork && appError.code === 'DATABASE_UNAVAILABLE') {
+    normalizedCode = 'NETWORK_ERROR';
+  }
+
+  const serverRetryable = errorPayload(error)?.retryable;
+  const retryable =
+    typeof serverRetryable === 'boolean'
+      ? serverRetryable
+      : appError.retryable;
+
+  return new ReadingApiError(normalizedCode, operationKey, {
+    status: appError.httpStatus ?? status,
+    retryable,
+    cause: error,
+  });
+}
+
+const READING_ERROR_MESSAGES: Record<ReadingErrorCode, string> = {
+  VALIDATION_ERROR: 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.',
+  AUTHENTICATION_REQUIRED: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+  ACCESS_DENIED: 'Bạn không có quyền thực hiện thao tác này.',
+  RESOURCE_NOT_FOUND: 'Không tìm thấy dữ liệu bạn yêu cầu.',
+  OPERATION_CONFLICT: 'Yêu cầu này đã được gửi. Vui lòng đợi kết quả.',
+  RATE_LIMITED: 'Gửi quá nhiều yêu cầu. Vui lòng đợi một lát rồi thử lại.',
+  PROVIDER_TIMEOUT: 'Dịch vụ AI tạm thời không phản hồi. Vui lòng thử lại sau.',
+  PROVIDER_UNAVAILABLE: 'Dịch vụ AI tạm thời không khả dụng. Vui lòng thử lại sau.',
+  DATABASE_UNAVAILABLE: 'Không thể lưu dữ liệu. Vui lòng thử lại sau.',
+  INSUFFICIENT_CREDITS: 'Bạn đã hết token. Vui lòng nạp thêm token để tiếp tục.',
+  INTERNAL_ERROR: 'Đã xảy ra lỗi. Vui lòng thử lại.',
+  OPERATION_UNKNOWN: 'Không xác định được trạng thái yêu cầu. Vui lòng thử lại.',
+  INVALID_AI_OUTPUT: 'Kết quả AI không hợp lệ. Vui lòng thử lại.',
+  NETWORK_ERROR: 'Không thể kết nối tới máy chủ. Kiểm tra mạng rồi thử lại.',
+  TIMEOUT: 'Yêu cầu mất quá lâu. Vui lòng thử lại.',
+};
+
+function readingErrorMessage(error: unknown, operationKey: ReadingOperationKey): string {
+  if (!(error instanceof ReadingApiError)) {
+    return READING_ERROR_MESSAGES.INTERNAL_ERROR;
+  }
+  if (error.operationKey !== operationKey) {
+    return READING_ERROR_MESSAGES.INTERNAL_ERROR;
+  }
+  return READING_ERROR_MESSAGES[error.code];
+}
+
+/** API boundary: only these functions talk to the network for this page. */
+const readingApi = {
+  async getLessons(): Promise<ReadingLesson[]> {
+    const token = getAccessToken();
+    const response = await fetch(
+      '/api/cms/lessons?type=reading&language=english&published=true&limit=200',
+      { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    );
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new ReadingApiError('AUTHENTICATION_REQUIRED', 'lessons', {
+          status: response.status,
+        });
+      }
+      throw new ReadingApiError('INTERNAL_ERROR', 'lessons', {
+        status: response.status,
+        retryable: response.status >= 500,
+      });
+    }
+    const json: unknown = await response.json().catch(() => null);
+    const record = asRecord(json);
+    const items: Record<string, unknown>[] = Array.isArray(record?.data)
+      ? (record.data as Record<string, unknown>[])
+      : Array.isArray(json)
+        ? (json as Record<string, unknown>[])
+        : [];
+    // CMS rows are already camelized by the route; normalize snake_case title
+    // defensively, then let normalizeLessonQuestions be the only answer-index
+    // normalizer in the feature.
+    return items.map((lesson) => {
+      const content = asRecord(lesson.content) ?? {};
+      const normalized = normalizeLessonQuestions(content.questions);
+      return {
+        id: (lesson.slug as string) || (lesson.id as string),
+        activityId: (lesson.id as string) || (lesson.slug as string),
+        title: lesson.title as string,
+        titleVi: (lesson.titleVi ?? lesson.title_vi) as string,
+        level: lesson.level as string,
+        category: lesson.category as string,
+        wordCount: (content.wordCount as number) ?? 0,
+        content: (content.text as string) ?? (content.content as string) ?? '',
+        vocabulary: (content.vocabulary as ReadingLesson['vocabulary']) ?? [],
+        questions: normalized.questions,
+        invalidQuestionCount: normalized.invalidQuestionCount,
+      } satisfies ReadingLesson;
+    });
+  },
+
+  async getHistory(limit = 20): Promise<SavedPassage[]> {
+    const res = await apiClient.get('/reading/history', { params: { limit } });
+    const data = asRecord(res.data);
+    return Array.isArray(data?.items) ? (data.items as SavedPassage[]) : [];
+  },
+
+  async generate(input: GenerateReadingInput): Promise<ReadingResult> {
+    // Deliberately no idempotency header: this frontend slice does not change
+    // the billing contract. The caller owns the single user intent.
+    const res = await apiClient.post('/reading/generate', {
+      topic: input.topic,
+      level: input.level,
+      language: input.language,
+    });
+    const raw = asRecord(res.data) ?? {};
+    const normalized = normalizeLessonQuestions(raw.questions);
+    return {
+      id: (raw.id as string) ?? '',
+      language: input.language,
+      title: typeof raw.title === 'string' ? raw.title : undefined,
+      passage: (raw.passage as string) ?? '',
+      vocabulary: raw.vocabulary as ReadingResult['vocabulary'],
+      questions: normalized.questions,
+      invalidQuestionCount: normalized.invalidQuestionCount,
+    } satisfies ReadingResult;
+  },
+
+  async analyzeText(input: AnalyzeTextInput): Promise<NlpResult> {
+    const res = await apiClient.post('/reading/analyze-text', {
+      text: input.text,
+      language: input.language,
+    });
+    return res.data as NlpResult;
+  },
+};
+
+const readingQueryKeys = {
+  lessons: ['reading', 'lessons'] as const,
+  history: (limit = 20) => ['reading', 'history', limit] as const,
+};
+
+/** Public CMS lessons: cached, manually refetchable. */
+function useReadingLessons() {
+  const query = useQuery<ReadingLesson[], ReadingApiError>({
+    queryKey: readingQueryKeys.lessons,
+    queryFn: async () => {
+      try {
+        return await readingApi.getLessons();
+      } catch (error) {
+        throw toReadingError(error, 'lessons');
+      }
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  return {
+    lessons: query.data ?? [],
+    isLoading: query.isLoading,
+    error: query.error ?? null,
+    refetch: query.refetch,
+  };
+}
+
+/** Private generation history: only fetched when the AI tab is opened. */
+function useReadingHistory(limit = 20) {
+  const query = useQuery<SavedPassage[], ReadingApiError>({
+    queryKey: readingQueryKeys.history(limit),
+    queryFn: async () => {
+      try {
+        return await readingApi.getHistory(limit);
+      } catch (error) {
+        throw toReadingError(error, 'history');
+      }
+    },
+    enabled: false,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  return {
+    passages: query.data ?? [],
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Generate is billable: `retry` is fixed at zero and every call is one explicit
+ * user action. Invalidating history is the only automatic side effect.
+ */
+function useGenerateReading() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation<ReadingResult, ReadingApiError, GenerateReadingInput>({
+    mutationFn: async (input) => {
+      try {
+        return await readingApi.generate(input);
+      } catch (error) {
+        throw toReadingError(error, 'generate');
+      }
+    },
+    retry: false,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['reading', 'history'] });
+    },
+  });
+  return {
+    generate: mutation.mutateAsync,
+    reset: mutation.reset,
+    result: mutation.data ?? null,
+    error: mutation.error ?? null,
+    isGenerating: mutation.isPending,
+  };
+}
+
+/** NLP analysis is also billed, so a failed analysis is never auto-retried. */
+function useAnalyzeText() {
+  const mutation = useMutation<NlpResult, ReadingApiError, AnalyzeTextInput>({
+    mutationFn: async (input) => {
+      try {
+        return await readingApi.analyzeText(input);
+      } catch (error) {
+        throw toReadingError(error, 'analyze-text');
+      }
+    },
+    retry: false,
+  });
+  return {
+    analyze: mutation.mutateAsync,
+    reset: mutation.reset,
+    result: mutation.data ?? null,
+    error: mutation.error ?? null,
+    isAnalyzing: mutation.isPending,
+  };
+}
+
+const readingCategories = [
+  { id: 'daily-life', label: 'Daily Life', labelVi: 'Cuộc sống hàng ngày' },
+  { id: 'culture', label: 'Culture & Travel', labelVi: 'Văn hóa & Du lịch' },
+  { id: 'science', label: 'Science & Nature', labelVi: 'Khoa học & Thiên nhiên' },
+  { id: 'society', label: 'Society & People', labelVi: 'Xã hội & Con người' },
+  { id: 'technology', label: 'Technology', labelVi: 'Công nghệ' },
+];
+
+type Tab = 'library' | 'ai' | 'nlp';
+
+function QuestionNotice() {
+  return <p role="status" className="rounded-lg border border-border p-3 text-sm">Một số câu hỏi thiếu đáp án hợp lệ nên đã được bỏ qua.</p>;
+}
+
+/** Fixed, localized-safe message for a typed failure on a known operation. */
+function ReadingErrorNotice({
+  error,
+  operationKey,
+  onRetry,
+}: {
+  error: unknown;
+  operationKey: ReadingOperationKey;
+  onRetry?: () => void;
+}) {
+  const message = readingErrorMessage(error, operationKey);
+  const typed = error instanceof ReadingApiError ? error : null;
+  return (
+    <div role="alert" className="flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center text-sm text-destructive">
+      <p>{message}</p>
+      {onRetry && typed?.retryable && (
+        <Button variant="outline" size="sm" onClick={onRetry}>Thử lại</Button>
+      )}
+    </div>
+  );
+}
+
 export default function ReadingPage() {
   const { t } = useLanguageStore();
   const [tab, setTab] = useState<Tab>('library');
-  const [lessons, setLessons] = useState<ReadingLesson[]>([]);
-  const [lessonsLoading, setLessonsLoading] = useState(true);
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedLesson, setSelectedLesson] = useState<ReadingLesson | null>(null);
@@ -119,33 +451,22 @@ export default function ReadingPage() {
   const [lessonSubmitted, setLessonSubmitted] = useState(false);
   const progress = useSkillCompletion();
 
-  useEffect(() => {
-    const token = getAccessToken();
-    fetch('/api/cms/lessons?type=reading&language=english&published=true&limit=200', {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-      .then(r => r.json())
-      .then(json => {
-        const items: Record<string, unknown>[] = json.data ?? json ?? [];
-        setLessons(items.map(cmsToReadingLesson));
-      })
-      .catch(() => {})
-      .finally(() => setLessonsLoading(false));
-  }, []);
+  const lessonsQuery = useReadingLessons();
+  const lessons = lessonsQuery.lessons;
+  const historyQuery = useReadingHistory(20);
+  const savedPassages = historyQuery.passages;
+  const generate = useGenerateReading();
+  const analyze = useAnalyzeText();
 
-  // AI tab state
+  // AI tab state (client-only; server state lives in the hooks above)
   const [topic, setTopic] = useState('');
   const [targetLanguage, setTargetLanguage] = useState('english');
   const [level, setLevel] = useState('B1');
-  const [loading, setLoading] = useState(false);
-  const [generationError, setGenerationError] = useState(false);
   const [result, setResult] = useState<ReadingResult | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  // Saved passages state
-  const [savedPassages, setSavedPassages] = useState<SavedPassage[]>([]);
-  const [savedLoading, setSavedLoading] = useState(false);
+  // Saved passage selection state
   const [selectedSaved, setSelectedSaved] = useState<SavedPassage | null>(null);
   const [savedAnswers, setSavedAnswers] = useState<Record<number, number>>({});
   const [savedSubmitted, setSavedSubmitted] = useState(false);
@@ -166,61 +487,43 @@ export default function ReadingPage() {
   // NLP tab state
   const [nlpText, setNlpText] = useState('');
   const [nlpLanguage, setNlpLanguage] = useState('english');
-  const [nlpLoading, setNlpLoading] = useState(false);
-  const [nlpResult, setNlpResult] = useState<NlpResult | null>(null);
-  const [nlpError, setNlpError] = useState<string | null>(null);
 
   const handleNlpAnalyze = async () => {
     if (!nlpText.trim()) return;
-    setNlpLoading(true);
-    setNlpResult(null);
-    setNlpError(null);
+    analyze.reset();
     try {
-      const res = await apiClient.post('/reading/analyze-text', { text: nlpText, language: nlpLanguage });
-      setNlpResult(res.data);
-    } catch {
-      const message = 'Failed to analyze text. Please try again.';
-      setNlpError(message);
-      toast.error(message);
+      const nlpResult = await analyze.analyze({ text: nlpText, language: nlpLanguage });
+      if (nlpResult) toast.success(t.reading.nlpTitle);
+    } catch (error) {
+      toast.error(readingErrorMessage(error, 'analyze-text'));
     }
-    finally { setNlpLoading(false); }
   };
 
-  const loadHistory = useCallback(async () => {
-    setSavedLoading(true);
-    try {
-      const res = await apiClient.get('/reading/history?limit=20');
-      setSavedPassages(res.data.items || []);
-    } catch { /* ignore – user may not be authenticated yet */ }
-    finally { setSavedLoading(false); }
-  }, []);
-
-  // Load history on first AI tab visit
-  const handleTabSwitch = useCallback((newTab: Tab) => {
+  // Load history on first AI tab visit; later refreshes are explicit.
+  const handleTabSwitch = (newTab: Tab) => {
     setTab(newTab);
-    if (newTab === 'ai' && savedPassages.length === 0) loadHistory();
-  }, [savedPassages.length, loadHistory]);
+    if (newTab === 'ai' && savedPassages.length === 0 && !historyQuery.isFetching) {
+      void historyQuery.refetch();
+    }
+  };
 
   const handleGenerate = async () => {
-    if (!topic.trim()) return;
-    setLoading(true);
-    setGenerationError(false);
+    const request = topic.trim();
+    if (!request) return;
+    generate.reset();
     setResult(null);
     setAnswers({});
     setSubmitted(false);
     try {
-      const res = await apiClient.post('/reading/generate', { topic, level, language: targetLanguage });
-      const raw = res.data as { id: string; passage: string; vocabulary?: { word: string; meaning: string }[]; questions: unknown };
-      const normalizedResult: ReadingResult = {
-        ...raw,
+      const generated = await generate.generate({
+        topic: request,
+        level,
         language: targetLanguage,
-        ...normalizeLessonQuestions(raw.questions),
-      };
-      setResult(normalizedResult);
-      // Reload history so the newly saved passage appears
-      loadHistory();
-    } catch { setGenerationError(true); }
-    finally { setLoading(false); }
+      });
+      if (generated) setResult(generated);
+    } catch (error) {
+      toast.error(readingErrorMessage(error, 'generate'));
+    }
   };
 
   const handleAnswer = (qIndex: number, optIndex: number) => { if (!submitted) setAnswers({ ...answers, [qIndex]: optIndex }); };
@@ -527,9 +830,17 @@ export default function ReadingPage() {
             ))}
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {lessonsLoading ? (
+            {lessonsQuery.isLoading ? (
               <div className="col-span-full flex items-center justify-center py-16">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : lessonsQuery.error ? (
+              <div className="col-span-full">
+                <ReadingErrorNotice
+                  error={lessonsQuery.error}
+                  operationKey="lessons"
+                  onRetry={() => void lessonsQuery.refetch()}
+                />
               </div>
             ) : filteredLessons.length === 0 ? (
               <div className="col-span-full">
@@ -582,12 +893,20 @@ export default function ReadingPage() {
                 <select className="h-11 rounded-xl border bg-background px-3 text-sm" value={level} onChange={(e) => setLevel(e.target.value)}>
                   {['A1','A2','B1','B2','C1','C2'].map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
-                <Button variant="gradient" onClick={handleGenerate} disabled={loading || !topic.trim()}>
-                  {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t.reading.generating}</> : <><Sparkles className="mr-2 h-4 w-4" /> {t.reading.generate}</>}
+                <Button variant="gradient" onClick={handleGenerate} disabled={generate.isGenerating || !topic.trim()}>
+                  {generate.isGenerating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t.reading.generating}</> : <><Sparkles className="mr-2 h-4 w-4" /> {t.reading.generate}</>}
                 </Button>
               </div>
             </CardContent>
           </Card>
+
+          {generate.error && !result && (
+            <ReadingErrorNotice
+              error={generate.error}
+              operationKey="generate"
+              onRetry={handleGenerate}
+            />
+          )}
 
           {result && (
             <div className="animate-fade-in space-y-6">
@@ -643,25 +962,33 @@ export default function ReadingPage() {
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                   <History className="h-4 w-4" /> {t.reading.savedPassages}
                 </h3>
-                <Button variant="ghost" size="sm" onClick={loadHistory} disabled={savedLoading} className="text-xs">
-                  {savedLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : t.reading.refresh}
+                <Button variant="ghost" size="sm" onClick={() => void historyQuery.refetch()} disabled={historyQuery.isFetching} className="text-xs">
+                  {historyQuery.isFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : t.reading.refresh}
                 </Button>
               </div>
 
-              {savedLoading && (
+              {historyQuery.isFetching && (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               )}
 
-              {!savedLoading && savedPassages.length === 0 && (
+              {historyQuery.error && (
+                <ReadingErrorNotice
+                  error={historyQuery.error}
+                  operationKey="history"
+                  onRetry={() => void historyQuery.refetch()}
+                />
+              )}
+
+              {!historyQuery.isFetching && !historyQuery.error && savedPassages.length === 0 && (
                 <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
                   <Sparkles className="mx-auto mb-2 h-8 w-8 opacity-30" />
                   <p className="text-sm">{t.reading.noSavedPassages}</p>
                 </div>
               )}
 
-              {!savedLoading && savedPassages.length > 0 && (
+              {!historyQuery.isFetching && savedPassages.length > 0 && (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {savedPassages.map((p) => (
                     <Card key={p.id} className="cursor-pointer transition-all hover:shadow-md hover:border-violet-400/50" onClick={() => openSaved(p)}>
@@ -721,8 +1048,8 @@ export default function ReadingPage() {
                   <option value="japanese">Japanese</option>
                   <option value="vietnamese">Vietnamese</option>
                 </select>
-                <Button onClick={handleNlpAnalyze} disabled={nlpLoading || !nlpText.trim()} variant="gradient">
-                  {nlpLoading ? (
+                <Button onClick={handleNlpAnalyze} disabled={analyze.isAnalyzing || !nlpText.trim()} variant="gradient">
+                  {analyze.isAnalyzing ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing...</>
                   ) : (
                     <><Search className="mr-2 h-4 w-4" /> Analyze Text</>
@@ -732,7 +1059,7 @@ export default function ReadingPage() {
             </CardContent>
           </Card>
 
-          {nlpLoading && (
+          {analyze.isAnalyzing && (
             <Card>
               <CardContent className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -743,13 +1070,14 @@ export default function ReadingPage() {
             </Card>
           )}
 
-          {nlpError && !nlpLoading && (
-            <Card>
-              <CardContent className="py-6 text-center text-sm text-destructive">{nlpError}</CardContent>
-            </Card>
+          {analyze.error && !analyze.isAnalyzing && (
+            <ReadingErrorNotice error={analyze.error} operationKey="analyze-text" />
           )}
 
-          {nlpResult && !nlpLoading && (
+          {(() => {
+            const nlpResult = analyze.result;
+            if (!nlpResult || analyze.isAnalyzing) return null;
+            return (
             <div className="space-y-4 animate-fade-in">
               {/* Level + Readability overview */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -835,7 +1163,8 @@ export default function ReadingPage() {
                 </Card>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>

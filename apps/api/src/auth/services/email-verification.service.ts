@@ -8,7 +8,11 @@ import { DateUtil } from '../../common/utils/date.util';
 
 /** Hash the email so no PII appears in Redis keys or log lines. */
 function emailKeyPart(email: string): string {
-  return crypto.createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 24);
+  return crypto
+    .createHash('sha256')
+    .update(email.trim().toLowerCase())
+    .digest('hex')
+    .slice(0, 24);
 }
 
 @Injectable()
@@ -40,7 +44,8 @@ export class EmailVerificationService {
         email_verification_expiry: null,
       },
     });
-    if (!result.count) throw new BadRequestException('Invalid or expired verification token');
+    if (!result.count)
+      throw new BadRequestException('Invalid or expired verification token');
 
     return { message: 'Email verified successfully' };
   }
@@ -48,7 +53,10 @@ export class EmailVerificationService {
   async resendVerificationEmail(email: string): Promise<{ message: string }> {
     // Always return the same response: whether an account exists or is already
     // verified must not be observable to an unauthenticated caller.
-    const response = { message: 'If that email needs verification, a verification link was sent.' };
+    const response = {
+      message:
+        'If that email needs verification, a verification link was sent.',
+    };
     const normalizedEmail = email.trim();
 
     // Per-email limits (the controller's @Throttle covers per-IP). Apply the
@@ -57,10 +65,20 @@ export class EmailVerificationService {
     // Fail-closed via RateLimiterService: when Redis is unavailable no token is
     // generated, so mail-bombing cannot degrade to an unthrottled path.
     const key = emailKeyPart(normalizedEmail);
-    await this.rateLimiter.checkRateLimit(`resend:min:${key}`, { limit: 1, window: 60, keyPrefix: 'email_verify' });
-    await this.rateLimiter.checkRateLimit(`resend:hour:${key}`, { limit: 5, window: 3600, keyPrefix: 'email_verify' });
+    await this.rateLimiter.checkRateLimit(`resend:min:${key}`, {
+      limit: 1,
+      window: 60,
+      keyPrefix: 'email_verify',
+    });
+    await this.rateLimiter.checkRateLimit(`resend:hour:${key}`, {
+      limit: 5,
+      window: 3600,
+      keyPrefix: 'email_verify',
+    });
 
-    const user = await this.prisma.users.findUnique({ where: { email: normalizedEmail } });
+    const user = await this.prisma.users.findUnique({
+      where: { email: normalizedEmail },
+    });
     if (!user || user.email_verified || !user.is_active) return response;
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -73,7 +91,11 @@ export class EmailVerificationService {
       },
     });
     if (updated.count) {
-      await this.emailService.sendVerificationEmail(user.email, user.first_name, token);
+      await this.emailService.sendVerificationEmail(
+        user.email,
+        user.first_name,
+        token,
+      );
     }
     return response;
   }

@@ -1,8 +1,17 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../generated/prisma';
 import { FsrsAlgorithm, FsrsGrade } from './fsrs.algorithm';
-import { ReviewCardDto, StartSessionDto, FinishSessionDto } from './dto/srs.dto';
+import {
+  ReviewCardDto,
+  StartSessionDto,
+  FinishSessionDto,
+} from './dto/srs.dto';
 
 @Injectable()
 export class SrsService {
@@ -27,7 +36,11 @@ export class SrsService {
       where: {
         user_id: userId,
         next_review_date: { lte: now },
-        cards: { deck_id: deckId, retired_at: null, decks: { OR: [{ creator_id: userId }, { is_public: true }] } },
+        cards: {
+          deck_id: deckId,
+          retired_at: null,
+          decks: { OR: [{ creator_id: userId }, { is_public: true }] },
+        },
       },
       include: { cards: true },
       take: limit,
@@ -77,7 +90,11 @@ export class SrsService {
    */
   private async assertCardAccess(userId: string, cardId: string) {
     const card = await this.prisma.cards.findFirst({
-      where: { id: cardId, retired_at: null, decks: { OR: [{ creator_id: userId }, { is_public: true }] } },
+      where: {
+        id: cardId,
+        retired_at: null,
+        decks: { OR: [{ creator_id: userId }, { is_public: true }] },
+      },
       select: { id: true },
     });
     if (!card) throw new NotFoundException('Card not found');
@@ -85,12 +102,20 @@ export class SrsService {
   }
 
   async reviewCard(userId: string, dto: ReviewCardDto) {
-    const replay = async (event: { user_id: string; card_id: string; result: Prisma.JsonValue }) => {
+    const replay = async (event: {
+      user_id: string;
+      card_id: string;
+      result: Prisma.JsonValue;
+    }) => {
       if (event.user_id !== userId || event.card_id !== dto.cardId) {
         throw new ConflictException('Review operation already exists');
       }
-      const saved = event.result as { grade: number; response: Prisma.JsonObject };
-      if (saved.grade !== dto.grade) throw new ConflictException('Review operation already exists');
+      const saved = event.result as {
+        grade: number;
+        response: Prisma.JsonObject;
+      };
+      if (saved.grade !== dto.grade)
+        throw new ConflictException('Review operation already exists');
       await this.assertCardAccess(userId, dto.cardId);
       return saved.response;
     };
@@ -100,12 +125,18 @@ export class SrsService {
         const lockKey = `srs:${userId}:${dto.cardId}`;
         await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
         if (dto.operationId) {
-          const event = await tx.srs_review_events.findUnique({ where: { id: dto.operationId } });
+          const event = await tx.srs_review_events.findUnique({
+            where: { id: dto.operationId },
+          });
           if (event) return replay(event);
         }
 
         const card = await tx.cards.findFirst({
-          where: { id: dto.cardId, retired_at: null, decks: { OR: [{ creator_id: userId }, { is_public: true }] } },
+          where: {
+            id: dto.cardId,
+            retired_at: null,
+            decks: { OR: [{ creator_id: userId }, { is_public: true }] },
+          },
           select: { id: true },
         });
         if (!card) throw new NotFoundException('Card not found');
@@ -113,20 +144,36 @@ export class SrsService {
         const response = await this.saveReview(tx, userId, dto);
         if (dto.operationId) {
           await tx.srs_review_events.create({
-            data: { id: dto.operationId, user_id: userId, card_id: dto.cardId, result: { grade: dto.grade, response } },
+            data: {
+              id: dto.operationId,
+              user_id: userId,
+              card_id: dto.cardId,
+              result: { grade: dto.grade, response },
+            },
           });
         }
         return response;
       });
     } catch (error) {
-      if (!dto.operationId || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
-      const event = await this.prisma.srs_review_events.findUnique({ where: { id: dto.operationId } });
+      if (
+        !dto.operationId ||
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      )
+        throw error;
+      const event = await this.prisma.srs_review_events.findUnique({
+        where: { id: dto.operationId },
+      });
       if (!event) throw error;
       return replay(event);
     }
   }
 
-  private async saveReview(tx: Prisma.TransactionClient, userId: string, dto: ReviewCardDto) {
+  private async saveReview(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    dto: ReviewCardDto,
+  ) {
     const existing = await tx.user_card_progress.findUnique({
       where: { user_id_card_id: { user_id: userId, card_id: dto.cardId } },
     });
@@ -143,10 +190,16 @@ export class SrsService {
       existing?.difficulty ?? 5.0,
       existing?.repetition_count ?? 0,
       daysSinceLast,
-      Boolean(lastReview || (Array.isArray(existing?.quality_history) && existing.quality_history.length)),
+      Boolean(
+        lastReview ||
+        (Array.isArray(existing?.quality_history) &&
+          existing.quality_history.length),
+      ),
     );
 
-    const history = Array.isArray(existing?.quality_history) ? existing.quality_history : [];
+    const history = Array.isArray(existing?.quality_history)
+      ? existing.quality_history
+      : [];
     const qualityHistory = [...history, dto.grade];
     const nextReviewDate = FsrsAlgorithm.getNextReviewDate(result.interval);
     const reviewedAt = new Date();
@@ -180,12 +233,15 @@ export class SrsService {
       stability: result.stability,
       difficulty: result.difficulty,
       newInterval: result.interval,
-      nextReviewDate: (progress.next_review_date ?? nextReviewDate).toISOString(),
+      nextReviewDate: (
+        progress.next_review_date ?? nextReviewDate
+      ).toISOString(),
       // Retrievability describes the state *before* this review, so use the
       // pre-review stability rather than the newly calculated one.
       retrievability: lastReview
         ? Math.round(
-            FsrsAlgorithm.retrievability(daysSinceLast, previousStability) * 100,
+            FsrsAlgorithm.retrievability(daysSinceLast, previousStability) *
+              100,
           )
         : 100,
     };
@@ -193,7 +249,9 @@ export class SrsService {
 
   async startSession(userId: string, dto: StartSessionDto) {
     if (dto.sessionId) {
-      const existing = await this.prisma.review_sessions.findUnique({ where: { id: dto.sessionId } });
+      const existing = await this.prisma.review_sessions.findUnique({
+        where: { id: dto.sessionId },
+      });
       if (existing) {
         this.confirmSession(existing, userId, dto.deckId);
         // A replay must not bypass the deck visibility check applied to a
@@ -208,14 +266,25 @@ export class SrsService {
         data: { id: dto.sessionId, user_id: userId, deck_id: dto.deckId },
       });
     } catch (error) {
-      if (!dto.sessionId || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
-      const existing = await this.prisma.review_sessions.findUnique({ where: { id: dto.sessionId } });
+      if (
+        !dto.sessionId ||
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      )
+        throw error;
+      const existing = await this.prisma.review_sessions.findUnique({
+        where: { id: dto.sessionId },
+      });
       if (!existing) throw error;
       return this.confirmSession(existing, userId, dto.deckId);
     }
   }
 
-  private confirmSession<T extends { user_id: string; deck_id: string }>(session: T, userId: string, deckId: string) {
+  private confirmSession<T extends { user_id: string; deck_id: string }>(
+    session: T,
+    userId: string,
+    deckId: string,
+  ) {
     if (session.user_id !== userId || session.deck_id !== deckId) {
       throw new ConflictException('Session operation already exists');
     }
@@ -223,7 +292,10 @@ export class SrsService {
   }
 
   async finishSession(userId: string, dto: FinishSessionDto) {
-    if (dto.cardsCorrect > dto.cardsReviewed) throw new BadRequestException('Correct cards cannot exceed reviewed cards');
+    if (dto.cardsCorrect > dto.cardsReviewed)
+      throw new BadRequestException(
+        'Correct cards cannot exceed reviewed cards',
+      );
     await this.prisma.review_sessions.updateMany({
       where: { id: dto.sessionId, user_id: userId, finished_at: null },
       data: {
@@ -233,7 +305,9 @@ export class SrsService {
         finished_at: new Date(),
       },
     });
-    const session = await this.prisma.review_sessions.findFirst({ where: { id: dto.sessionId, user_id: userId } });
+    const session = await this.prisma.review_sessions.findFirst({
+      where: { id: dto.sessionId, user_id: userId },
+    });
     if (!session) throw new NotFoundException('Session not found');
     return session;
   }
@@ -258,13 +332,17 @@ export class SrsService {
     });
     const now = new Date();
 
-    const dueCards = allProgress.filter((p) => p.next_review_date <= now).length;
+    const dueCards = allProgress.filter(
+      (p) => p.next_review_date <= now,
+    ).length;
     const learnedCards = allProgress.filter(
       (p) => p.repetition_count >= 3 && p.interval_days >= 7,
     ).length;
     const totalCards = allProgress.length;
 
-    const allQualities = allProgress.flatMap((p) => (p.quality_history as number[]) || []);
+    const allQualities = allProgress.flatMap(
+      (p) => (p.quality_history as number[]) || [],
+    );
     const goodReviews = allQualities.filter((q) => q >= 3).length;
     const retentionRate =
       allQualities.length > 0 ? goodReviews / allQualities.length : 0;
@@ -275,7 +353,8 @@ export class SrsService {
         : 0;
     const avgDifficulty =
       totalCards > 0
-        ? allProgress.reduce((sum, p) => sum + (p.difficulty || 5.0), 0) / totalCards
+        ? allProgress.reduce((sum, p) => sum + (p.difficulty || 5.0), 0) /
+          totalCards
         : 5.0;
 
     return {
@@ -305,7 +384,11 @@ export class SrsService {
     const forecast: { date: string; count: number }[] = [];
     const now = new Date();
 
-    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const todayUtc = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
     for (let i = 0; i < days; i++) {
       // Use UTC boundaries throughout: the date key comes from toISOString(),
       // so local-midnight boundaries would label the bucket with the wrong day.
@@ -365,14 +448,18 @@ export class SrsService {
 
       const grades = Array.isArray(p.quality_history) ? p.quality_history : [];
       const elapsed = p.last_review_date
-        ? Math.max(0, (now.getTime() - p.last_review_date.getTime()) / 86_400_000)
+        ? Math.max(
+            0,
+            (now.getTime() - p.last_review_date.getTime()) / 86_400_000,
+          )
         : 0;
-      const R =
-        p.last_review_date
-          ? FsrsAlgorithm.retrievability(elapsed, p.ease_factor)
-          : 1.0;
+      const R = p.last_review_date
+        ? FsrsAlgorithm.retrievability(elapsed, p.ease_factor)
+        : 1.0;
       const retrievabilityPct = Math.round(R * 100);
-      const isAtRisk = grades[grades.length - 1] === 1 || (retrievabilityPct < 70 && Boolean(p.last_review_date));
+      const isAtRisk =
+        grades[grades.length - 1] === 1 ||
+        (retrievabilityPct < 70 && Boolean(p.last_review_date));
 
       deckMap.get(deckId)!.cards.push({
         cardId: p.card_id,
@@ -387,16 +474,25 @@ export class SrsService {
         nextReviewDate: p.next_review_date,
         repetitions: p.repetition_count,
         attempts: grades.length,
-        correctAttempts: grades.filter((grade) => typeof grade === 'number' && grade >= 2).length,
+        correctAttempts: grades.filter(
+          (grade) => typeof grade === 'number' && grade >= 2,
+        ).length,
         lastReviewDate: p.last_review_date,
       });
     }
 
     const decks = Array.from(deckMap.values()).map((d) => {
-      const sorted = d.cards.sort((a, b) => Number(b.isAtRisk) - Number(a.isAtRisk) || a.retrievabilityPct - b.retrievabilityPct);
+      const sorted = d.cards.sort(
+        (a, b) =>
+          Number(b.isAtRisk) - Number(a.isAtRisk) ||
+          a.retrievabilityPct - b.retrievabilityPct,
+      );
       const avgRetention =
         d.cards.length > 0
-          ? Math.round(d.cards.reduce((s, c) => s + c.retrievabilityPct, 0) / d.cards.length)
+          ? Math.round(
+              d.cards.reduce((s, c) => s + c.retrievabilityPct, 0) /
+                d.cards.length,
+            )
           : 100;
       return {
         deckId: d.deckId,
@@ -410,7 +506,9 @@ export class SrsService {
     const globalAtRisk = decks.reduce((s, d) => s + d.atRiskCards, 0);
     const globalAvgRetention =
       decks.length > 0
-        ? Math.round(decks.reduce((s, d) => s + d.avgRetentionPct, 0) / decks.length)
+        ? Math.round(
+            decks.reduce((s, d) => s + d.avgRetentionPct, 0) / decks.length,
+          )
         : 100;
 
     return {

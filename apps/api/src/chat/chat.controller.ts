@@ -19,11 +19,7 @@ import {
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { ChatService } from './chat.service';
-import {
-  CHAT_LANGUAGES,
-  SendChatDto,
-  StreamChatDto,
-} from './dto/chat.dto';
+import { CHAT_LANGUAGES, SendChatDto, StreamChatDto } from './dto/chat.dto';
 import { normalizeChatInput } from './chat.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -37,7 +33,8 @@ const CHAT_FEATURE = 'ai_chat';
 
 /** Idempotency-Key is a UUID or an opaque key of bounded length. */
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
-const UUID_V4_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_V4_LIKE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OPAQUE_KEY = /^[A-Za-z0-9._:-]+$/;
 
 /** Hard limits protecting the SSE transport from slow or verbose clients. */
@@ -91,7 +88,8 @@ const FAILURE_CODE_SET = new Set<ChatFailureCode>([
 const SAFE_FAILURE_MESSAGES: Record<ChatFailureCode, string> = {
   VALIDATION_ERROR: 'The request could not be validated.',
   INSUFFICIENT_CREDITS: 'Not enough credits to complete this request.',
-  OPERATION_CONFLICT: 'The operation key was already used for a different request.',
+  OPERATION_CONFLICT:
+    'The operation key was already used for a different request.',
   RATE_LIMITED: 'Too many requests. Please try again shortly.',
   PROVIDER_UNAVAILABLE: 'The AI service is temporarily unavailable.',
   PROVIDER_TIMEOUT: 'The AI service did not respond in time.',
@@ -122,9 +120,10 @@ class ChatTransportError extends Error {
 function toTransportError(error: unknown): ChatTransportError {
   if (error instanceof ChatTransportError) return error;
 
-  const status = typeof (error as { getStatus?: () => unknown })?.getStatus === 'function'
-    ? (error as { getStatus: () => unknown }).getStatus()
-    : (error as { status?: unknown })?.status;
+  const status =
+    typeof (error as { getStatus?: () => unknown })?.getStatus === 'function'
+      ? (error as { getStatus: () => unknown }).getStatus()
+      : (error as { status?: unknown })?.status;
 
   if (status === 400 || error instanceof BadRequestException) {
     return new ChatTransportError('VALIDATION_ERROR', 400);
@@ -133,7 +132,11 @@ function toTransportError(error: unknown): ChatTransportError {
     return new ChatTransportError('INSUFFICIENT_CREDITS', 403);
   }
   if (status === 404) {
-    return new ChatTransportError('VALIDATION_ERROR', 404, 'Conversation not found.');
+    return new ChatTransportError(
+      'VALIDATION_ERROR',
+      404,
+      'Conversation not found.',
+    );
   }
   if (status === 409 || status === 422) {
     return new ChatTransportError('OPERATION_CONFLICT', 409);
@@ -170,7 +173,8 @@ function parseIdempotencyKey(value: string | undefined): string {
 
 /** Convert an operation error code to the allowlisted SSE code set. */
 function operationFailureCode(raw: string | null | undefined): ChatFailureCode {
-  if (raw && FAILURE_CODE_SET.has(raw as ChatFailureCode)) return raw as ChatFailureCode;
+  if (raw && FAILURE_CODE_SET.has(raw as ChatFailureCode))
+    return raw as ChatFailureCode;
   // Provider timeout is the only ambiguous case; other provider errors are known.
   return 'INTERNAL_ERROR';
 }
@@ -191,7 +195,9 @@ export class ChatController {
   ) {}
 
   @Post('send')
-  @ApiOperation({ summary: 'Send message to AI tutor (legacy non-stream contract)' })
+  @ApiOperation({
+    summary: 'Send message to AI tutor (legacy non-stream contract)',
+  })
   async send(
     @CurrentUser('id') userId: string,
     @Body() dto: SendChatDto,
@@ -200,7 +206,7 @@ export class ChatController {
     const candidate = dto as unknown as Partial<StreamChatDto> & SendChatDto;
     const key = parseIdempotencyKey(idempotencyKey ?? candidate.idempotencyKey);
     const lastMessage = Array.isArray(candidate.messages)
-      ? candidate.messages[candidate.messages.length - 1]?.content ?? ''
+      ? (candidate.messages[candidate.messages.length - 1]?.content ?? '')
       : '';
     const turn: StreamChatDto = {
       conversationId: candidate.conversationId,
@@ -220,8 +226,11 @@ export class ChatController {
     if (operation.status === 'SUCCEEDED') {
       const saved = await this.readReplayResult(userId, operation);
       if (!saved) {
-        throw new ChatTransportError('OPERATION_CONFLICT', 409,
-          'The saved result for this operation is no longer available.');
+        throw new ChatTransportError(
+          'OPERATION_CONFLICT',
+          409,
+          'The saved result for this operation is no longer available.',
+        );
       }
       const balance = await this.currentBalance(userId);
       return {
@@ -247,7 +256,9 @@ export class ChatController {
   }
 
   @Post('stream')
-  @ApiOperation({ summary: 'Stream AI response via SSE with scoped idempotency' })
+  @ApiOperation({
+    summary: 'Stream AI response via SSE with scoped idempotency',
+  })
   async stream(
     @CurrentUser('id') userId: string,
     @Body() dto: StreamChatDto,
@@ -266,7 +277,11 @@ export class ChatController {
       const failure = toTransportError(error);
       // Pre-flight failures are ordinary HTTP errors; the SSE contract only
       // applies after headers have been flushed.
-      throw new ChatTransportError(failure.code, failure.httpStatus, failure.message);
+      throw new ChatTransportError(
+        failure.code,
+        failure.httpStatus,
+        failure.message,
+      );
     }
     const abort = new AbortController();
     const onClientClose = () => {
@@ -282,7 +297,10 @@ export class ChatController {
     let queuedBytes = 0;
     let seq = 0;
 
-    const writeEvent = (event: string, data: Record<string, unknown>): boolean => {
+    const writeEvent = (
+      event: string,
+      data: Record<string, unknown>,
+    ): boolean => {
       if (res.destroyed || res.writableEnded || terminalSent) return false;
       const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
       queuedBytes += Buffer.byteLength(payload);
@@ -319,7 +337,8 @@ export class ChatController {
           writeEvent('failed', {
             operationId: operation.operationId,
             code: 'OPERATION_CONFLICT',
-            message: 'The saved result for this operation is no longer available.',
+            message:
+              'The saved result for this operation is no longer available.',
           });
         } else {
           const text = saved.content.slice(0, MAX_DELTA_LENGTH);
@@ -340,7 +359,9 @@ export class ChatController {
         if (!res.destroyed && !res.writableEnded) res.write(': ping\n\n');
       }, HEARTBEAT_MS);
       deadline = setTimeout(() => {
-        this.logger.warn(`Chat stream deadline reached for operation ${operation.operationId}`);
+        this.logger.warn(
+          `Chat stream deadline reached for operation ${operation.operationId}`,
+        );
         abort.abort();
       }, MAX_STREAM_SECONDS * 1000);
 
@@ -374,7 +395,9 @@ export class ChatController {
       if (!terminalSent) {
         // EOF without a committed result is never success: no completed event,
         // no assistant message was persisted by the service in that case.
-        this.logger.warn(`Chat stream ended without a terminal event for operation ${operation.operationId}`);
+        this.logger.warn(
+          `Chat stream ended without a terminal event for operation ${operation.operationId}`,
+        );
         await this.failOperation(userId, operation, 'PROVIDER_TIMEOUT');
         if (!res.destroyed) {
           writeEvent('failed', {
@@ -430,9 +453,13 @@ export class ChatController {
     key: string,
     dto: StreamChatDto,
   ): Promise<ReservedChatOperation> {
-    const { conversationId: requestedConversation, language: requestedLanguage } = dto;
+    const {
+      conversationId: requestedConversation,
+      language: requestedLanguage,
+    } = dto;
     const message = normalizeChatInput(dto.message);
-    if (!message) throw new BadRequestException('A non-empty user message is required');
+    if (!message)
+      throw new BadRequestException('A non-empty user message is required');
 
     const language = resolveControllerLanguage(requestedLanguage);
     const conversationId = await this.resolveOwnedConversation(
@@ -454,31 +481,42 @@ export class ChatController {
     }
 
     const operation = reserved.operation;
-    if (operation.conversation_id && operation.conversation_id !== conversationId) {
-      throw new ConflictException('Operation key belongs to another conversation');
+    if (
+      operation.conversation_id &&
+      operation.conversation_id !== conversationId
+    ) {
+      throw new ConflictException(
+        'Operation key belongs to another conversation',
+      );
     }
 
     // Only a fresh RESERVED row gets a debit; a replayed operation never
     // charges a second time. The billing key is derived from the operation ID.
     if (reserved.created) {
       try {
-        await this.tokens.reserveTokens(userId, {
-          operationId: operation.id,
-          user: userId,
-          feature: CHAT_FEATURE,
-          charge: operation.reserved_credits,
-          status: operation.status,
-        }, CHAT_FEATURE);
+        await this.tokens.reserveTokens(
+          userId,
+          {
+            operationId: operation.id,
+            user: userId,
+            feature: CHAT_FEATURE,
+            charge: operation.reserved_credits,
+            status: operation.status,
+          },
+          CHAT_FEATURE,
+        );
       } catch (error) {
         const failure = toTransportError(error);
-        await this.operations.markTerminal(
-          userId,
-          operation.id,
-          operation.version,
-          this.policy.newLeaseToken(),
-          'FAILED',
-          { errorCode: failure.code },
-        ).catch(() => undefined);
+        await this.operations
+          .markTerminal(
+            userId,
+            operation.id,
+            operation.version,
+            this.policy.newLeaseToken(),
+            'FAILED',
+            { errorCode: failure.code },
+          )
+          .catch(() => undefined);
         throw failure;
       }
     }
@@ -495,7 +533,10 @@ export class ChatController {
           inProgress: false,
         };
       }
-      throw new ChatTransportError(operationFailureCode(operation.error_code), 409);
+      throw new ChatTransportError(
+        operationFailureCode(operation.error_code),
+        409,
+      );
     }
 
     // A live lease means another request already owns this operation and is
@@ -516,7 +557,11 @@ export class ChatController {
     }
 
     try {
-      const claimed = await this.operations.claimLease(userId, operation.id, operation.version);
+      const claimed = await this.operations.claimLease(
+        userId,
+        operation.id,
+        operation.version,
+      );
       return {
         operationId: operation.id,
         conversationId: operation.conversation_id ?? conversationId,
@@ -570,15 +615,21 @@ export class ChatController {
         'SUCCEEDED',
         { resultRef: messageId || null },
       );
-      await this.tokens.settleTokens(userId, {
-        operationId: operation.operationId,
-        user: userId,
-        feature: CHAT_FEATURE,
-        charge: this.policy.getCost(CHAT_FEATURE),
-        status: 'RUNNING',
-      }, CHAT_FEATURE);
-    } catch (error) {
-      this.logger.warn(`Failed to finalize chat operation ${operation.operationId}`);
+      await this.tokens.settleTokens(
+        userId,
+        {
+          operationId: operation.operationId,
+          user: userId,
+          feature: CHAT_FEATURE,
+          charge: this.policy.getCost(CHAT_FEATURE),
+          status: 'RUNNING',
+        },
+        CHAT_FEATURE,
+      );
+    } catch {
+      this.logger.warn(
+        `Failed to finalize chat operation ${operation.operationId}`,
+      );
       throw new ChatTransportError('INTERNAL_ERROR', 500);
     }
   }
@@ -599,8 +650,10 @@ export class ChatController {
         code === 'PROVIDER_TIMEOUT' ? 'UNKNOWN' : 'FAILED',
         { errorCode: code },
       );
-    } catch (error) {
-      this.logger.warn(`Failed to terminalize chat operation ${operation.operationId}`);
+    } catch {
+      this.logger.warn(
+        `Failed to terminalize chat operation ${operation.operationId}`,
+      );
     }
   }
 
@@ -625,7 +678,9 @@ export class ChatController {
    * never starts a provider call, charges credits or mutates the operation.
    */
   @Get('operations/:operationId')
-  @ApiOperation({ summary: 'Get the persisted status and result of a chat operation' })
+  @ApiOperation({
+    summary: 'Get the persisted status and result of a chat operation',
+  })
   async getOperationStatus(
     @CurrentUser('id') userId: string,
     @Param('operationId', ParseUUIDPipe) operationId: string,
@@ -633,7 +688,9 @@ export class ChatController {
     // The ledger delegate is gated behind db:generate, so use the same
     // defensive access as AiOperationsRepository. Reading the row without a
     // user filter is deliberate: an unknown id is 404, another user's id is 403.
-    const delegate = (this.prisma as unknown as Record<string, unknown>)['ai_operations'] as
+    const delegate = (this.prisma as unknown as Record<string, unknown>)[
+      'ai_operations'
+    ] as
       | {
           findUnique: (args: {
             where: { id: string };
@@ -657,14 +714,19 @@ export class ChatController {
       throw new ForbiddenException('AI operation belongs to another user');
     }
 
-    let result: { messageId: string; role: string; content: string } | null = null;
+    let result: { messageId: string; role: string; content: string } | null =
+      null;
     if (operation.result_ref) {
       const message = await this.prisma.chat_messages.findUnique({
         where: { id: operation.result_ref },
         select: { id: true, role: true, content: true },
       });
       if (message) {
-        result = { messageId: message.id, role: message.role, content: message.content };
+        result = {
+          messageId: message.id,
+          role: message.role,
+          content: message.content,
+        };
       }
     }
 

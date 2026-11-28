@@ -14,6 +14,83 @@ def setup_api_keys(monkeypatch):
     monkeypatch.setattr(settings, "api_keys", "test-api-key-123")
 
 
+@pytest.fixture(autouse=True)
+def offline_guards(monkeypatch):
+    """Use a fresh in-process guard store and no response cache in these tests.
+
+    Production keeps Redis and fail-closed guards. The pytest ``memory://`` URI
+    is rejected by redis.asyncio, which would fail every mocked request with a
+    503 before the provider is called.
+    """
+    import app.rate_limit as rate_limit
+    from app.services.cache import cache_service
+
+    class _Pipeline:
+        def __init__(self, store):
+            self._store = store
+            self._ops = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def incr(self, key):
+            self._ops.append(("incr", key))
+
+        def expire(self, key, ttl):
+            self._ops.append(("expire", key, ttl))
+
+        async def execute(self):
+            results = []
+            for op, key, *_ in self._ops:
+                if op == "incr":
+                    value = int(self._store.get(key, 0)) + 1
+                    self._store[key] = value
+                    results.append(value)
+                elif op == "expire":
+                    results.append(True)
+            self._ops.clear()
+            return results
+
+    class _Store:
+        def __init__(self):
+            self.data = {}
+
+        async def incr(self, key):
+            value = int(self.data.get(key, 0)) + 1
+            self.data[key] = value
+            return value
+
+        async def expire(self, key, ttl):
+            return True
+
+        async def get(self, key):
+            return self.data.get(key)
+
+        async def decr(self, key):
+            value = int(self.data.get(key, 0)) - 1
+            self.data[key] = value
+            return value
+
+        async def delete(self, key):
+            self.data.pop(key, None)
+            return 1
+
+        def pipeline(self, transaction=True):
+            return _Pipeline(self.data)
+
+    rate_limit._redis_client = _Store()
+    rate_limit._redis_unavailable = False
+    monkeypatch.setattr(cache_service, "get_cached", AsyncMock(return_value=None))
+    monkeypatch.setattr(cache_service, "set_cached", AsyncMock())
+    yield
+    # Avoid leaking a latched outage from an earlier test module into later
+    # test files that install their own guard fakes.
+    rate_limit._redis_unavailable = False
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Content Generation Endpoint Tests
 # ──────────────────────────────────────────────────────────────────────────────
@@ -149,7 +226,13 @@ async def test_generate_cards_invalid_json_twice_returns_502():
         )
 
     assert response.status_code == 502
-    assert response.json() == {"detail": "AI returned invalid JSON"}
+    # All client errors use the bounded roadmap envelope; the legacy
+    # {"detail": ...} shape was replaced by it.
+    body = response.json()
+    assert set(body) == {"error"}
+    assert body["error"]["code"] == "INVALID_AI_OUTPUT"
+    assert body["error"]["message"] == "AI service returned an invalid result"
+    assert body["error"]["retryable"] is False
     assert mock_generate.await_count == 2
 
 

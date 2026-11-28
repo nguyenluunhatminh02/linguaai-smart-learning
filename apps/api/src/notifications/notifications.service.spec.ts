@@ -2,11 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException } from '@nestjs/common';
-import { notifications_type_enum, notifications_channel_enum } from '../generated/prisma';
+import {
+  notifications_type_enum,
+  notifications_channel_enum,
+} from '../generated/prisma';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     notifications: {
@@ -29,7 +31,6 @@ describe('NotificationsService', () => {
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
-    prisma = module.get<PrismaService>(PrismaService);
   });
 
   afterEach(() => {
@@ -38,7 +39,11 @@ describe('NotificationsService', () => {
 
   describe('create', () => {
     it('should call prisma.notifications.create with correct data', async () => {
-      const mockResult = { id: 'uuid-1', user_id: 'user-1', title: 'Test title' };
+      const mockResult = {
+        id: 'uuid-1',
+        user_id: 'user-1',
+        title: 'Test title',
+      };
       mockPrismaService.notifications.create.mockResolvedValueOnce(mockResult);
 
       const result = await service.create(
@@ -111,8 +116,13 @@ describe('NotificationsService', () => {
   describe('markAsRead', () => {
     it('should mark notification as read and set read_at date', async () => {
       const mockNotif = { id: 'uuid-1', user_id: 'user-1', is_read: false };
-      mockPrismaService.notifications.findFirst.mockResolvedValueOnce(mockNotif);
-      mockPrismaService.notifications.update.mockResolvedValueOnce({ ...mockNotif, is_read: true });
+      mockPrismaService.notifications.findFirst.mockResolvedValueOnce(
+        mockNotif,
+      );
+      mockPrismaService.notifications.update.mockResolvedValueOnce({
+        ...mockNotif,
+        is_read: true,
+      });
 
       const result = await service.markAsRead('uuid-1', 'user-1');
 
@@ -132,13 +142,17 @@ describe('NotificationsService', () => {
     it('should throw NotFoundException if notification is not found', async () => {
       mockPrismaService.notifications.findFirst.mockResolvedValueOnce(null);
 
-      await expect(service.markAsRead('uuid-1', 'user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.markAsRead('uuid-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('markAllAsRead', () => {
     it('should call prisma.notifications.updateMany to mark all as read', async () => {
-      mockPrismaService.notifications.updateMany.mockResolvedValueOnce({ count: 3 });
+      mockPrismaService.notifications.updateMany.mockResolvedValueOnce({
+        count: 3,
+      });
 
       await service.markAllAsRead('user-1');
 
@@ -158,7 +172,9 @@ describe('NotificationsService', () => {
   describe('delete', () => {
     it('should delete notification if it exists', async () => {
       const mockNotif = { id: 'uuid-1', user_id: 'user-1' };
-      mockPrismaService.notifications.findFirst.mockResolvedValueOnce(mockNotif);
+      mockPrismaService.notifications.findFirst.mockResolvedValueOnce(
+        mockNotif,
+      );
       mockPrismaService.notifications.delete.mockResolvedValueOnce(mockNotif);
 
       await service.delete('uuid-1', 'user-1');
@@ -174,7 +190,9 @@ describe('NotificationsService', () => {
     it('should throw NotFoundException if notification to delete is not found', async () => {
       mockPrismaService.notifications.findFirst.mockResolvedValueOnce(null);
 
-      await expect(service.delete('uuid-1', 'user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.delete('uuid-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

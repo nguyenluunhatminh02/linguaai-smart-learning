@@ -11,6 +11,20 @@ import { DateUtil } from '../utils/date.util';
 
 export type ApiErrors = string[] | Record<string, string[]> | null;
 
+/** Allowlisted error codes; must stay in lockstep with the global filter. */
+export type ApiErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'AUTHENTICATION_REQUIRED'
+  | 'ACCESS_DENIED'
+  | 'RESOURCE_NOT_FOUND'
+  | 'OPERATION_CONFLICT'
+  | 'RATE_LIMITED'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'DATABASE_UNAVAILABLE'
+  | 'INSUFFICIENT_CREDITS'
+  | 'INTERNAL_ERROR';
+
 export interface ApiResponse<T> {
   success: boolean;
   message: string | null;
@@ -20,10 +34,18 @@ export interface ApiResponse<T> {
   path: string;
 }
 
+/** Error envelope: six shared keys plus code, retryable and requestId. */
+export interface ApiErrorResponse extends ApiResponse<null> {
+  code: ApiErrorCode;
+  retryable: boolean;
+  requestId: string;
+}
+
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,

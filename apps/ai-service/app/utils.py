@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
+from app.services.cache import cache_service
 from app.services.llm_client import llm_client
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,6 @@ async def ai_json_request(
     model: Optional[str] = None,
 ) -> dict:
     from app.config import settings
-    from app.services.cache import cache_service
 
     # Resolve once so the cache key always describes the model actually used.
     resolved_model = model or settings.llm_model
@@ -147,8 +147,8 @@ async def ai_json_request(
                         context,
                         type(exc).__name__,
                     )
-                    # The fresh response below is written back under the same key,
-                    # replacing the stale entry. (CacheService has no delete API.)
+                    # Do not leave the stale entry around if the fresh call fails.
+                    await cache_service.delete_cached("ai", **cache_kwargs)
                     cached = None
                 else:
                     cached = validated_cached.model_dump()

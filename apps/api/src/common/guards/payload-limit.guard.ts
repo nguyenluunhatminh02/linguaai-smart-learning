@@ -18,7 +18,8 @@ function parseContentLength(value: unknown): number | undefined {
   if (typeof value === 'number') {
     return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
   }
-  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) return undefined;
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim()))
+    return undefined;
 
   const parsed = Number(value.trim());
   return Number.isSafeInteger(parsed) ? parsed : undefined;
@@ -37,12 +38,15 @@ export class PayloadLimitGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const configured = this.reflector.getAllAndOverride<PayloadLimitMetadata | undefined>(
-      PAYLOAD_LIMIT_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const configured = this.reflector.getAllAndOverride<
+      PayloadLimitMetadata | undefined
+    >(PAYLOAD_LIMIT_KEY, [context.getHandler(), context.getClass()]);
     const limit = configured?.bytes;
-    if (typeof limit !== 'number' || limit < 1 || limit > MAX_DECORATED_LIMIT_BYTES) {
+    if (
+      typeof limit !== 'number' ||
+      limit < 1 ||
+      limit > MAX_DECORATED_LIMIT_BYTES
+    ) {
       // No usable decorator metadata (or an invalid configured limit): do not
       // reject legitimate traffic based on a broken configuration.
       return true;

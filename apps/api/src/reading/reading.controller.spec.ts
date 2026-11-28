@@ -31,7 +31,8 @@ describe('ReadingController ownership (SEC-02)', () => {
   });
 
   it('declares JwtAuthGuard on the controller', () => {
-    const guards = Reflect.getMetadata(GUARDS_METADATA, ReadingController) ?? [];
+    const guards =
+      Reflect.getMetadata(GUARDS_METADATA, ReadingController) ?? [];
     expect(guards).toContain(JwtAuthGuard);
   });
 
@@ -41,14 +42,20 @@ describe('ReadingController ownership (SEC-02)', () => {
 
     // Call the handler directly with the arguments Nest would inject after
     // resolving @CurrentUser('id') and @Param('id', ParseUUIDPipe).
-    await expect(controller.getById(OWNER_ID, PASSAGE_ID)).resolves.toBe(passage);
+    await expect(controller.getById(OWNER_ID, PASSAGE_ID)).resolves.toBe(
+      passage,
+    );
     expect(readingService.getById).toHaveBeenCalledWith(OWNER_ID, PASSAGE_ID);
   });
 
   it('surfaces the service 404 for a foreign passage instead of returning its body', async () => {
-    readingService.getById.mockRejectedValue(new NotFoundException('Reading passage not found'));
+    readingService.getById.mockRejectedValue(
+      new NotFoundException('Reading passage not found'),
+    );
 
-    await expect(controller.getById(OWNER_ID, PASSAGE_ID)).rejects.toThrow(NotFoundException);
+    await expect(controller.getById(OWNER_ID, PASSAGE_ID)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('getById signature takes two arguments (userId, id)', () => {

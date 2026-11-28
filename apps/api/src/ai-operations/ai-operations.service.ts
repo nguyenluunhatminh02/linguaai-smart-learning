@@ -5,7 +5,11 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { AiOperationsRepository, AiOperationRecord, AiOperationScope } from './ai-operations.repository';
+import {
+  AiOperationsRepository,
+  AiOperationRecord,
+  AiOperationScope,
+} from './ai-operations.repository';
 import {
   AiOperationsPolicy,
   AiOperationFeature,
@@ -56,7 +60,10 @@ export class AiOperationsService {
    * (replay). Same scoped key + different hash is a caller bug and must not
    * silently overwrite the original intent, so it returns HTTP 409.
    */
-  async findOrCreate(userId: string, dto: CreateAiOperationDto): Promise<FindOrCreateResult> {
+  async findOrCreate(
+    userId: string,
+    dto: CreateAiOperationDto,
+  ): Promise<FindOrCreateResult> {
     const scope: AiOperationScope = {
       userId,
       feature: dto.feature as AiOperationFeature,
@@ -71,7 +78,9 @@ export class AiOperationsService {
     };
     const requestHash = this.policy.computeRequestHash(payload);
     const pricingVersion = this.policy.getPricingVersion();
-    const reservedCredits = this.policy.getCost(dto.feature as AiOperationFeature);
+    const reservedCredits = this.policy.getCost(
+      dto.feature as AiOperationFeature,
+    );
 
     const existing = await this.repository.findByScope(scope);
     if (existing) {
@@ -106,7 +115,10 @@ export class AiOperationsService {
     expectedVersion: number,
     ttlMs: number = AiOperationsPolicy.DEFAULT_LEASE_TTL_MS,
   ): Promise<ClaimLeaseResult> {
-    const operation = await this.repository.findByIdForUser(operationId, userId);
+    const operation = await this.repository.findByIdForUser(
+      operationId,
+      userId,
+    );
     if (!operation) {
       throw new NotFoundException('AI operation not found');
     }
@@ -153,7 +165,10 @@ export class AiOperationsService {
 
     if (!updated) {
       // Either a concurrent claim won or the row moved. Re-read and report.
-      const current = await this.repository.findByIdForUser(operation.id, userId);
+      const current = await this.repository.findByIdForUser(
+        operation.id,
+        userId,
+      );
       if (!current) throw new NotFoundException('AI operation not found');
       throw new ConflictException('Another worker has claimed this operation');
     }
@@ -181,7 +196,10 @@ export class AiOperationsService {
       forceRefund?: boolean;
     } = {},
   ): Promise<TerminalizeResult> {
-    const operation = await this.repository.findByIdForUser(operationId, userId);
+    const operation = await this.repository.findByIdForUser(
+      operationId,
+      userId,
+    );
     if (!operation) {
       throw new NotFoundException('AI operation not found');
     }
@@ -203,7 +221,8 @@ export class AiOperationsService {
     }
 
     const chargedCredits =
-      options.chargedCredits ?? (status === 'SUCCEEDED' ? operation.reserved_credits : 0);
+      options.chargedCredits ??
+      (status === 'SUCCEEDED' ? operation.reserved_credits : 0);
 
     const updated = await this.repository.markTerminal({
       id: operation.id,
@@ -220,21 +239,31 @@ export class AiOperationsService {
     if (!updated) {
       // Fencing rejected the write: either the version/lease moved or the
       // row is already terminal. Re-read and surface the actual state.
-      const current = await this.repository.findByIdForUser(operation.id, userId);
+      const current = await this.repository.findByIdForUser(
+        operation.id,
+        userId,
+      );
       if (!current) throw new NotFoundException('AI operation not found');
       if (this.policy.isTerminal(current.status)) {
-        if (current.status === status) return { operation: current, refunded: false };
+        if (current.status === status)
+          return { operation: current, refunded: false };
         throw new ConflictException(
           `Operation is already in terminal state ${current.status}`,
         );
       }
-      throw new ConflictException('Lease or version no longer valid for this operation');
+      throw new ConflictException(
+        'Lease or version no longer valid for this operation',
+      );
     }
 
-    const refunded = await this.maybeRefund(updated, options.forceRefund === true, {
-      status,
-      errorCode: options.errorCode ?? null,
-    });
+    const refunded = await this.maybeRefund(
+      updated,
+      options.forceRefund === true,
+      {
+        status,
+        errorCode: options.errorCode ?? null,
+      },
+    );
     return { operation: updated, refunded };
   }
 
@@ -246,7 +275,10 @@ export class AiOperationsService {
   async maybeRefund(
     operation: AiOperationRecord,
     force = false,
-    context: { status?: AiOperationRecord['status']; errorCode?: string | null } = {},
+    context: {
+      status?: AiOperationRecord['status'];
+      errorCode?: string | null;
+    } = {},
   ): Promise<boolean> {
     if (operation.reserved_credits <= 0) return false;
     if (operation.charged_credits >= operation.reserved_credits && !force) {
@@ -259,7 +291,9 @@ export class AiOperationsService {
       ? { refund: true as const, reason: 'refund' as const }
       : this.policy.getRefundDecision(
           context.status ?? operation.status,
-          context.errorCode !== undefined ? context.errorCode : operation.error_code,
+          context.errorCode !== undefined
+            ? context.errorCode
+            : operation.error_code,
         );
 
     if (!decision.refund) {
@@ -269,7 +303,10 @@ export class AiOperationsService {
       return false;
     }
 
-    const refundAmount = Math.max(0, operation.reserved_credits - operation.charged_credits);
+    const refundAmount = Math.max(
+      0,
+      operation.reserved_credits - operation.charged_credits,
+    );
     if (refundAmount <= 0) return false;
 
     const ledgerKey = this.buildRefundLedgerKey(operation.id);
@@ -299,14 +336,18 @@ export class AiOperationsService {
   /** Short, deterministic, unique-per-operation ledger key for refunds. */
   private buildRefundLedgerKey(operationId: string): string {
     const key = `${REFUND_LEDGER_KEY_PREFIX}${operationId}`;
-    return key.length > MAX_REFUND_KEY_LENGTH ? key.slice(0, MAX_REFUND_KEY_LENGTH) : key;
+    return key.length > MAX_REFUND_KEY_LENGTH
+      ? key.slice(0, MAX_REFUND_KEY_LENGTH)
+      : key;
   }
 
   /** Expose the pricing catalog read-only; cost is never client-supplied. */
   getCost(feature: string): number {
     const cost = AI_OPERATION_COSTS[feature as AiOperationFeature];
     if (cost === undefined) {
-      throw new ConflictException(`Unsupported AI operation feature: ${feature}`);
+      throw new ConflictException(
+        `Unsupported AI operation feature: ${feature}`,
+      );
     }
     return cost;
   }

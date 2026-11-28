@@ -72,7 +72,10 @@ describe('SessionService privacy (SEC-11)', () => {
         SessionService,
         { provide: PrismaService, useValue: prisma },
         { provide: TokenService, useValue: tokens },
-        { provide: TokenBlacklistService, useValue: { clearUserBlacklist: jest.fn() } },
+        {
+          provide: TokenBlacklistService,
+          useValue: { clearUserBlacklist: jest.fn() },
+        },
         { provide: AuditLogService, useValue: audit },
         { provide: RedisService, useValue: redis },
       ],
@@ -122,7 +125,9 @@ describe('SessionService privacy (SEC-11)', () => {
   });
 
   it('does not cancel an account with no pending deletion', async () => {
-    prisma.users.findUnique.mockResolvedValue({ delete_status: DeleteStatus.ACTIVE });
+    prisma.users.findUnique.mockResolvedValue({
+      delete_status: DeleteStatus.ACTIVE,
+    });
     await expect(service.cancelDeleteAccount(user, req)).rejects.toBeInstanceOf(
       NotFoundException,
     );

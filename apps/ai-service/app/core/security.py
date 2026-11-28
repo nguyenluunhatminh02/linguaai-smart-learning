@@ -15,6 +15,7 @@ from __future__ import annotations
 import hmac
 import re
 import unicodedata
+from typing import Any, Iterable
 
 from app.core.limits import MAX_CONTEXT_CHARS, MAX_TEXT_CHARS
 
@@ -84,6 +85,50 @@ def wrap_user_input(
     limit = MAX_TEXT_CHARS if max_chars is None else max_chars
     sanitized = sanitize_user_input(text, max_length=limit)
     return f"{_WRAPPER_OPEN}{sanitized}{_WRAPPER_CLOSE}"
+
+
+def wrap_data_recursive(value: Any) -> Any:
+    """Recursively wrap every string leaf as opaque user data.
+
+    The result is a JSON-serialisable structure where every string leaf —
+    including strings inside dicts, lists and tuples — is enclosed in the
+    ``<user_input>`` envelope. Non-string leaves (numbers, booleans, None) are
+    preserved. Dict keys are sanitised; with an allowlist, keys outside it are
+    dropped so no caller-controlled field name reaches the prompt.
+
+    This is the containment layer for free-form user structures (error lists,
+    nested metadata): the prompt template sees only wrapped data, never raw
+    caller-supplied strings that could carry injection tokens.
+    """
+    return _wrap_recursive(value, allowlist=None)
+
+
+def wrap_data_recursive_filtered(value: Any, allowlist: Iterable[str]) -> Any:
+    """Like :func:`wrap_data_recursive` but drops keys not in ``allowlist``."""
+    return _wrap_recursive(value, allowlist=frozenset(allowlist))
+
+
+def _wrap_recursive(value: Any, allowlist: frozenset[str] | None) -> Any:
+    if isinstance(value, str):
+        return wrap_user_input(value)
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            key_str = str(k)
+            if allowlist is not None and key_str not in allowlist:
+                continue
+            # Keys are sanitised but NOT wrapped: they become JSON object
+            # member names, which cannot carry an XML-like envelope. The
+            # sanitizer strips injection tokens so a malicious key cannot
+            # inject structural markers into the rendered prompt.
+            safe_key = sanitize_user_input(key_str)
+            out[safe_key] = _wrap_recursive(v, allowlist)
+        return out
+    if isinstance(value, (list, tuple)):
+        wrapped = [_wrap_recursive(item, allowlist) for item in value]
+        return wrapped if isinstance(value, list) else tuple(wrapped)
+    # Numbers, booleans, None pass through unchanged.
+    return value
 
 
 def verify_api_key(api_key: str | None, valid_keys: set[str]) -> bool:

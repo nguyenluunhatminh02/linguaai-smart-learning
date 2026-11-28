@@ -5,3 +5,4 @@ export * from './quiz';
 export * from './reading';
 export * from './cms';
 export * from './chat';
+export * from './async-state';

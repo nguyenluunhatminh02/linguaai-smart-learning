@@ -13,7 +13,10 @@ export class RecommendationsController {
 
   @Get('next-activity')
   @ApiOperation({ summary: 'Get the next activity for the learner' })
-  getNextActivity(@CurrentUser('id') userId: string, @Query('language') language?: string) {
+  getNextActivity(
+    @CurrentUser('id') userId: string,
+    @Query('language') language?: string,
+  ) {
     return this.recommendationsService.getNextActivity(userId, language);
   }
 
@@ -31,7 +34,8 @@ export class RecommendationsController {
   @Post('invalidate-cache')
   @ApiOperation({
     summary: 'Invalidate learning path cache',
-    description: 'Call after completing an activity to get fresh recommendations.',
+    description:
+      'Call after completing an activity to get fresh recommendations.',
   })
   invalidateCache(@CurrentUser('id') userId: string) {
     return this.recommendationsService.invalidateCache(userId);

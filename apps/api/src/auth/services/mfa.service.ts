@@ -1,16 +1,21 @@
-import { Injectable, BadRequestException, HttpException, HttpStatus } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { Request } from "express";
-import { generateSecret, verify, generateURI } from "otplib";
-import * as QRCode from "qrcode";
-import * as crypto from "crypto";
-import { PrismaService } from "../../prisma/prisma.service";
-import { AuditLogService } from "../../common/services/audit-log.service";
-import { RedisService } from "../../common/services/redis.service";
-import { extractRequestContext } from "../../common/utils/request-context.util";
-import { LoginAction } from "../../users/enums/login-action.enum";
-import { User } from "../../users/entities/user.entity";
-import { DateUtil } from "../../common/utils/date.util";
+import {
+  Injectable,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
+import { generateSecret, verify, generateURI } from 'otplib';
+import * as QRCode from 'qrcode';
+import * as crypto from 'crypto';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
+import { RedisService } from '../../common/services/redis.service';
+import { extractRequestContext } from '../../common/utils/request-context.util';
+import { LoginAction } from '../../users/enums/login-action.enum';
+import { User } from '../../users/entities/user.entity';
+import { DateUtil } from '../../common/utils/date.util';
 
 export interface MfaSetupResult {
   secret: string;
@@ -32,13 +37,13 @@ export class MfaService {
     private readonly auditLogService: AuditLogService,
     private readonly redis: RedisService,
   ) {
-    const mfaKey = config.get<string>("MFA_ENCRYPTION_KEY");
-    const secret = config.get<string>("JWT_SECRET");
+    const mfaKey = config.get<string>('MFA_ENCRYPTION_KEY');
+    const secret = config.get<string>('JWT_SECRET');
     if (!secret) {
-      throw new Error("JWT_SECRET must be defined. Set it in your .env file.");
+      throw new Error('JWT_SECRET must be defined. Set it in your .env file.');
     }
     this.encKey = crypto
-      .createHash("sha256")
+      .createHash('sha256')
       .update(mfaKey || secret)
       .digest();
   }
@@ -48,22 +53,32 @@ export class MfaService {
   // RedisService degrades gracefully when Redis is down; these wrappers also
   // tolerate lightweight test doubles that implement only a subset of it.
   private async redisGet(key: string): Promise<string | null> {
-    return typeof this.redis.get === 'function' ? await this.redis.get(key) : null;
+    return typeof this.redis.get === 'function'
+      ? await this.redis.get(key)
+      : null;
   }
 
-  private async redisSet(key: string, value: string, ttl: number): Promise<void> {
-    if (typeof this.redis.set === 'function') await this.redis.set(key, value, ttl);
+  private async redisSet(
+    key: string,
+    value: string,
+    ttl: number,
+  ): Promise<void> {
+    if (typeof this.redis.set === 'function')
+      await this.redis.set(key, value, ttl);
   }
 
   private async redisIncrWithExpiry(key: string, ttl: number): Promise<number> {
     if (typeof this.redis.incrWithExpiry === 'function') {
       return await this.redis.incrWithExpiry(key, ttl);
     }
-    return typeof this.redis.incr === 'function' ? await this.redis.incr(key) : 1;
+    return typeof this.redis.incr === 'function'
+      ? await this.redis.incr(key)
+      : 1;
   }
 
   private async redisExpire(key: string, ttl: number): Promise<void> {
-    if (typeof this.redis.expire === 'function') await this.redis.expire(key, ttl);
+    if (typeof this.redis.expire === 'function')
+      await this.redis.expire(key, ttl);
   }
 
   /** Throttle attempts per user so TOTP codes cannot be brute-forced. */
@@ -78,13 +93,19 @@ export class MfaService {
     }
   }
 
-  private async recordFailedAttempt(userId: string, purpose: string): Promise<void> {
+  private async recordFailedAttempt(
+    userId: string,
+    purpose: string,
+  ): Promise<void> {
     const key = `mfa:fail:${purpose}:${userId}`;
     const count = await this.redisIncrWithExpiry(key, MFA_LOCKOUT_SECONDS);
     if (count === 1) await this.redisExpire(key, MFA_LOCKOUT_SECONDS);
   }
 
-  private async clearFailedAttempts(userId: string, purpose: string): Promise<void> {
+  private async clearFailedAttempts(
+    userId: string,
+    purpose: string,
+  ): Promise<void> {
     await this.redis.del(`mfa:fail:${purpose}:${userId}`);
   }
 
@@ -92,10 +113,17 @@ export class MfaService {
    * Reject a code if a code from the same or an earlier 30-second TOTP step
    * has already been used. Prevents replay of a shoulder-surfed code.
    */
-  private async consumeTotpStep(userId: string, step: number): Promise<boolean> {
+  private async consumeTotpStep(
+    userId: string,
+    step: number,
+  ): Promise<boolean> {
     const key = `mfa:laststep:${userId}`;
     const lastStepRaw = await this.redisGet(key);
-    if (lastStepRaw !== null && !Number.isNaN(Number(lastStepRaw)) && step <= Number(lastStepRaw)) {
+    if (
+      lastStepRaw !== null &&
+      !Number.isNaN(Number(lastStepRaw)) &&
+      step <= Number(lastStepRaw)
+    ) {
       return false;
     }
     await this.redisSet(key, String(step), 60);
@@ -103,19 +131,27 @@ export class MfaService {
   }
 
   private hashBackupCode(code: string): string {
-    return crypto.createHash("sha256").update(code).digest("hex");
+    return crypto.createHash('sha256').update(code).digest('hex');
   }
 
-  private async auditMfaFailure(user: User, reason: string, req?: Request): Promise<void> {
+  private async auditMfaFailure(
+    user: User,
+    reason: string,
+    req?: Request,
+  ): Promise<void> {
     try {
       await this.auditLogService.recordLoginHistory(
         user,
         LoginAction.LOGIN_FAILED,
-        req ? extractRequestContext(req) : { ip: 'unknown', ua: '', device: 'Unknown' },
+        req
+          ? extractRequestContext(req)
+          : { ip: 'unknown', ua: '', device: 'Unknown' },
         false,
         reason,
       );
-    } catch { /* audit logging must not break MFA */ }
+    } catch {
+      /* audit logging must not break MFA */
+    }
   }
 
   // ─── Setup MFA ─────────────────────────────────────────────────────────────
@@ -126,7 +162,7 @@ export class MfaService {
    */
   async setupMfa(user: User): Promise<MfaSetupResult> {
     if (user.twoFactorEnabled) {
-      throw new BadRequestException("MFA is already enabled");
+      throw new BadRequestException('MFA is already enabled');
     }
 
     const secret = generateSecret();
@@ -152,7 +188,7 @@ export class MfaService {
       },
     });
 
-    const issuer = this.config.get<string>("MFA_ISSUER", "TicketApp");
+    const issuer = this.config.get<string>('MFA_ISSUER', 'TicketApp');
     const otpAuthUri = generateURI({ label: user.email, issuer, secret });
     const qrCodeUrl = await QRCode.toDataURL(otpAuthUri);
 
@@ -173,12 +209,12 @@ export class MfaService {
     const mfaSecret = await this.prisma.mfa_secrets.findUnique({
       where: { user_id: user.id },
     });
-    if (!mfaSecret) throw new BadRequestException("MFA setup not started");
+    if (!mfaSecret) throw new BadRequestException('MFA setup not started');
     if (user.twoFactorEnabled) {
-      throw new BadRequestException("MFA is already enabled");
+      throw new BadRequestException('MFA is already enabled');
     }
     if (mfaSecret.enabled && mfaSecret.verified) {
-      throw new BadRequestException("MFA is already enabled");
+      throw new BadRequestException('MFA is already enabled');
     }
 
     await this.checkRateLimit(user.id, 'confirm');
@@ -187,8 +223,12 @@ export class MfaService {
     const verification = await verify({ token: dto.code, secret });
     if (!verification.valid) {
       await this.recordFailedAttempt(user.id, 'confirm');
-      await this.auditMfaFailure(user, 'Invalid MFA setup confirmation code', req);
-      throw new BadRequestException("Invalid MFA code");
+      await this.auditMfaFailure(
+        user,
+        'Invalid MFA setup confirmation code',
+        req,
+      );
+      throw new BadRequestException('Invalid MFA code');
     }
     await this.clearFailedAttempts(user.id, 'confirm');
 
@@ -210,7 +250,7 @@ export class MfaService {
       ctx,
       true,
     );
-    return { message: "Two-factor authentication enabled" };
+    return { message: 'Two-factor authentication enabled' };
   }
 
   // ─── Verify code (dùng khi login) ─────────────────────────────────────────
@@ -241,7 +281,8 @@ export class MfaService {
     const verification = await verify({ token: code, secret });
     if (verification.valid) {
       // Reject replays of a code used in the same 30-second TOTP step.
-      const timeStep = (verification as any).timeStep ?? Math.floor(Date.now() / 30000);
+      const timeStep =
+        (verification as any).timeStep ?? Math.floor(Date.now() / 30000);
       if (!(await this.consumeTotpStep(user.id, timeStep))) {
         await this.recordFailedAttempt(user.id, 'verify');
         return false;
@@ -282,10 +323,10 @@ export class MfaService {
     req: Request,
   ): Promise<{ message: string }> {
     if (!user.twoFactorEnabled)
-      throw new BadRequestException("MFA is not enabled");
+      throw new BadRequestException('MFA is not enabled');
 
     const valid = await this.verifyCodeOrBackup(user, dto.code);
-    if (!valid) throw new BadRequestException("Invalid MFA code");
+    if (!valid) throw new BadRequestException('Invalid MFA code');
 
     await this.prisma.mfa_secrets.delete({ where: { user_id: user.id } });
     await this.prisma.users.update({
@@ -301,7 +342,7 @@ export class MfaService {
       ctx,
       true,
     );
-    return { message: "Two-factor authentication disabled" };
+    return { message: 'Two-factor authentication disabled' };
   }
 
   // ─── Regenerate Backup Codes ───────────────────────────────────────────────
@@ -314,7 +355,7 @@ export class MfaService {
       where: { user_id: userId },
     });
     if (!mfaSecret || !mfaSecret.enabled || !mfaSecret.verified) {
-      throw new BadRequestException("MFA is not enabled");
+      throw new BadRequestException('MFA is not enabled');
     }
 
     await this.checkRateLimit(userId, 'regenerate');
@@ -323,12 +364,12 @@ export class MfaService {
     try {
       secret = this.decrypt(mfaSecret.secret_encrypted);
     } catch {
-      throw new BadRequestException("MFA secret is unavailable");
+      throw new BadRequestException('MFA secret is unavailable');
     }
     const verification = await verify({ token: totpCode, secret });
     if (!verification.valid) {
       await this.recordFailedAttempt(userId, 'regenerate');
-      throw new BadRequestException("Invalid TOTP code");
+      throw new BadRequestException('Invalid TOTP code');
     }
     await this.clearFailedAttempts(userId, 'regenerate');
 
@@ -364,37 +405,37 @@ export class MfaService {
 
   private encrypt(text: string): string {
     const iv = crypto.randomBytes(12); // 96-bit IV for GCM
-    const cipher = crypto.createCipheriv("aes-256-gcm", this.encKey, iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.encKey, iv);
     const encrypted = Buffer.concat([
-      cipher.update(text, "utf8"),
+      cipher.update(text, 'utf8'),
       cipher.final(),
     ]);
     const authTag = cipher.getAuthTag();
     // Format: iv:authTag:ciphertext (all hex)
-    return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted.toString("hex")}`;
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
   }
 
   private decrypt(data: string): string {
     try {
-      const parts = data.split(":");
-      if (parts.length !== 3) throw new Error("Malformed ciphertext");
+      const parts = data.split(':');
+      if (parts.length !== 3) throw new Error('Malformed ciphertext');
       const [ivHex, authTagHex, encHex] = parts;
-      const iv = Buffer.from(ivHex, "hex");
-      const authTag = Buffer.from(authTagHex, "hex");
-      const encrypted = Buffer.from(encHex, "hex");
+      const iv = Buffer.from(ivHex, 'hex');
+      const authTag = Buffer.from(authTagHex, 'hex');
+      const encrypted = Buffer.from(encHex, 'hex');
       if (iv.length !== 12 || authTag.length !== 16 || encrypted.length === 0) {
-        throw new Error("Malformed ciphertext");
+        throw new Error('Malformed ciphertext');
       }
-      const decipher = crypto.createDecipheriv("aes-256-gcm", this.encKey, iv);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', this.encKey, iv);
       decipher.setAuthTag(authTag);
       return Buffer.concat([
         decipher.update(encrypted),
         decipher.final(),
-      ]).toString("utf8");
-    } catch (err) {
+      ]).toString('utf8');
+    } catch {
       // Corrupt ciphertext or an old encryption key must fail cleanly so
       // callers can return 401/400 instead of crashing with a 500.
-      throw new Error("Unable to decrypt MFA secret");
+      throw new Error('Unable to decrypt MFA secret');
     }
   }
 
@@ -404,7 +445,7 @@ export class MfaService {
     // 16 bytes (128 bits) of entropy per code; lowercase hex is easy to
     // transcribe and keeps compatibility with existing code validation.
     return Array.from({ length: count }, () =>
-      crypto.randomBytes(16).toString("hex"),
+      crypto.randomBytes(16).toString('hex'),
     );
   }
 }

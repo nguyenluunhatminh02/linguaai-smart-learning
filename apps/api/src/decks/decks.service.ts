@@ -41,7 +41,13 @@ export class DecksService {
         where,
       }),
     ]);
-    return { items, total, page, pageSize: limit, totalPages: Math.ceil(total / limit) };
+    return {
+      items,
+      total,
+      page,
+      pageSize: limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   /**
@@ -102,21 +108,22 @@ export class DecksService {
     });
     const ids = cardIds.map((card) => card.id);
 
-    const [foreignSessions, foreignProgress, foreignReviews] = await Promise.all([
-      this.prisma.review_sessions.count({
-        where: { deck_id: id, user_id: { not: userId } },
-      }),
-      ids.length
-        ? this.prisma.user_card_progress.count({
-            where: { card_id: { in: ids }, user_id: { not: userId } },
-          })
-        : Promise.resolve(0),
-      ids.length
-        ? this.prisma.srs_review_events.count({
-            where: { card_id: { in: ids }, user_id: { not: userId } },
-          })
-        : Promise.resolve(0),
-    ]);
+    const [foreignSessions, foreignProgress, foreignReviews] =
+      await Promise.all([
+        this.prisma.review_sessions.count({
+          where: { deck_id: id, user_id: { not: userId } },
+        }),
+        ids.length
+          ? this.prisma.user_card_progress.count({
+              where: { card_id: { in: ids }, user_id: { not: userId } },
+            })
+          : Promise.resolve(0),
+        ids.length
+          ? this.prisma.srs_review_events.count({
+              where: { card_id: { in: ids }, user_id: { not: userId } },
+            })
+          : Promise.resolve(0),
+      ]);
 
     if (foreignSessions + foreignProgress + foreignReviews > 0) {
       if (deck.is_public) {

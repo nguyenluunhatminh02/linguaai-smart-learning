@@ -1,5 +1,20 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards, ParseUUIDPipe, Headers } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+  Headers,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ReadingService } from './reading.service';
 import { GenerateReadingDto, AnalyzeTextDto } from './dto/reading.dto';
@@ -26,8 +41,15 @@ export class ReadingController {
   ) {
     // Namespace the idempotency key per user so one user cannot suppress
     // another's token charge by replaying a known/guessed key.
-    const namespacedKey = idempotencyKey ? `${userId}:${idempotencyKey}` : undefined;
-    await this.tokensService.consumeTokens(userId, 'reading_generate', undefined, namespacedKey);
+    const namespacedKey = idempotencyKey
+      ? `${userId}:${idempotencyKey}`
+      : undefined;
+    await this.tokensService.consumeTokens(
+      userId,
+      'reading_generate',
+      undefined,
+      namespacedKey,
+    );
     return this.readingService.generate(userId, dto);
   }
 
@@ -51,10 +73,15 @@ export class ReadingController {
   @Get('recommendations')
   @ApiOperation({
     summary: 'Get personalized reading topic recommendations',
-    description: 'Returns ranked topic suggestions based on reading history. Excludes recently read topics.',
+    description:
+      'Returns ranked topic suggestions based on reading history. Excludes recently read topics.',
   })
   @ApiQuery({ name: 'language', required: false, example: 'english' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Number of topics to return (default 5)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Number of topics to return (default 5)',
+  })
   getRecommendations(
     @CurrentUser('id') userId: string,
     @Query('language') language?: string,
@@ -62,7 +89,11 @@ export class ReadingController {
   ) {
     // Clamp limit to a safe range to prevent resource abuse.
     const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 50);
-    return this.readingService.getRecommendations(userId, language || 'english', safeLimit);
+    return this.readingService.getRecommendations(
+      userId,
+      language || 'english',
+      safeLimit,
+    );
   }
 
   @Get('history')
@@ -82,7 +113,10 @@ export class ReadingController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a reading passage by ID' })
-  getById(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+  getById(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.readingService.getById(userId, id);
   }
 }

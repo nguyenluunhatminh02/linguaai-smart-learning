@@ -5,7 +5,10 @@
  */
 
 import { AiOperationsService } from '../src/ai-operations/ai-operations.service';
-import { AiOperationsRepository, AiOperationRecord } from '../src/ai-operations/ai-operations.repository';
+import {
+  AiOperationsRepository,
+  AiOperationRecord,
+} from '../src/ai-operations/ai-operations.repository';
 import { AiOperationsPolicy } from '../src/ai-operations/ai-operations.policy';
 import { ChatService } from '../src/chat/chat.service';
 import { FakeLlmProvider } from './fixtures/chat-billing.fixture';
@@ -16,7 +19,9 @@ const CONVERSATION_ID = '33333333-3333-4333-8333-333333333333';
 const LEASE_TOKEN = 'lease-token';
 const REQUEST_HASH = 'hash';
 
-function operation(overrides: Partial<AiOperationRecord> = {}): AiOperationRecord {
+function operation(
+  overrides: Partial<AiOperationRecord> = {},
+): AiOperationRecord {
   return {
     id: OP_ID,
     user_id: USER_ID,
@@ -99,7 +104,9 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
       findExpired: jest.fn(),
       isKnownRequestError: jest.fn(),
     };
-    tokens = { addTokens: jest.fn().mockResolvedValue({ balance: 5, added: 5 }) };
+    tokens = {
+      addTokens: jest.fn().mockResolvedValue({ balance: 5, added: 5 }),
+    };
     policy = new AiOperationsPolicy();
     jest.spyOn(policy, 'computeRequestHash').mockReturnValue(REQUEST_HASH);
     service = new AiOperationsService(
@@ -118,9 +125,9 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
       },
-      $transaction: jest.fn().mockImplementation(async (fn: (tx: unknown) => unknown) =>
-        fn(prisma),
-      ),
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     };
     chat = new ChatService(prisma as never, llm as never);
   });
@@ -170,7 +177,9 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
 
   it('keeps the original operation when a key is reused with a different payload', async () => {
     await reserveClaimAndStart();
-    repository.findByScope.mockResolvedValueOnce(operation({ request_hash: 'other' }));
+    repository.findByScope.mockResolvedValueOnce(
+      operation({ request_hash: 'other' }),
+    );
     await expect(
       service.findOrCreate(USER_ID, {
         feature: 'ai_chat',
@@ -348,7 +357,11 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
   it('stale lease token cannot commit a result after the lease moved', async () => {
     const { operation: reserved, claim } = await reserveClaimAndStart();
     repository.findByIdForUser.mockResolvedValueOnce(
-      operation({ status: 'RUNNING', version: 2, lease_token: 'another-token' }),
+      operation({
+        status: 'RUNNING',
+        version: 2,
+        lease_token: 'another-token',
+      }),
     );
     repository.markTerminal.mockResolvedValueOnce(null);
     await expect(
@@ -368,7 +381,12 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
       operation({ status: 'RUNNING', version: 1, lease_token: LEASE_TOKEN }),
     );
     repository.markTerminal.mockResolvedValueOnce(
-      operation({ status: 'CANCELLED', version: 2, lease_token: null, lease_until: null }),
+      operation({
+        status: 'CANCELLED',
+        version: 2,
+        lease_token: null,
+        lease_until: null,
+      }),
     );
     const cancelled = await service.markTerminal(
       USER_ID,
@@ -380,9 +398,7 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
     expect(cancelled.operation.status).toBe('CANCELLED');
 
     repository.findByIdForUser.mockResolvedValueOnce(cancelled.operation);
-    await expect(
-      service.claimLease(USER_ID, reserved.id, 2),
-    ).rejects.toThrow();
+    await expect(service.claimLease(USER_ID, reserved.id, 2)).rejects.toThrow();
   });
 
   it('T12 variant — terminal SUCCEEDED is immutable and a replay cannot change the result', async () => {
@@ -401,14 +417,9 @@ describe('Chat billing orchestrator state transitions (CHAT-04)', () => {
 
     repository.findByIdForUser.mockResolvedValueOnce(done.operation);
     await expect(
-      service.markTerminal(
-        USER_ID,
-        reserved.id,
-        2,
-        LEASE_TOKEN,
-        'FAILED',
-        { errorCode: 'PROVIDER_UNAVAILABLE' },
-      ),
+      service.markTerminal(USER_ID, reserved.id, 2, LEASE_TOKEN, 'FAILED', {
+        errorCode: 'PROVIDER_UNAVAILABLE',
+      }),
     ).rejects.toThrow();
     expect(repository.markTerminal).toHaveBeenCalledTimes(1);
     expect(tokens.addTokens).not.toHaveBeenCalled();

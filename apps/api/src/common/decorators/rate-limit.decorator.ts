@@ -3,7 +3,14 @@ import { RateLimitConfig } from '../services/rate-limiter.service';
 
 export const RATE_LIMIT_KEY = 'rate_limit';
 
-export type RateLimitType = 'LOGIN' | 'REGISTER' | 'PASSWORD_RESET' | 'EMAIL_VERIFICATION' | 'MFA' | 'GENERAL' | 'IP';
+export type RateLimitType =
+  | 'LOGIN'
+  | 'REGISTER'
+  | 'PASSWORD_RESET'
+  | 'EMAIL_VERIFICATION'
+  | 'MFA'
+  | 'GENERAL'
+  | 'IP';
 
 export const RATE_LIMIT_CONFIGS: Record<RateLimitType, RateLimitConfig> = {
   LOGIN: { limit: 5, window: 900, keyPrefix: 'login' },
@@ -16,9 +23,7 @@ export const RATE_LIMIT_CONFIGS: Record<RateLimitType, RateLimitConfig> = {
 };
 
 export const RateLimit = (config: RateLimitType | RateLimitConfig) => {
-  const rateLimitConfig = typeof config === 'string'
-    ? RATE_LIMIT_CONFIGS[config]
-    : config;
+  const rateLimitConfig =
+    typeof config === 'string' ? RATE_LIMIT_CONFIGS[config] : config;
   return SetMetadata(RATE_LIMIT_KEY, rateLimitConfig);
 };
-

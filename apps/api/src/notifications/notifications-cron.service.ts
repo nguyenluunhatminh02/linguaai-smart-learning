@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
-import { notifications_type_enum, notifications_channel_enum } from '../generated/prisma';
+import {
+  notifications_type_enum,
+  notifications_channel_enum,
+} from '../generated/prisma';
 
 @Injectable()
 export class NotificationsCronService {
@@ -36,7 +39,9 @@ export class NotificationsCronService {
         },
       });
 
-      this.logger.log(`Found ${dueCards.length} users with cards due for review today.`);
+      this.logger.log(
+        `Found ${dueCards.length} users with cards due for review today.`,
+      );
 
       for (const group of dueCards) {
         if (!group.user_id) continue;
@@ -60,7 +65,10 @@ export class NotificationsCronService {
 
       this.logger.log('Daily SRS review reminder sent successfully.');
     } catch (err: any) {
-      this.logger.error(`Failed to run daily SRS reminder: ${err.message}`, err.stack);
+      this.logger.error(
+        `Failed to run daily SRS reminder: ${err.message}`,
+        err.stack,
+      );
     }
   }
 }

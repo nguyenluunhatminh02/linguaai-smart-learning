@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 import { verifyAuthHeader } from "@/lib/auth/jwt-verify";
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
+const ALLOWED_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
+const ALLOWED_CATEGORIES = [
+  'conversation',
+  'news',
+  'academic',
+  'business',
+  'daily-life',
+] as const;
+
+/**
+ * Listening generation is intentionally a thin BFF proxy: the provider key,
+ * token reservation, durable idempotency and operation ledger all live behind
+ * the NestJS API. This route only authenticates the caller, validates the
+ * request shape, and relays the legacy { data } / { error } contract used by
+ * the listening page.
+ */
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   const user = await verifyAuthHeader(authHeader);
@@ -13,117 +27,130 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  let body: unknown;
   try {
-    // Validate the request before charging tokens so malformed input is free.
-    const body = await req.json();
-    const { topic, level, category } = body as {
-      topic?: string;
-      level?: string;
-      category?: string;
-    };
-    if (typeof topic !== 'string' || topic.trim().length === 0 || topic.length > 500) {
-      return NextResponse.json({ error: 'Invalid topic' }, { status: 400 });
-    }
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
 
-    // Stable per-request idempotency key: retries of the same user request (or
-    // a retried consume fetch) must not charge the user twice.
-    const idempotencyKey = createHash('sha256')
-      .update(`${user.id}:listening_generate:${topic}:${level ?? ''}:${category ?? ''}`)
-      .digest('hex');
+  // Validate inputs locally so malformed requests never reach the backend or
+  // consume tokens. The backend performs its own validation as the source of
+  // truth; this is a defence-in-depth fast-fail.
+  const { topic, level, category } = (body ?? {}) as {
+    topic?: unknown;
+    level?: unknown;
+    category?: unknown;
+  };
 
-    // Call backend /tokens/consume
-    try {
-      const consumeRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/tokens/consume`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader!,
-          'Idempotency-Key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          feature: 'listening_generate',
-          cost: 8,
-        }),
-      });
+  if (typeof topic !== 'string' || topic.trim().length === 0 || topic.length > 500) {
+    return NextResponse.json({ error: 'Invalid topic' }, { status: 400 });
+  }
 
-      if (!consumeRes.ok) {
-        if (consumeRes.status === 400) {
-          return NextResponse.json({ error: 'Insufficient tokens' }, { status: 400 });
-        }
-        return NextResponse.json({ error: 'Failed to consume tokens' }, { status: consumeRes.status });
-      }
-    } catch (err) {
-      console.error('[Listening API] Token consume error:', err);
-      return NextResponse.json({ error: 'Failed to connect to token service' }, { status: 500 });
-    }
+  const normalizedLevel =
+    typeof level === 'string' && (ALLOWED_LEVELS as readonly string[]).includes(level)
+      ? level
+      : undefined;
+  if (level !== undefined && !normalizedLevel) {
+    return NextResponse.json({ error: 'Invalid level' }, { status: 400 });
+  }
 
-    const systemPrompt = `You are an English listening comprehension exercise generator. Create a listening exercise for an ESL student.
+  const normalizedCategory =
+    typeof category === 'string' &&
+    (ALLOWED_CATEGORIES as readonly string[]).includes(category)
+      ? category
+      : undefined;
+  if (category !== undefined && !normalizedCategory) {
+    return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
+  }
 
-Topic: "${topic || 'general conversation'}"
-Student level: ${level || 'B1'}
-Category: ${category || 'conversation'}
-
-Generate a listening exercise with the following EXACT JSON format:
-{
-  "title": "<exercise title in English>",
-  "titleVi": "<exercise title in Vietnamese>",
-  "level": "${level || 'B1'}",
-  "category": "${category || 'conversation'}",
-  "duration": "<estimated duration like 2-3 min>",
-  "transcript": "<a natural English dialogue or monologue, 100-200 words appropriate for the level>",
-  "vocabulary": [
-    { "word": "<key word>", "definition": "<English definition>", "definitionVi": "<Vietnamese definition>" },
-    { "word": "<key word>", "definition": "<English definition>", "definitionVi": "<Vietnamese definition>" }
-  ],
-  "questions": [
-    { "question": "<comprehension question>", "options": ["<A>", "<B>", "<C>", "<D>"], "correctAnswer": <0-3 index>, "explanation": "<why this is correct>" },
-    { "question": "<comprehension question>", "options": ["<A>", "<B>", "<C>", "<D>"], "correctAnswer": <0-3 index>, "explanation": "<why this is correct>" },
-    { "question": "<comprehension question>", "options": ["<A>", "<B>", "<C>", "<D>"], "correctAnswer": <0-3 index>, "explanation": "<why this is correct>" }
-  ]
-}
-
-Generate 4-6 vocabulary items and 3-5 questions. Make the transcript natural and engaging.
-The transcript should be suitable for text-to-speech reading.
-Return ONLY the JSON, no markdown fences.`;
-
-    const response = await fetch(GROQ_URL, {
+  try {
+    const backendRes = await fetch(`${API_URL}/listening/generate`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
+        'Authorization': authHeader!,
+        'Idempotency-Key': randomUUID(),
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Generate a listening exercise about: ${topic || 'an interesting everyday topic'}` },
-        ],
-        temperature: 0.8,
-        max_tokens: 2048,
+        topic: topic.trim(),
+        ...(normalizedLevel ? { level: normalizedLevel } : {}),
+        ...(normalizedCategory ? { category: normalizedCategory } : {}),
       }),
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('[Listening Generate API] Groq error:', response.status, errText);
-      return NextResponse.json({ error: 'Groq API error' }, { status: 502 });
+    if (backendRes.status === 200) {
+      const json = await backendRes.json();
+      // Preserve the legacy UI contract: the page reads json.data.
+      if (json?.data) {
+        return NextResponse.json({ data: json.data });
+      }
+      console.error('[Listening Generate API] Backend returned no data');
+      return NextResponse.json({ error: 'Invalid AI response' }, { status: 502 });
     }
 
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
+    let json: { error?: unknown; message?: unknown; detail?: unknown } = {};
     try {
-      const parsed = JSON.parse(content);
-      return NextResponse.json({ data: parsed });
+      json = await backendRes.json();
     } catch {
-      // Log the raw completion server-side only. Never echo model output to the
-      // browser: it may contain injected markup or leaked system-prompt text.
-      console.error('[Listening Generate API] Invalid AI JSON:', content.slice(0, 1000));
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 502 });
+      // Non-JSON gateway errors still need a stable UI error shape.
+    }
+
+    const message =
+      (typeof json.error === 'string' && json.error) ||
+      (typeof json.message === 'string' && json.message) ||
+      (typeof json.detail === 'string' && json.detail);
+
+    switch (backendRes.status) {
+      case 400:
+        return NextResponse.json(
+          { error: message || 'Invalid request' },
+          { status: 400 },
+        );
+      case 401:
+      case 403:
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      case 402:
+        return NextResponse.json(
+          { error: message || 'Insufficient tokens' },
+          { status: 402 },
+        );
+      case 409:
+        return NextResponse.json(
+          { error: message || 'Duplicate request' },
+          { status: 409 },
+        );
+      case 429:
+        return NextResponse.json(
+          { error: message || 'Too many requests' },
+          { status: 429 },
+        );
+      case 502:
+        return NextResponse.json(
+          { error: message || 'AI service temporarily unavailable' },
+          { status: 502 },
+        );
+      default:
+        if (backendRes.status >= 500) {
+          console.error(
+            '[Listening Generate API] Backend error:',
+            backendRes.status,
+          );
+          return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 },
+          );
+        }
+        return NextResponse.json(
+          { error: message || 'Failed to generate listening exercise' },
+          { status: 502 },
+        );
     }
   } catch (error) {
     console.error('[Listening Generate API] Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to connect to listening service' },
+      { status: 502 },
+    );
   }
 }

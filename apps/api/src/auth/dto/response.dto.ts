@@ -36,7 +36,11 @@ export class AuthResponseDto {
   mfaToken?: string;
 
   /** Factory: đăng nhập thành công */
-  static of(accessToken: string, refreshToken: string, user: UserInfoDto): AuthResponseDto {
+  static of(
+    accessToken: string,
+    refreshToken: string,
+    user: UserInfoDto,
+  ): AuthResponseDto {
     return {
       accessToken,
       refreshToken,
@@ -54,7 +58,9 @@ export class AuthResponseDto {
 
 // ─── MFA Setup Response ───────────────────────────────────────────────────────
 export class MfaSetupResponseDto {
-  @ApiProperty({ description: 'Raw TOTP secret (dùng để nhập thủ công nếu không scan QR)' })
+  @ApiProperty({
+    description: 'Raw TOTP secret (dùng để nhập thủ công nếu không scan QR)',
+  })
   secret: string;
 
   @ApiProperty({ description: 'QR code data URL (base64 PNG)' })
@@ -84,7 +90,9 @@ export class DeviceResponseDto {
       deviceId: d.device_id,
       deviceName: d.device_name,
       deviceType: d.device_type,
-      browser: d.browser ? `${d.browser} ${d.browser_version ?? ''}`.trim() : undefined,
+      browser: d.browser
+        ? `${d.browser} ${d.browser_version ?? ''}`.trim()
+        : undefined,
       operatingSystem: d.operating_system
         ? `${d.operating_system} ${d.os_version ?? ''}`.trim()
         : undefined,

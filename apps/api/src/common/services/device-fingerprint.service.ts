@@ -25,7 +25,7 @@ export interface DeviceFingerprintData {
 
 /**
  * Device Fingerprint Service
- * 
+ *
  * Generates and manages device fingerprints for security purposes.
  * Helps identify trusted devices and detect suspicious login attempts.
  */
@@ -35,7 +35,7 @@ export class DeviceFingerprintService {
 
   /**
    * Generate a device fingerprint from request data
-   * 
+   *
    * @param data - The device fingerprint data
    * @returns A unique fingerprint hash
    */
@@ -43,18 +43,20 @@ export class DeviceFingerprintService {
     try {
       // Create a normalized string from the device data
       const normalizedData = this.normalizeDeviceData(data);
-      
+
       // Generate a hash from the normalized data
       return this.hashData(normalizedData);
     } catch (error) {
-      this.logger.error(`Error generating device fingerprint: ${error.message}`);
+      this.logger.error(
+        `Error generating device fingerprint: ${error.message}`,
+      );
       return this.generateFallbackFingerprint(data);
     }
   }
 
   /**
    * Generate a device fingerprint from HTTP request
-   * 
+   *
    * @param req - The HTTP request object
    * @returns A unique fingerprint hash
    */
@@ -78,7 +80,7 @@ export class DeviceFingerprintService {
 
   /**
    * Compare two fingerprints for similarity
-   * 
+   *
    * @param fp1 - First fingerprint
    * @param fp2 - Second fingerprint
    * @returns True if fingerprints match
@@ -89,7 +91,7 @@ export class DeviceFingerprintService {
 
   /**
    * Extract device information from user agent
-   * 
+   *
    * @param userAgent - The user agent string
    * @returns Parsed device information
    */
@@ -100,7 +102,7 @@ export class DeviceFingerprintService {
   } {
     // Simple user agent parsing
     // In production, use a library like 'ua-parser-js'
-    
+
     let browser = 'Unknown';
     let os = 'Unknown';
     let deviceType = 'desktop';
@@ -132,7 +134,11 @@ export class DeviceFingerprintService {
     }
 
     // Device type detection
-    if (userAgent.includes('Mobile') || userAgent.includes('Android') || userAgent.includes('iPhone')) {
+    if (
+      userAgent.includes('Mobile') ||
+      userAgent.includes('Android') ||
+      userAgent.includes('iPhone')
+    ) {
       deviceType = 'mobile';
     } else if (userAgent.includes('Tablet') || userAgent.includes('iPad')) {
       deviceType = 'tablet';
@@ -143,7 +149,7 @@ export class DeviceFingerprintService {
 
   /**
    * Extract IP address from request
-   * 
+   *
    * @param req - The HTTP request object
    * @returns The IP address
    */
@@ -166,7 +172,7 @@ export class DeviceFingerprintService {
 
   /**
    * Normalize device data for consistent fingerprinting
-   * 
+   *
    * @param data - The device fingerprint data
    * @returns Normalized data string
    */
@@ -200,7 +206,7 @@ export class DeviceFingerprintService {
 
   /**
    * Hash data to generate fingerprint
-   * 
+   *
    * @param data - The data to hash
    * @returns The hashed fingerprint
    */
@@ -210,57 +216,59 @@ export class DeviceFingerprintService {
 
   /**
    * Generate a fallback fingerprint when error occurs
-   * 
+   *
    * @param data - The device fingerprint data
    * @returns A simple fallback fingerprint
    */
   private generateFallbackFingerprint(data: DeviceFingerprintData): string {
     const parts: string[] = [];
-    
+
     if (data.userAgent) {
       parts.push(data.userAgent);
     }
     if (data.ipAddress) {
       parts.push(data.ipAddress);
     }
-    
+
     return this.hashData(parts.join('-'));
   }
 
   /**
    * Generate a device name for display
-   * 
+   *
    * @param data - The device fingerprint data
    * @returns A human-readable device name
    */
   generateDeviceName(data: DeviceFingerprintData): string {
-    const parsed = data.userAgent ? this.parseUserAgent(data.userAgent) : { browser: 'Unknown', os: 'Unknown', deviceType: 'desktop' };
+    const parsed = data.userAgent
+      ? this.parseUserAgent(data.userAgent)
+      : { browser: 'Unknown', os: 'Unknown', deviceType: 'desktop' };
     const parts: string[] = [];
-    
+
     if (parsed.deviceType === 'mobile') {
       parts.push('Mobile');
     } else if (parsed.deviceType === 'tablet') {
       parts.push('Tablet');
     }
-    
+
     if (parsed.browser !== 'Unknown') {
       parts.push(parsed.browser);
     }
-    
+
     if (parsed.os !== 'Unknown') {
       parts.push(parsed.os);
     }
-    
+
     if (parts.length === 0) {
       return 'Unknown Device';
     }
-    
+
     return parts.join(' - ');
   }
 
   /**
    * Check if device is likely a bot
-   * 
+   *
    * @param userAgent - The user agent string
    * @returns True if likely a bot
    */
@@ -279,6 +287,6 @@ export class DeviceFingerprintService {
       /selenium/i,
     ];
 
-    return botPatterns.some(pattern => pattern.test(userAgent));
+    return botPatterns.some((pattern) => pattern.test(userAgent));
   }
 }

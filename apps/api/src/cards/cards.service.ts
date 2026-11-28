@@ -4,14 +4,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from "@nestjs/common";
-import { randomUUID } from "crypto";
-import { PrismaService } from "../prisma/prisma.service";
-import { DecksService } from "../decks/decks.service";
-import { AiClientService } from "../common/services/ai-client.service";
-import { CreateCardDto, UpdateCardDto, GenerateCardsDto } from "./dto/card.dto";
-import { TokensService } from "../tokens/tokens.service";
-import { requestContextStorage } from "../common/utils/request-context";
+} from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { DecksService } from '../decks/decks.service';
+import { AiClientService } from '../common/services/ai-client.service';
+import { CreateCardDto, UpdateCardDto, GenerateCardsDto } from './dto/card.dto';
+import { TokensService } from '../tokens/tokens.service';
+import { requestContextStorage } from '../common/utils/request-context';
 
 @Injectable()
 export class CardsService {
@@ -64,7 +64,7 @@ export class CardsService {
     if (!userId) {
       return this.prisma.cards.findMany({
         where: { deck_id: deckId, retired_at: null },
-        orderBy: { created_at: "asc" },
+        orderBy: { created_at: 'asc' },
       });
     }
 
@@ -75,7 +75,7 @@ export class CardsService {
           where: { user_id: userId },
         },
       },
-      orderBy: { created_at: "asc" },
+      orderBy: { created_at: 'asc' },
     });
 
     return cards.map((c) => {
@@ -110,10 +110,10 @@ export class CardsService {
       where: { id },
       include: { decks: { select: { creator_id: true, is_public: true } } },
     });
-    if (!card) throw new NotFoundException("Card not found");
+    if (!card) throw new NotFoundException('Card not found');
     if (!userId || !card.decks.is_public) {
       if (!userId || card.decks.creator_id !== userId) {
-        throw new NotFoundException("Card not found");
+        throw new NotFoundException('Card not found');
       }
     }
     return card;
@@ -129,7 +129,8 @@ export class CardsService {
 
   async update(id: string, dto: UpdateCardDto, userId?: string) {
     const card = await this.findCardWithDeck(id, userId);
-    if (!userId || card.decks.creator_id !== userId) throw new ForbiddenException();
+    if (!userId || card.decks.creator_id !== userId)
+      throw new ForbiddenException();
     return this.prisma.cards.update({
       where: { id },
       data: {
@@ -145,9 +146,10 @@ export class CardsService {
 
   async remove(id: string, userId?: string) {
     const card = await this.findCardWithDeck(id, userId);
-    if (!userId || card.decks.creator_id !== userId) throw new ForbiddenException();
+    if (!userId || card.decks.creator_id !== userId)
+      throw new ForbiddenException();
     // Already retired: do not decrement the count a second time.
-    if (card.retired_at) throw new NotFoundException("Card not found");
+    if (card.retired_at) throw new NotFoundException('Card not found');
 
     // Deleting a card cascades to user_card_progress and srs_review_events.
     // If anyone has studied it, retire it instead: every SRS query filters on
@@ -196,7 +198,7 @@ export class CardsService {
       });
       return tx.cards.findMany({
         where: { id: { in: data.map((d) => d.id) } },
-        orderBy: { created_at: "asc" },
+        orderBy: { created_at: 'asc' },
       });
     });
   }
@@ -215,15 +217,17 @@ export class CardsService {
     // context (populated in main.ts) supplies it. Scoped to this user/feature
     // and stored on the token transaction so a retried request is charged at
     // most once even across process restarts.
-    const contextKey = (requestContextStorage.getStore() as any)?.idempotencyKey;
+    const contextKey = (requestContextStorage.getStore() as any)
+      ?.idempotencyKey;
     const rawKey = idempotencyKey ?? contextKey;
     const validKey =
-      typeof rawKey === "string" && /^[A-Za-z0-9._:-]{8,64}$/.test(rawKey)
+      typeof rawKey === 'string' && /^[A-Za-z0-9._:-]{8,64}$/.test(rawKey)
         ? rawKey
         : undefined;
-    const tokenKey = userId && validKey
-      ? `${userId}:cards_generate:${validKey}`.slice(0, 128)
-      : undefined;
+    const tokenKey =
+      userId && validKey
+        ? `${userId}:cards_generate:${validKey}`.slice(0, 128)
+        : undefined;
     const batchKey = tokenKey ? `cards_generate:${tokenKey}` : undefined;
 
     if (batchKey) {
@@ -234,7 +238,7 @@ export class CardsService {
           deck_id: deckId,
           seed_key: { startsWith: `${batchKey}:` },
         },
-        orderBy: { created_at: "asc" },
+        orderBy: { created_at: 'asc' },
       });
       if (existing.length > 0) {
         return { generated: existing.length, cards: existing };
@@ -251,16 +255,16 @@ export class CardsService {
         pronunciation: string;
         difficulty: number;
       }>;
-    }>("/ai/content/generate-cards", {
+    }>('/ai/content/generate-cards', {
       text: dto.text,
-      language: dto.language || "english",
+      language: dto.language || 'english',
       count: dto.count || 10,
     });
 
     // LLM output is untrusted: enforce the database varchar limits before
     // createMany, otherwise one overlong field rejects the whole batch.
     const clamp = (value: unknown, max: number): string =>
-      typeof value === "string" ? value.trim().slice(0, max) : "";
+      typeof value === 'string' ? value.trim().slice(0, max) : '';
     const aiCards = Array.isArray(aiResult?.cards) ? aiResult.cards : [];
     const data = aiCards
       .map((c, index) => ({
@@ -278,7 +282,7 @@ export class CardsService {
 
     if (data.length === 0) {
       // Charge only for cards that will actually be saved.
-      throw new BadRequestException("AI did not generate any valid cards");
+      throw new BadRequestException('AI did not generate any valid cards');
     }
 
     // Charge only after the AI call succeeded and validation produced usable
@@ -287,13 +291,13 @@ export class CardsService {
     if (userId) {
       await this.tokensService.consumeTokens(
         userId,
-        "cards_generate",
+        'cards_generate',
         undefined,
         tokenKey,
       );
     }
 
-    let created: Awaited<ReturnType<PrismaService["cards"]["findMany"]>>;
+    let created: Awaited<ReturnType<PrismaService['cards']['findMany']>>;
     try {
       created = await this.prisma.$transaction(async (tx) => {
         await tx.cards.createMany({ data });
@@ -303,7 +307,7 @@ export class CardsService {
         });
         return tx.cards.findMany({
           where: { id: { in: data.map((d) => d.id) } },
-          orderBy: { created_at: "asc" },
+          orderBy: { created_at: 'asc' },
         });
       });
     } catch (error: any) {

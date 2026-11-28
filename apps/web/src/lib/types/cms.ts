@@ -86,7 +86,7 @@ export function normalizeListeningAnswers(lesson: CmsLesson): CmsLesson {
   if (!content || !Array.isArray(content.questions)) return lesson;
 
   let changed = false;
-  const questions = content.questions.map((q: any) => {
+  const questions = content.questions.map((q) => {
     if (typeof q?.correctAnswer !== 'number' && typeof q?.correct === 'number') {
       changed = true;
       const { correct, ...rest } = q;

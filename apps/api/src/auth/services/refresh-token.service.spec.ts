@@ -41,9 +41,18 @@ describe('RefreshTokenService', () => {
   describe('createRefreshToken', () => {
     it('creates a new refresh token', async () => {
       mockPrisma.refresh_tokens.findMany.mockResolvedValue([]); // no active sessions
-      mockPrisma.refresh_tokens.create.mockResolvedValue({ id: 'rt-1', token: 'abc123' });
+      mockPrisma.refresh_tokens.create.mockResolvedValue({
+        id: 'rt-1',
+        token: 'abc123',
+      });
 
-      const result = await service.createRefreshToken(mockUser, 7, 'Chrome', '127.0.0.1', 'Mozilla');
+      const result = await service.createRefreshToken(
+        mockUser,
+        7,
+        'Chrome',
+        '127.0.0.1',
+        'Mozilla',
+      );
 
       expect(mockPrisma.refresh_tokens.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -71,14 +80,22 @@ describe('RefreshTokenService', () => {
       await service.createRefreshToken(mockUser, 7);
 
       expect(mockPrisma.refresh_tokens.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'rt-old' }, data: { is_revoked: true } }),
+        expect.objectContaining({
+          where: { id: 'rt-old' },
+          data: { is_revoked: true },
+        }),
       );
     });
   });
 
   describe('findValid', () => {
     it('returns token record when found and not revoked', async () => {
-      const rt = { id: 'rt-1', token: 'tok', is_revoked: false, users: { id: 'user-123' } };
+      const rt = {
+        id: 'rt-1',
+        token: 'tok',
+        is_revoked: false,
+        users: { id: 'user-123' },
+      };
       mockPrisma.refresh_tokens.findFirst.mockResolvedValue(rt);
 
       const result = await service.findValid('tok');
@@ -157,7 +174,9 @@ describe('RefreshTokenService', () => {
 
       expect(result).toEqual(sessions);
       expect(mockPrisma.refresh_tokens.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { user_id: 'user-123', is_revoked: false } }),
+        expect.objectContaining({
+          where: { user_id: 'user-123', is_revoked: false },
+        }),
       );
     });
   });
@@ -184,7 +203,9 @@ describe('RefreshTokenService', () => {
       await service.removeExpired();
 
       expect(mockPrisma.refresh_tokens.deleteMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { expires_at: { lt: expect.any(Date) } } }),
+        expect.objectContaining({
+          where: { expires_at: { lt: expect.any(Date) } },
+        }),
       );
     });
   });
@@ -203,7 +224,10 @@ describe('RefreshTokenService', () => {
     it('atomically revokes the old row and creates a replacement with the same session metadata', async () => {
       mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.refresh_tokens.findFirst.mockResolvedValue(oldRt);
-      mockPrisma.refresh_tokens.create.mockResolvedValue({ id: 'rt-new', token: 'new-token' });
+      mockPrisma.refresh_tokens.create.mockResolvedValue({
+        id: 'rt-new',
+        token: 'new-token',
+      });
 
       const result = await service.rotateToken('old-token', 7);
 
@@ -215,7 +239,9 @@ describe('RefreshTokenService', () => {
       });
       expect(mockPrisma.refresh_tokens.findFirst).toHaveBeenCalledWith({
         where: { token: 'old-token' },
-        include: { users: { include: { user_roles: { include: { roles: true } } } } },
+        include: {
+          users: { include: { user_roles: { include: { roles: true } } } },
+        },
       });
       expect(mockPrisma.refresh_tokens.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -272,11 +298,13 @@ describe('RefreshTokenService', () => {
         return { count: state.active ? 1 : 0 };
       });
       mockPrisma.refresh_tokens.findFirst.mockResolvedValue(oldRt);
-      mockPrisma.refresh_tokens.create.mockImplementation(async ({ data }: any) => {
-        const record = { id: `rt-new-${state.created.length + 1}`, ...data };
-        state.created.push(record);
-        return record;
-      });
+      mockPrisma.refresh_tokens.create.mockImplementation(
+        async ({ data }: any) => {
+          const record = { id: `rt-new-${state.created.length + 1}`, ...data };
+          state.created.push(record);
+          return record;
+        },
+      );
 
       const results = await Promise.allSettled([
         service.rotateToken('shared-token', 7),
@@ -290,7 +318,9 @@ describe('RefreshTokenService', () => {
       expect((rejected[0] as PromiseRejectedResult).reason.message).toBe(
         'Invalid or expired refresh token',
       );
-      expect((fulfilled[0] as PromiseFulfilledResult<any>).value.token).toBeDefined();
+      expect(
+        (fulfilled[0] as PromiseFulfilledResult<any>).value.token,
+      ).toBeDefined();
       expect(state.created).toHaveLength(1);
     });
   });

@@ -16,7 +16,10 @@ import { TokenService } from '../services/token.service';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { User } from '../../users/entities/user.entity';
 import { RenameDeviceDto } from '../dto/auth.dto';
-import { DeviceResponseDto, ActiveSessionsResponseDto } from '../dto/response.dto';
+import {
+  DeviceResponseDto,
+  ActiveSessionsResponseDto,
+} from '../dto/response.dto';
 
 @ApiTags('Devices')
 @ApiBearerAuth()
@@ -38,7 +41,9 @@ export class DeviceController {
   // ─── Session summary ──────────────────────────────────────────────────────
   @Get('sessions')
   @ApiOperation({ summary: 'Get active session summary' })
-  async getSessions(@CurrentUser() user: User): Promise<ActiveSessionsResponseDto> {
+  async getSessions(
+    @CurrentUser() user: User,
+  ): Promise<ActiveSessionsResponseDto> {
     const [devices, count] = await Promise.all([
       this.deviceService.getActiveDevices(user.id),
       this.tokenService.getActiveSessionCount(user.id),
@@ -52,7 +57,9 @@ export class DeviceController {
   // ─── Remove all other devices ─────────────────────────────────────────────
   @Delete('others')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove all other devices and revoke their sessions' })
+  @ApiOperation({
+    summary: 'Remove all other devices and revoke their sessions',
+  })
   async removeOtherDevices(
     @CurrentUser() user: User,
     @CurrentUser('deviceId') currentDeviceId: string,

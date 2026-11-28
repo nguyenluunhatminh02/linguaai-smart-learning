@@ -8,18 +8,60 @@ import { GenerateReadingDto } from './dto/reading.dto';
 // Curated topic pool keyed by language and broad category
 const TOPIC_POOL: Record<string, string[]> = {
   english: [
-    'technology', 'climate change', 'health and medicine', 'travel', 'food culture',
-    'history', 'space exploration', 'business', 'art and culture', 'sports',
-    'education', 'environment', 'psychology', 'economics', 'social media',
-    'artificial intelligence', 'biodiversity', 'urban living', 'music', 'cinema',
+    'technology',
+    'climate change',
+    'health and medicine',
+    'travel',
+    'food culture',
+    'history',
+    'space exploration',
+    'business',
+    'art and culture',
+    'sports',
+    'education',
+    'environment',
+    'psychology',
+    'economics',
+    'social media',
+    'artificial intelligence',
+    'biodiversity',
+    'urban living',
+    'music',
+    'cinema',
   ],
   chinese: [
-    '科技', '饮食文化', '运动', '游覆', '历史', '自然', '商业', '教育', '刻分', '家庭',
-    '经济', '中国传统', '健康', '环境保护', '両山',
+    '科技',
+    '饮食文化',
+    '运动',
+    '游覆',
+    '历史',
+    '自然',
+    '商业',
+    '教育',
+    '刻分',
+    '家庭',
+    '经济',
+    '中国传统',
+    '健康',
+    '环境保护',
+    '両山',
   ],
   japanese: [
-    '技術', '料理', '旅行', 'スポーツ', '歴史', '自然', 'ビジネス', '教育', '音楽', '映画',
-    '伝統文化', '健康', '環境', '社会', '科学',
+    '技術',
+    '料理',
+    '旅行',
+    'スポーツ',
+    '歴史',
+    '自然',
+    'ビジネス',
+    '教育',
+    '音楽',
+    '映画',
+    '伝統文化',
+    '健康',
+    '環境',
+    '社会',
+    '科学',
   ],
 };
 
@@ -39,7 +81,9 @@ export class ReadingService {
     // A fresh DB row is always created below so each generation is recorded in the
     // user's history and the returned passage ID always belongs to this user.
     const cacheKey = `reading:prompt:${dto.level}:${dto.topic}:${language}:${wordCount}`;
-    let cachedPrompt: { passage: string; vocabulary: unknown[]; questions: unknown[] } | undefined;
+    let cachedPrompt:
+      | { passage: string; vocabulary: unknown[]; questions: unknown[] }
+      | undefined;
     try {
       cachedPrompt = await this.cache.get<typeof cachedPrompt>(cacheKey);
     } catch {
@@ -55,7 +99,12 @@ export class ReadingService {
     };
     type AiReading = {
       passage: string;
-      vocabulary: Array<{ word: string; meaning?: string; definition?: string; part_of_speech?: string }>;
+      vocabulary: Array<{
+        word: string;
+        meaning?: string;
+        definition?: string;
+        part_of_speech?: string;
+      }>;
       questions: AiQuestion[];
     };
 
@@ -69,7 +118,7 @@ export class ReadingService {
         });
 
     // Normalize AI vocabulary to unified shape
-    const normalizedVocab = (aiResult.vocabulary || []).map(v => ({
+    const normalizedVocab = (aiResult.vocabulary || []).map((v) => ({
       word: v.word,
       meaning: v.definition || v.meaning || '',
       definition: v.definition || v.meaning || '',
@@ -86,11 +135,16 @@ export class ReadingService {
     }> = [];
     for (const q of aiResult.questions || []) {
       if (typeof q?.question !== 'string' || !q.question.trim()) continue;
-      if (!Array.isArray(q.options) || q.options.some((option) => typeof option !== 'string')) continue;
+      if (
+        !Array.isArray(q.options) ||
+        q.options.some((option) => typeof option !== 'string')
+      )
+        continue;
       const options = q.options.map((option) => option.trim()).filter(Boolean);
       if (options.length < 2) continue;
       const rawAnswer = q.correctAnswer ?? q.correct_answer;
-      if (typeof rawAnswer !== 'string' && typeof rawAnswer !== 'number') continue;
+      if (typeof rawAnswer !== 'string' && typeof rawAnswer !== 'number')
+        continue;
       const answerText = String(rawAnswer).trim();
       // Accept an option index (0- or 1-based), a letter marker, or the exact option text.
       const indexMatch = answerText.match(/^(\d+)$/);
@@ -100,7 +154,8 @@ export class ReadingService {
         const index = Number(indexMatch[1]);
         correctAnswer = options[index] ?? options[index - 1];
       } else if (letterMatch) {
-        correctAnswer = options[letterMatch[1].toUpperCase().charCodeAt(0) - 65];
+        correctAnswer =
+          options[letterMatch[1].toUpperCase().charCodeAt(0) - 65];
       } else {
         correctAnswer = options.find((option) => option === answerText);
       }
@@ -130,11 +185,15 @@ export class ReadingService {
     // Cache only the reusable prompt output, never a user-specific passage ID.
     if (!cachedPrompt) {
       try {
-        await this.cache.set(cacheKey, {
-          passage: aiResult.passage,
-          vocabulary: normalizedVocab,
-          questions: aiResult.questions || [],
-        }, 86_400_000); // 24h cache
+        await this.cache.set(
+          cacheKey,
+          {
+            passage: aiResult.passage,
+            vocabulary: normalizedVocab,
+            questions: aiResult.questions || [],
+          },
+          86_400_000,
+        ); // 24h cache
       } catch {
         // cache-manager store incompatibility – ignore
       }
@@ -157,9 +216,17 @@ export class ReadingService {
         take: limit,
         orderBy: { created_at: 'desc' },
       }),
-      this.prisma.reading_passages.count({ where: { generated_by_user_id: userId } }),
+      this.prisma.reading_passages.count({
+        where: { generated_by_user_id: userId },
+      }),
     ]);
-    return { items, total, page, pageSize: limit, totalPages: Math.ceil(total / limit) };
+    return {
+      items,
+      total,
+      page,
+      pageSize: limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   /**
@@ -229,18 +296,23 @@ export class ReadingService {
       rank: i + 1,
       topic: s.topic,
       suggestedLevel: mostReadLevel,
-      reason: s.isNew ? 'New topic — broaden your vocabulary' : 'Revisit to deepen comprehension',
+      reason: s.isNew
+        ? 'New topic — broaden your vocabulary'
+        : 'Revisit to deepen comprehension',
       timesRead: s.score,
     }));
 
-    const result = { language, recommendations, basedOn: recentPassages.length };
+    const result = {
+      language,
+      recommendations,
+      basedOn: recentPassages.length,
+    };
     await this.cache.set(cacheKey, result, 3_600_000); // 1h cache
     return result;
   }
 
   private _inferLevel(passages: { level: string | null }[]): string {
     if (passages.length === 0) return 'B1';
-    const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
     const counts: Record<string, number> = {};
     for (const p of passages) {
       const l = (p.level || 'B1').toUpperCase();

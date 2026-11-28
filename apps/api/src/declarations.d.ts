@@ -30,7 +30,16 @@ declare module 'nodemailer' {
 }
 declare module 'pg' {
   export class Pool {
-    constructor(options?: { connectionString?: string; max?: number; host?: string; port?: number; user?: string; password?: string; database?: string; ssl?: any });
+    constructor(options?: {
+      connectionString?: string;
+      max?: number;
+      host?: string;
+      port?: number;
+      user?: string;
+      password?: string;
+      database?: string;
+      ssl?: any;
+    });
     connect(): Promise<any>;
     end(): Promise<void>;
     query(text: string, values?: any[]): Promise<any>;

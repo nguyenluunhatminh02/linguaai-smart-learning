@@ -1,9 +1,23 @@
-import { IsString, IsOptional, IsNumber, IsArray, IsInt, IsUUID, MaxLength, MinLength, ValidateNested, Min, Max, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  IsInt,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+  Min,
+  Max,
+  Matches,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // Valid CEFR levels pattern
-const CEFR_LEVEL_PATTERN = /^(A1|A2|B1|B2|C1|C2|beginner|intermediate|advanced|elementary|pre-intermediate|upper-intermediate|proficient)$/i;
+const CEFR_LEVEL_PATTERN =
+  /^(A1|A2|B1|B2|C1|C2|beginner|intermediate|advanced|elementary|pre-intermediate|upper-intermediate|proficient)$/i;
 
 export class CreateQuizQuestionDto {
   @ApiProperty()
@@ -28,7 +42,12 @@ export class CreateQuizQuestionDto {
   @IsOptional()
   explanation?: string;
 
-  @ApiPropertyOptional({ description: 'Difficulty 1(easy)–5(hard)', minimum: 1, maximum: 5, default: 3 })
+  @ApiPropertyOptional({
+    description: 'Difficulty 1(easy)–5(hard)',
+    minimum: 1,
+    maximum: 5,
+    default: 3,
+  })
   @IsNumber()
   @IsOptional()
   @Min(1)
@@ -80,7 +99,9 @@ class QuizAnswerDto {
   @MaxLength(1000)
   answer: string;
 
-  @ApiPropertyOptional({ description: 'Zero-based choice index for multiple-choice answers' })
+  @ApiPropertyOptional({
+    description: 'Zero-based choice index for multiple-choice answers',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -103,14 +124,19 @@ export class SubmitQuizDto {
   @Min(0)
   durationSeconds: number;
 
-  @ApiPropertyOptional({ description: 'Stable ID for safely retrying this attempt' })
+  @ApiPropertyOptional({
+    description: 'Stable ID for safely retrying this attempt',
+  })
   @IsOptional()
   @IsUUID()
   attemptId?: string;
 }
 
 export class AdaptiveNextDto {
-  @ApiProperty({ description: 'Number of questions answered so far', minimum: 0 })
+  @ApiProperty({
+    description: 'Number of questions answered so far',
+    minimum: 0,
+  })
   @IsNumber()
   @Min(0)
   answeredCount: number;
@@ -120,14 +146,19 @@ export class AdaptiveNextDto {
   @Min(0)
   correctCount: number;
 
-  @ApiPropertyOptional({ description: 'IDs of questions already answered (to exclude)' })
+  @ApiPropertyOptional({
+    description: 'IDs of questions already answered (to exclude)',
+  })
   @IsArray()
   @IsOptional()
   answeredIds?: string[];
 }
 
 export class GenerateQuizDto {
-  @ApiProperty({ description: 'Topic to generate quiz about', example: 'climate change' })
+  @ApiProperty({
+    description: 'Topic to generate quiz about',
+    example: 'climate change',
+  })
   @IsString()
   // Validation runs before the controller charges tokens; an empty topic would
   // otherwise be rejected by the AI service after the charge with no refund.
@@ -140,22 +171,33 @@ export class GenerateQuizDto {
   @IsOptional()
   language?: string;
 
-  @ApiPropertyOptional({ example: 'B1', description: 'CEFR level for question difficulty (A1-C2)' })
+  @ApiPropertyOptional({
+    example: 'B1',
+    description: 'CEFR level for question difficulty (A1-C2)',
+  })
   @IsString()
   @IsOptional()
   @Matches(CEFR_LEVEL_PATTERN, {
-    message: 'level must be a valid CEFR level (A1, A2, B1, B2, C1, C2) or common equivalents',
+    message:
+      'level must be a valid CEFR level (A1, A2, B1, B2, C1, C2) or common equivalents',
   })
   level?: string;
 
-  @ApiPropertyOptional({ description: 'Number of questions to generate (3-20)', default: 10, minimum: 3, maximum: 20 })
+  @ApiPropertyOptional({
+    description: 'Number of questions to generate (3-20)',
+    default: 10,
+    minimum: 3,
+    maximum: 20,
+  })
   @IsNumber()
   @IsOptional()
   @Min(3)
   @Max(20)
   count?: number;
 
-  @ApiPropertyOptional({ description: 'Custom quiz title (AI generates one if omitted)' })
+  @ApiPropertyOptional({
+    description: 'Custom quiz title (AI generates one if omitted)',
+  })
   @IsString()
   @IsOptional()
   title?: string;

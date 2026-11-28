@@ -1,5 +1,5 @@
-import { User } from "../../users/entities/user.entity";
-import { UserResponse } from "../../users/dto/user-response.dto";
+import { User } from '../../users/entities/user.entity';
+import { UserResponse } from '../../users/dto/user-response.dto';
 
 export function toAppUser(user: any): User {
   const roles = (user.user_roles ?? [])
@@ -62,10 +62,10 @@ export function toAppUser(user: any): User {
 export function mapToUserResponse(user: User): UserResponse {
   const firstRole = user.roles?.[0] as { name?: string } | string | undefined;
   const rawRoleName =
-    typeof firstRole === "string" ? firstRole : firstRole?.name;
+    typeof firstRole === 'string' ? firstRole : firstRole?.name;
   // Role names in the database are uppercase (ADMIN | USER | MODERATOR).
   // Normalize legacy lowercase values so frontend admin guards can rely on this.
-  const roleName = rawRoleName ? rawRoleName.toUpperCase() : "USER";
+  const roleName = rawRoleName ? rawRoleName.toUpperCase() : 'USER';
   return {
     id: user.id,
     email: user.email,
@@ -82,10 +82,10 @@ export function mapToUserResponse(user: User): UserResponse {
     isPhoneVerified: false,
     isActive: user.isActive ?? true,
     twoFactorEnabled: user.twoFactorEnabled ?? false,
-    language: user.language ?? "en",
+    language: user.language ?? 'en',
     nativeLanguage: user.nativeLanguage ?? null,
     targetLanguage: user.targetLanguage ?? null,
-    timezone: user.timezone ?? "UTC",
+    timezone: user.timezone ?? 'UTC',
     lastLoginAt: user.lastLoginAt ?? null,
     createdAt: user.createdAt,
   };

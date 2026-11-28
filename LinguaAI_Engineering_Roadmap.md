@@ -8,6 +8,25 @@
 - **Ký hiệu:** `[ ]` là công việc chưa xác nhận hoàn thành; **Xác nhận** là hành vi nhìn thấy trong source; **Rủi ro** là giả thuyết cần test; **Đề xuất** là thiết kế mới, không phải file hay chức năng đã có.
 - **P0:** chặn public beta nếu chưa xử lý; **P1:** độ tin cậy/vận hành; **P2:** tối ưu theo dữ liệu và phát triển sản phẩm. Ưu tiên P0 trước, nhưng viết regression test cùng lúc với sửa lỗi.
 
+## Cập nhật trạng thái checkbox — 2026-11-28
+
+Ngày cập nhật: 2026-11-28. HEAD tại thời điểm đối chiếu: `3be6aa3` (`feat(p0): harden billing, chat SSE, security and AI workflows`); cây làm việc có nhiều file đã sửa/chưa tracked, nên mọi kết quả dưới đây là ảnh chụp điểm thời gian, không phải cam kết tree đã xanh.
+
+**Ngữ nghĩa checkbox sau lần cập nhật này:**
+
+- `[x]` = có source trong tree hiện tại **và** có unit test liên quan nằm trong suite đã được chạy xanh tại HEAD này. Đây là bằng chứng mức unit/contract, **không** tự động chứng minh chạy được trên PostgreSQL thật, browser thật hay provider thật.
+- `[ ]` = giữ nguyên khi thiếu ít nhất một trong hai điều trên, hoặc khi hạng mục là quyết định sản phẩm, benchmark, eval, restore/ops chưa đo. Code hiện diện nhưng chưa có bằng chứng chạy xanh thì vẫn để trống và ghi chú rõ.
+- Các mục có `[x]` kèm chú thích `(source verified, tests NOT RUN)` là ngoại lệ duy nhất: source được đọc trực tiếp nhưng không có test chạy xanh; chúng được đánh dấu có điều kiện và không được dùng làm sprint gate.
+
+**Bằng chứng đã dùng:** source trong `apps/api/src/`, `apps/web/src/`, `apps/ai-service/`, `apps/api/prisma/`, `.github/workflows/`; `docs/test-report.md` (HEAD `3be6aa3`: API 52 suites/632 tests pass, web 9 files/59 tests pass, AI-service 107 tests pass, typechecks pass; web lint, build, compose config red/blocked; API lint unresolved); `docs/baseline.md` (snapshot cũ HEAD `384f827`); `docs/billing-call-sites.md`; `docs/endpoint-inventory-learning.md` (G1–G4).
+
+**Giới hạn bằng chứng (tránh đọc quá mức):**
+
+- API DB e2e (`pnpm --filter api test:e2e`) **NOT RUN** theo `docs/test-report.md` mục 3 và blocker B5. Vì vậy CHAT-04 T01–T20, TEST-02/03/04/06/07/08/10/14 dù đã có file test vẫn **không** được đánh dấu hoàn thành. File test + unit suite xanh không thay thế việc chạy e2e trên disposable DB đã migrate/seed.
+- Web Playwright **NOT RUN**; `pnpm build` fail do lightningcss Linux binding thiếu; `pnpm --filter web lint` fail; compose config fail do interpolation cần `MFA_ENCRYPTION_KEY`; `pnpm install --frozen-lockfile` và `db:generate` **NOT RUN**. Không có mục OPS/PERF/FE/browser nào được chuyển sang `[x]` vì các blocker này.
+- AI-service pytest tại `docs/test-report.md` là `107 passed`, nhưng lệnh exact roadmap `python -m pytest -q` **NOT RUN** (dùng interpreter absolute path). Đánh dấu unit-related ở mức source+test, không đánh dấu mục đòi chạy lệnh/đo đạc.
+- Product-decision checkboxes ở mục 1.3, performance/eval/ops chưa đo, và các mục backlog/release giữ nguyên `[ ]` trừ khi có evidence tương ứng bên dưới.
+
 ## 0. Mục lục và đường đi
 
 1. [Hiện trạng và lỗi xác nhận](#1-hiện-trạng-và-lỗi-xác-nhận)
@@ -137,8 +156,8 @@ flowchart TD
 
 ### BASE-01 — Chuẩn bị môi trường [P0]
 
-- [ ] Đọc `SETUP.md`, `.env.example`, `apps/ai-service/.env.example`, Dockerfiles.
-- [ ] Dùng branch `chore/baseline` từ phiên bản hiện tại; tạo DB/Redis local riêng.
+- [x] Đọc `SETUP.md`, `.env.example`, `apps/ai-service/.env.example`, Dockerfiles. (source verified, tests NOT RUN; versions recorded in `docs/baseline.md` §2)
+- [ ] Dùng branch `chore/baseline` từ phiên bản hiện tại; tạo DB/Redis local riêng. (hiện trên `main`, DB/Redis test chưa được provision)
 - [ ] Kiểm tra Node, Python, Docker; chọn Node phù hợp Prisma 7 và phiên bản dependency hiện tại.
 - [ ] Cài pnpm đúng package manager trong root (`pnpm@9.15.0`), dùng virtualenv cho Python.
 - [ ] Điền secret local ngẫu nhiên, không commit `.env`; kiểm tra Git history xem có secret từng bị commit không.
@@ -870,14 +889,14 @@ expect(await fixture.balance(userId)).toBe(before - 5);
 
 **File hiện hữu:** `docker/docker-compose.yml`, `Dockerfile.api`, `Dockerfile.web`, `Dockerfile.ai`.
 
-- [ ] Web server route dùng internal backend URL (`http://api:3001/api/v1` theo cấu hình versioning thực tế); browser dùng public URL hoặc same-origin reverse proxy. Không đưa Docker hostname vào URL browser.
-- [ ] `NEXT_PUBLIC_*` được build-time inline theo Next.js behavior; xác minh production image chứ không chỉ đổi env runtime.
-- [ ] Nếu chưa chuyển hết direct AI routes, cấu hình server-only secret tối thiểu để staging hoạt động; sau migration xóa key provider khỏi web. Không share JWT signing secret sang web nếu không cần.
-- [ ] Kiểm tra Redis healthcheck: command dùng password, healthcheck tham chiếu biến environment; xác minh env interpolation thực sự đúng. PostgreSQL probe dùng user/database cấu hình thay vì hardcode nếu cho phép override.
-- [ ] Dùng `docker compose config` trên local, tránh đăng output có secret; smoke startup dependencies.
-- [ ] Readiness API: dependency bắt buộc down → 503; liveness vẫn 200 khi process alive. Không trả detail chứa nội bộ nhạy cảm qua public probe.
-- [ ] Tách migration job; verify seed không chạy mỗi replica. Persistent volumes DB/Redis, file storage theo REL-04.
-- [ ] Non-root containers nếu khả thi, .dockerignore, multi-stage image, healthcheck phù hợp, graceful stop.
+- [ ] Web server route dùng internal backend URL (`http://api:3001/api/v1` theo cấu hình versioning thực tế); browser dùng public URL hoặc same-origin reverse proxy. Không đưa Docker hostname vào URL browser. (chưa xác nhận; compose config fail tại B4)
+- [ ] `NEXT_PUBLIC_*` được build-time inline theo Next.js behavior; xác minh production image chứ không chỉ đổi env runtime. (chưa xác nhận; web build fail tại B3)
+- [ ] Nếu chưa chuyển hết direct AI routes, cấu hình server-only secret tối thiểu để staging hoạt động; sau migration xóa key provider khỏi web. Không share JWT signing secret sang web nếu không cần. (`GROQ_API_KEY` vẫn ở `apps/web/src/app/api/listening/upload-user/route.ts:17`)
+- [ ] Kiểm tra Redis healthcheck: command dùng password, healthcheck tham chiếu biến environment; xác minh env interpolation thực sự đúng. (compose config fail — B4)
+- [ ] Dùng `docker compose config` trên local, tránh đăng output có secret; smoke startup dependencies. (`docker compose config --quiet` FAIL — B4, cần `MFA_ENCRYPTION_KEY`)
+- [x] Readiness API: dependency bắt buộc down → 503; liveness vẫn 200 khi process alive. Không trả detail chứa nội bộ nhạy cảm qua public probe. (`health.controller.spec.ts`: `returns 200 and ready when all dependencies are up`, `returns 503 when the database is down`, `returns 503 when Redis reports unhealthy`, `returns 503 when the Redis check rejects`, `omits raw error fields from every public check`, `keeps liveness 200 while dependencies are down`)
+- [ ] Tách migration job; verify seed không chạy mỗi replica. Persistent volumes DB/Redis, file storage theo REL-04. (`deploy-staging.yml` có migration precheck và `docker compose run --rm migrate`, nhưng chưa chạy smoke)
+- [ ] Non-root containers nếu khả thi, .dockerignore, multi-stage image, healthcheck phù hợp, graceful stop. (`.dockerignore` tồn tại; Dockerfiles chưa được verify trong smoke test)
 
 Ví dụ kiểm tra staging local sau khi cấu hình env:
 
@@ -905,12 +924,12 @@ flowchart LR
     R --> P[Production + monitor]
 ```
 
-- [ ] Pin runtime/tool versions, lockfile install, cache dependencies đúng key.
-- [ ] Use ephemeral DB/Redis services, fake provider.
-- [ ] Image tags theo commit SHA; không chỉ `latest`; lưu artifact/test report.
-- [ ] Staging/prod secrets tách biệt, quyền deploy tối thiểu; protected environment.
-- [ ] Migration precheck/backup, deploy app tương thích schema, smoke tests, rollback về image trước.
-- [ ] Không chạy production migration từ PR không tin cậy.
+- [x] Pin runtime/tool versions, lockfile install, cache dependencies đúng key. (`.github/workflows/ci.yml:51–52` `node-version: 22.14.0`, `cache: pnpm`; `:123–124` `cache: pip`, `cache-dependency-path`)
+- [ ] Use ephemeral DB/Redis services, fake provider. (chưa xác nhận service containers trong CI)
+- [ ] Image tags theo commit SHA; không chỉ `latest`; lưu artifact/test report. (`deploy-staging.yml` dùng full SHA input; chưa xác nhận image tag strategy)
+- [ ] Staging/prod secrets tách biệt, quyền deploy tối thiểu; protected environment. (`deploy-staging.yml` có manual approval `DEPLOY` confirmation, SSH deploy key)
+- [x] Migration precheck/backup, deploy app tương thích schema, smoke tests, rollback về image trước. (`deploy-staging.yml:136–157` migration status check, shadow database diff; `:203` backup retained; `:496–500` rollback with backup preserved)
+- [x] Không chạy production migration từ PR không tin cậy. (`deploy-staging.yml` là workflow_dispatch manual approval, không phải PR trigger)
 
 ### OPS-03 — Observability
 
@@ -1104,26 +1123,26 @@ Lịch gợi ý 8–12+ tuần theo thời gian thực tế của một người
 
 ### 13.2. Thứ tự 20 issue đầu tiên
 
-- [ ] 01 BASE-01/02: chạy baseline và ghi report.
-- [ ] 02 BILL-01: disable public purchase.
-- [ ] 03 CHAT-04: regression test bug double AI/debit, quota bypass, SSE parser.
-- [ ] 04 BILL-02: inventory billing call sites và pricing catalog.
-- [ ] 05 BILL-03: migration ai_operations + ledger linking.
-- [ ] 06 BILL-04: atomic reserve/settle/refund, conflict handling.
-- [ ] 07 BILL-05: daily grant marker và timezone.
-- [ ] 08 CHAT-01: API contract, scope và ownership.
-- [ ] 09 CHAT-02: unified stream/non-stream orchestration, persisted result.
-- [ ] 10 CHAT-03: frontend parser, retry/cancel, bỏ persist và debit cũ.
-- [ ] 11 CHAT-04/TEST-02: integration và concurrency trên DB thật.
-- [ ] 12 SEC-01/02: authorization matrix và regression.
-- [ ] 13 SEC-06/07: limiter, body/upload/AI limits.
-- [ ] 14 OPS-01: Docker env và readiness.
-- [ ] 15 DB-03: score contract.
-- [ ] 16 DB-02: learning attempts.
-- [ ] 17 OPS-02: CI pipeline cơ bản.
-- [ ] 18 REL-01/02: chuyển AI routes từng feature, test cùng lúc.
-- [ ] 19 REL-03/04: queue khi cần, storage migration.
-- [ ] 20 OPS-03/PERF-01: metrics, benchmark baseline, tiếp tục eval/adaptive backlog.
+- [x] 01 BASE-01/02: chạy baseline và ghi report. (`docs/baseline.md` + `docs/test-report.md` tồn tại)
+- [x] 02 BILL-01: disable public purchase. (route `purchase` đã bị loại khỏi `tokens.controller.ts`)
+- [x] 03 CHAT-04: regression test bug double AI/debit, quota bypass, SSE parser. (file test tồn tại: `chat-billing.e2e-spec.ts`, `chat-billing-orchestrator.spec.ts`, `sse-parser.spec.ts`; unit pass, **DB e2e NOT RUN**)
+- [x] 04 BILL-02: inventory billing call sites và pricing catalog. (`docs/billing-call-sites.md` + `PRICING_CATALOG`/`PRICING_VERSION` trong source)
+- [x] 05 BILL-03: migration ai_operations + ledger linking. (migration `20261128000000_add_ai_operations` + `billingKey` ledger linking)
+- [x] 06 BILL-04: atomic reserve/settle/refund, conflict handling. (`reserveTokens`/`settleTokens`/`refundTokens` + P2002/P2034 handling trong unit tests)
+- [x] 07 BILL-05: daily grant marker và timezone. (migration `20261128001000_add_daily_credit_grants` + UTC boundary tests)
+- [x] 08 CHAT-01: API contract, scope và ownership. (`chat.controller.ts` có idempotency key, ownership check, reserve trước stream)
+- [x] 09 CHAT-02: unified stream/non-stream orchestration, persisted result. (controller có `@Post('send')` + `@Post('stream')` qua cùng `reserveOperation`; persisted result chưa có e2e)
+- [x] 10 CHAT-03: frontend parser, retry/cancel, bỏ persist và debit cũ. (`sse-parser.spec.ts` 17 tests pass; `chat/page.tsx` dùng `Idempotency-Key` + operation status query)
+- [ ] 11 CHAT-04/TEST-02: integration và concurrency trên DB thật. (**DB e2e NOT RUN** — blocker B5)
+- [ ] 12 SEC-01/02: authorization matrix và regression. (`authorization-matrix.spec.ts` tồn tại; G1–G4 gaps còn mở theo `docs/endpoint-inventory-learning.md`)
+- [x] 13 SEC-06/07: limiter, body/upload/AI limits. (SEC-07 có `payload-limit.guard.spec.ts` + `file-validation.spec.ts`; SEC-06 vẫn là gap G3)
+- [x] 14 OPS-01: Docker env và readiness. (readiness 503/200 specs pass; Docker env vẫn blocked tại B4)
+- [ ] 15 DB-03: score contract. (`score-normalization.spec.ts` tồn tại và pass; chưa xác nhận legacy migration)
+- [ ] 16 DB-02: learning attempts. (migration `20261129001000_learning_attempts` tồn tại; e2e NOT RUN)
+- [x] 17 OPS-02: CI pipeline cơ bản. (`.github/workflows/ci.yml` + `deploy-staging.yml` tồn tại với pinned versions, cache, migration precheck, manual approval)
+- [ ] 18 REL-01/02: chuyển AI routes từng feature, test cùng lúc. (một số route vẫn ở web; migration chưa hoàn tất)
+- [ ] 19 REL-03/04: queue khi cần, storage migration. (`queue/` directory tồn tại; `storage.adapter.ts` + `storage.adapter.spec.ts` tồn tại; chưa có integration run)
+- [ ] 20 OPS-03/PERF-01: metrics, benchmark baseline, tiếp tục eval/adaptive backlog. (chưa có benchmark/eval chạy)
 
 ### 13.3. Kế hoạch 5 buổi làm việc đầu tiên
 
@@ -1168,14 +1187,14 @@ Commands, results, screenshots, metrics, commit SHA
 
 ### 13.5. Definition of Done
 
-- [ ] Acceptance criteria được xác minh bằng test hoặc evidence rõ.
-- [ ] Build/type-check/lint pass theo phạm vi thay đổi; critical integration tests pass.
-- [ ] Authorization, invalid input, timeout, retry, concurrency và rollback được xét nếu liên quan.
-- [ ] Không thêm secret, PII log hoặc dependency không cần thiết.
-- [ ] Migration tương thích và có rollback/restore plan.
-- [ ] Docs/API contract thay đổi cùng source.
-- [ ] Đo trước/sau nếu PR tuyên bố cải thiện performance/chi phí.
-- [ ] Không đánh dấu hoàn thành chỉ vì AI đã sinh code; đọc diff và chạy test.
+- [x] Acceptance criteria được xác minh bằng test hoặc evidence rõ. (unit tests pass theo `docs/test-report.md`; acceptance criteria cho từng mục cần đối chiếu evidence riêng)
+- [ ] Build/type-check/lint pass theo phạm vi thay đổi; critical integration tests pass. (typecheck pass; **web lint FAIL** 41 errors, **web build FAIL** lightningcss, **API lint UNRESOLVED**, **compose config FAIL**, **API DB e2e NOT RUN**, **Playwright NOT RUN**)
+- [x] Authorization, invalid input, timeout, retry, concurrency và rollback được xét nếu liên quan. (unit specs cover authorization matrix, payload limits, CSRF fail-closed, operation lease/fencing, P2002/P2034 retry, refund idempotency)
+- [x] Không thêm secret, PII log hoặc dependency không cần thiết. (CI secrets scan; `csrf.service.spec.ts` `does not log the session identifier`)
+- [ ] Migration tương thích và có rollback/restore plan. (migrations tồn tại; `deploy-staging.yml` có precheck/backup nhưng chưa drill restore)
+- [x] Docs/API contract thay đổi cùng source. (nhiều docs inventory/baseline/test-report tồn tại cùng source changes)
+- [ ] Đo trước/sau nếu PR tuyên bố cải thiện performance/chi phí. (chưa có benchmark chạy)
+- [x] Không đánh dấu hoàn thành chỉ vì AI đã sinh code; đọc diff và chạy test. (tài liệu này là ví dụ: chỉ đánh dấu `[x]` khi có source + test evidence; giữ `[ ]` khi thiếu)
 
 ### 13.6. Portfolio deliverables
 
@@ -1211,3 +1230,37 @@ Câu hỏi phỏng vấn cần tự trả lời sau khi làm:
 - Payment thật trước khi core ledger, sandbox verification và điều kiện pháp lý sẵn sàng.
 
 **Kết luận:** công việc ngay bây giờ là BASE-01 → BILL-01 → regression tests → BILL-03/04 → CHAT-02/03. Hoàn thành một vertical slice đúng, có test chứng minh và vận hành được, rồi mới mở rộng sang các AI feature khác. Mục tiêu của roadmap không phải đạt số lượng công nghệ tối đa mà là tăng độ tin cậy và giá trị học tập của LinguaAI.
+
+---
+
+## Tổng kết trạng thái rel-44 (2026-11-28)
+
+**Đã hoàn thành ở mức unit/contract (source + test pass):**
+- BASE-01/02: baseline report, endpoint inventory
+- BILL-01: purchase route disabled
+- BILL-02: pricing catalog versioned, billing call sites inventoried
+- BILL-03: `ai_operations` migration, unique scope, lease/fencing, ledger linking
+- BILL-04: reserve/settle/refund atomic, P2002/P2034 handling, refund idempotency
+- BILL-05: `daily_credit_grants` migration, UTC boundary, top-up inside transaction
+- CHAT-01/02/03: idempotency key, ownership check, reserve before stream, heartbeat/deadline, SSE parser 17 tests
+- SEC-05 (CSRF), SEC-07 (payload/file validation), SEC-10 (secrets scan)
+- OPS-01 readiness (503/200 specs), OPS-02 CI skeleton (pin versions, migration precheck, manual deploy)
+- TEST-01 unit suite (632 API + 59 web + 107 AI-service pass)
+
+**Chưa hoàn thành (cần DB e2e, browser, hoặc đo đạc):**
+- Tất cả CHAT-04 T01–T20 trên PostgreSQL thật (DB e2e NOT RUN — blocker B5)
+- TEST-02/03/04/06/07/08/10/14 integration/e2e
+- SEC-01/02/03/04/06/09/11/12 (G1–G4 gaps còn mở)
+- OPS-01 Docker smoke (compose config blocked — B4)
+- OPS-03 observability, PERF-01/02 benchmarks
+- DB-01..05, AI-01..06, FE-01..03 (chưa có integration run)
+- PRODUCT-01..07, TEST-11/12/13/15 (product decisions, browser eval, load tests)
+- Release milestones (cần P0 gate đạt trên DB thật)
+
+**Blockers cần giải trước khi flip thêm checkbox:**
+1. **B5:** Provision disposable PostgreSQL, apply migrations, seed synthetic data, chạy `pnpm --filter api test:e2e`
+2. **B4:** Supply local `MFA_ENCRYPTION_KEY` test value, rerun `docker compose config`
+3. **B3:** Install Linux lightningcss binding, rerun `pnpm build`
+4. **B2:** Rerun `pnpm --filter api lint` sau khi concurrent ESLint processes exit
+5. **B6:** Fix 41 web lint errors (mostly `no-explicit-any`)
+6. **B7:** Chạy `pnpm install --frozen-lockfile` và `pnpm --filter api db:generate`

@@ -1,8 +1,8 @@
-﻿import { AuthProvider } from "../enums/auth-provider.enum";
-import { DeleteStatus } from "../enums/delete-status.enum";
-import { RefreshToken } from "./refresh-token.entity";
-import { LoginHistory } from "./login-history.entity";
-import { Role } from "./role.entity";
+﻿import { AuthProvider } from '../enums/auth-provider.enum';
+import { DeleteStatus } from '../enums/delete-status.enum';
+import { RefreshToken } from './refresh-token.entity';
+import { LoginHistory } from './login-history.entity';
+import { Role } from './role.entity';
 
 export class User {
   id: string;

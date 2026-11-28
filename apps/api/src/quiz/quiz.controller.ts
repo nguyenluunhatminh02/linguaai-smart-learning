@@ -1,11 +1,30 @@
 import {
-  Controller, Get, Post, Delete,
-  Body, Param, Query, UseGuards, ParseUUIDPipe, Headers,
-  ForbiddenException, NotFoundException,
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+  Headers,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { QuizService } from './quiz.service';
-import { CreateQuizDto, SubmitQuizDto, AdaptiveNextDto, GenerateQuizDto } from './dto/quiz.dto';
+import {
+  CreateQuizDto,
+  SubmitQuizDto,
+  AdaptiveNextDto,
+  GenerateQuizDto,
+} from './dto/quiz.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { TokensService } from '../tokens/tokens.service';
@@ -40,7 +59,12 @@ export class QuizController {
     @Body() dto: GenerateQuizDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    await this.tokensService.consumeTokens(userId, 'quiz_generate', undefined, idempotencyKey);
+    await this.tokensService.consumeTokens(
+      userId,
+      'quiz_generate',
+      undefined,
+      idempotencyKey,
+    );
     return this.quizService.generateFromTopic(userId, dto);
   }
 
@@ -72,7 +96,8 @@ export class QuizController {
   @Post(':id/adaptive/next')
   @ApiOperation({
     summary: 'Get next adaptive question based on session performance',
-    description: 'Uses correctRate to adjust question difficulty dynamically (IRT-lite).',
+    description:
+      'Uses correctRate to adjust question difficulty dynamically (IRT-lite).',
   })
   adaptiveNext(
     @Param('id', ParseUUIDPipe) quizId: string,
@@ -92,7 +117,10 @@ export class QuizController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a quiz you created' })
-  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
     const quiz = await this.prisma.quizzes.findUnique({
       where: { id },
       select: { creator_id: true },

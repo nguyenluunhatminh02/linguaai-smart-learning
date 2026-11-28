@@ -57,7 +57,9 @@ describe('JwtStrategy', () => {
     isTokenBlacklisted: jest.fn(),
   };
   const mockConfig = {
-    get: jest.fn((key: string) => (key === 'JWT_SECRET' ? 'test-jwt-secret' : undefined)),
+    get: jest.fn((key: string) =>
+      key === 'JWT_SECRET' ? 'test-jwt-secret' : undefined,
+    ),
   };
 
   beforeEach(async () => {
@@ -151,7 +153,9 @@ describe('JwtStrategy', () => {
       await expect(
         strategy.validate(reqWithToken(), makePayload()),
       ).rejects.toThrow(new UnauthorizedException('Token has been revoked'));
-      expect(mockTokenService.isTokenBlacklisted).toHaveBeenCalledWith('access.jwt');
+      expect(mockTokenService.isTokenBlacklisted).toHaveBeenCalledWith(
+        'access.jwt',
+      );
       expect(mockPrisma.users.findFirst).not.toHaveBeenCalled();
     });
 
@@ -163,7 +167,9 @@ describe('JwtStrategy', () => {
     });
 
     it('rejects a disabled user', async () => {
-      mockPrisma.users.findFirst.mockResolvedValue(makeDbUser({ is_active: false }));
+      mockPrisma.users.findFirst.mockResolvedValue(
+        makeDbUser({ is_active: false }),
+      );
       await expect(
         strategy.validate(reqWithToken(), makePayload()),
       ).rejects.toThrow(new UnauthorizedException('Account is disabled'));
@@ -243,8 +249,13 @@ describe('JwtStrategy', () => {
     it('rejects a stale or forged deviceId claim', async () => {
       mockPrisma.user_devices.findFirst.mockResolvedValue(null);
       await expect(
-        strategy.validate(reqWithToken(), makePayload({ deviceId: 'dev-stale' })),
-      ).rejects.toThrow(new UnauthorizedException('Device session is no longer active'));
+        strategy.validate(
+          reqWithToken(),
+          makePayload({ deviceId: 'dev-stale' }),
+        ),
+      ).rejects.toThrow(
+        new UnauthorizedException('Device session is no longer active'),
+      );
     });
 
     it('does not consult the device table for tokens without deviceId', async () => {

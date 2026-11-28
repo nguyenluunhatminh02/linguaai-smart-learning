@@ -25,7 +25,8 @@ export class LoginAttemptService {
     private readonly emailService: EmailService,
   ) {
     this.maxAttempts = config.get<number>('MAX_LOGIN_ATTEMPTS', 5);
-    this.lockDurationSec = config.get<number>('LOCKOUT_DURATION_MINUTES', 30) * 60;
+    this.lockDurationSec =
+      config.get<number>('LOCKOUT_DURATION_MINUTES', 30) * 60;
     this.failClosedOnRedisOutage =
       config.get<string>('NODE_ENV') === 'production';
   }
@@ -42,7 +43,9 @@ export class LoginAttemptService {
     // production we reject while counters cannot be trusted; elsewhere we
     // fall back to counting attempts recorded in the DB.
     if (!this.redis.isAvailable() && this.failClosedOnRedisOutage) {
-      this.logger.error('Redis unavailable - failing closed on brute-force check');
+      this.logger.error(
+        'Redis unavailable - failing closed on brute-force check',
+      );
       throw new RateLimitExceededException('Login temporarily unavailable');
     }
 
@@ -56,7 +59,9 @@ export class LoginAttemptService {
       // kiểm tra IP rate limit: 50 lần/giờ
       const ipCount = await this.redis.get(`ip_attempts:${ip}`);
       if (ipCount && parseInt(ipCount, 10) >= this.ipLimit) {
-        throw new RateLimitExceededException('Too many login attempts from this IP');
+        throw new RateLimitExceededException(
+          'Too many login attempts from this IP',
+        );
       }
       return;
     }
@@ -77,7 +82,9 @@ export class LoginAttemptService {
       throw new AccountLockedException();
     }
     if (failedIpCount >= this.ipLimit) {
-      throw new RateLimitExceededException('Too many login attempts from this IP');
+      throw new RateLimitExceededException(
+        'Too many login attempts from this IP',
+      );
     }
   }
 
@@ -108,23 +115,26 @@ export class LoginAttemptService {
     // When Redis is unavailable we derive the count from DB rows instead of
     // trusting incr()'s 0 sentinel (which would disable all throttling).
     let count: number;
-    let ipCount: number;
 
     if (this.redis.isAvailable()) {
       const emailKey = `login_attempts:${email}`;
       const ipKey = `ip_attempts:${ip}`;
-      [count, ipCount] = await Promise.all([
+      [count] = await Promise.all([
         this.redis.incrWithExpiry(emailKey, this.windowSec),
         this.redis.incrWithExpiry(ipKey, this.windowSec),
       ]);
     } else {
       const since = DateUtil.subtractMs(this.windowSec * 1000);
-      [count, ipCount] = await Promise.all([
+      [count] = await Promise.all([
         this.prisma.login_attempts.count({
           where: { email, success: false, attempted_at: { gte: since } },
         }),
         this.prisma.login_attempts.count({
-          where: { ip_address: ip, success: false, attempted_at: { gte: since } },
+          where: {
+            ip_address: ip,
+            success: false,
+            attempted_at: { gte: since },
+          },
         }),
       ]);
       this.logger.warn(
@@ -143,7 +153,11 @@ export class LoginAttemptService {
   /**
    * Gọi khi login thành công — xóa counter.
    */
-  async recordSuccessfulLogin(email: string, ip: string, userId: string): Promise<void> {
+  async recordSuccessfulLogin(
+    email: string,
+    ip: string,
+    userId: string,
+  ): Promise<void> {
     await this.prisma.login_attempts.create({
       data: {
         email,
@@ -164,7 +178,11 @@ export class LoginAttemptService {
     // DB's is_locked/lock_time so the lock is still applied (checkBruteForce
     // and auth.service.ts both read those fields).
     if (this.redis.isAvailable()) {
-      const wasSet = await this.redis.setNx(`account_lock:${email}`, '1', this.lockDurationSec);
+      const wasSet = await this.redis.setNx(
+        `account_lock:${email}`,
+        '1',
+        this.lockDurationSec,
+      );
       if (!wasSet) return; // đã lock rồi
     } else {
       const existing = await this.prisma.users.findFirst({
@@ -185,10 +203,14 @@ export class LoginAttemptService {
     if (user) {
       this.emailService
         .sendAccountLockedEmail(user.email, user.first_name)
-        .catch(e => this.logger.warn(`Account locked email failed: ${e.message}`));
+        .catch((e) =>
+          this.logger.warn(`Account locked email failed: ${e.message}`),
+        );
     }
 
-    this.logger.warn(`Account locked: ${email} until ${lockedUntil.toISOString()}`);
+    this.logger.warn(
+      `Account locked: ${email} until ${lockedUntil.toISOString()}`,
+    );
   }
 
   // ─── Login History (paginated) ─────────────────────────────────────────────

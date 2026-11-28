@@ -1,10 +1,15 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 /**
  * Redis Service
- * 
+ *
  * Provides Redis connection with retry logic, health checking, and fallback handling.
  * When Redis is unavailable, operations are gracefully skipped with warnings logged.
  */
@@ -83,7 +88,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, skipping set operation for key: ${key}`);
+      this.logger.warn(
+        `Redis not available, skipping set operation for key: ${key}`,
+      );
       return;
     }
 
@@ -120,7 +127,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async del(key: string): Promise<void> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, skipping delete operation for key: ${key}`);
+      this.logger.warn(
+        `Redis not available, skipping delete operation for key: ${key}`,
+      );
       return;
     }
 
@@ -136,7 +145,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async exists(key: string): Promise<boolean> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, returning false for key existence check: ${key}`);
+      this.logger.warn(
+        `Redis not available, returning false for key existence check: ${key}`,
+      );
       return false;
     }
 
@@ -170,7 +181,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async mget(keys: string[]): Promise<(string | null)[]> {
     if (!this.isConnected) {
-      this.logger.warn('Redis not available, returning nulls for mget operation');
+      this.logger.warn(
+        'Redis not available, returning nulls for mget operation',
+      );
       return keys.map(() => null);
     }
 
@@ -194,7 +207,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async incrWithExpiry(key: string, windowSeconds: number): Promise<number> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, returning 1 for incrWithExpiry: ${key}`);
+      this.logger.warn(
+        `Redis not available, returning 1 for incrWithExpiry: ${key}`,
+      );
       return 1;
     }
 
@@ -208,10 +223,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     `;
 
     try {
-      const result = await (this.client as any).eval(luaScript, 1, key, windowSeconds.toString());
+      const result = await (this.client as any).eval(
+        luaScript,
+        1,
+        key,
+        windowSeconds.toString(),
+      );
       return result as number;
     } catch (err) {
-      this.logger.error(`Redis incrWithExpiry error for key ${key}: ${err.message}`);
+      this.logger.error(
+        `Redis incrWithExpiry error for key ${key}: ${err.message}`,
+      );
       return 1;
     }
   }
@@ -221,7 +243,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async incr(key: string): Promise<number> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, returning 0 for increment operation: ${key}`);
+      this.logger.warn(
+        `Redis not available, returning 0 for increment operation: ${key}`,
+      );
       return 0;
     }
 
@@ -238,7 +262,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async expire(key: string, seconds: number): Promise<void> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, skipping expire operation for key: ${key}`);
+      this.logger.warn(
+        `Redis not available, skipping expire operation for key: ${key}`,
+      );
       return;
     }
 
@@ -254,7 +280,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   async ttl(key: string): Promise<number> {
     if (!this.isConnected) {
-      this.logger.warn(`Redis not available, returning -1 for TTL operation: ${key}`);
+      this.logger.warn(
+        `Redis not available, returning -1 for TTL operation: ${key}`,
+      );
       return -1;
     }
 
@@ -282,7 +310,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   // ─── New methods for token.service ─────────────────────────────────────────
 
   /** Set NX (only if not exists). Returns true if set, false if already existed. */
-  async setNx(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
+  async setNx(
+    key: string,
+    value: string,
+    ttlSeconds?: number,
+  ): Promise<boolean> {
     if (!this.isConnected) return false;
     try {
       let result: any;
@@ -304,7 +336,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     try {
       return await this.client.keys(pattern);
     } catch (err) {
-      this.logger.error(`Redis keys error for pattern ${pattern}: ${err.message}`);
+      this.logger.error(
+        `Redis keys error for pattern ${pattern}: ${err.message}`,
+      );
       return [];
     }
   }
@@ -319,4 +353,3 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
-

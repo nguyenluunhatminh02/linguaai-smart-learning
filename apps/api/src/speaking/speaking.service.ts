@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
@@ -7,7 +6,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { TokensService } from '../tokens/tokens.service';
-import { validateAudioPayload, extensionForMimeType } from '../files/file-validation';
+import {
+  validateAudioPayload,
+  extensionForMimeType,
+} from '../files/file-validation';
 import Groq from 'groq-sdk';
 
 /**
@@ -24,7 +26,10 @@ export class SpeakingService {
     private readonly tokensService: TokensService,
   ) {
     this.groq = new Groq({ apiKey: this.config.get<string>('GROQ_API_KEY') });
-    this.modelStt = this.config.get<string>('GROQ_MODEL_STT', 'whisper-large-v3');
+    this.modelStt = this.config.get<string>(
+      'GROQ_MODEL_STT',
+      'whisper-large-v3',
+    );
   }
 
   async getHistory(userId: string, page = 1, limit = 10) {
@@ -121,7 +126,9 @@ export class SpeakingService {
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     if (isProduction && (!apiKey || apiKey === 'your-groq-api-key')) {
       // Never serve canned transcripts to real users in production.
-      throw new ServiceUnavailableException('Speech transcription is unavailable');
+      throw new ServiceUnavailableException(
+        'Speech transcription is unavailable',
+      );
     }
     if (!apiKey || apiKey === 'your-groq-api-key') {
       // Mock transcription in development/test environment without Groq key
@@ -131,7 +138,9 @@ export class SpeakingService {
         ja: 'こんにちは世界',
       };
       const langCode = toLangCode(language);
-      const transcript = defaultTranscripts[langCode] || 'the quick brown fox jumps over the lazy dog';
+      const transcript =
+        defaultTranscripts[langCode] ||
+        'the quick brown fox jumps over the lazy dog';
       return { transcript };
     }
 
@@ -144,7 +153,9 @@ export class SpeakingService {
       // Build a File-like object that groq-sdk accepts
       const audioBytes = new Uint8Array(decoded.buffer.byteLength);
       audioBytes.set(decoded.buffer);
-      const audioFile = new File([audioBytes], `speech.${ext}`, { type: decoded.mimeType });
+      const audioFile = new File([audioBytes], `speech.${ext}`, {
+        type: decoded.mimeType,
+      });
 
       const transcriptionResult = await this.groq.audio.transcriptions.create({
         file: audioFile as any,
@@ -156,10 +167,12 @@ export class SpeakingService {
       transcript = (
         typeof transcriptionResult === 'string'
           ? transcriptionResult
-          : (transcriptionResult as any).text ?? ''
+          : ((transcriptionResult as any).text ?? '')
       ).trim();
     } catch (err) {
-      const isDev = this.config.get<string>('NODE_ENV') === 'development' || this.config.get<string>('APP_ENV') === 'development';
+      const isDev =
+        this.config.get<string>('NODE_ENV') === 'development' ||
+        this.config.get<string>('APP_ENV') === 'development';
       if (isDev) {
         // Fallback to mock in development mode when transcription fails (e.g. dummy/empty audio in headless test)
         const defaultTranscripts: Record<string, string> = {
@@ -168,7 +181,9 @@ export class SpeakingService {
           ja: 'こんにちは世界',
         };
         const langCode = toLangCode(language);
-        transcript = defaultTranscripts[langCode] || 'the quick brown fox jumps over the lazy dog';
+        transcript =
+          defaultTranscripts[langCode] ||
+          'the quick brown fox jumps over the lazy dog';
       } else {
         throw err;
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,7 +12,6 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  GripVertical,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,16 +41,33 @@ import {
   normalizeListeningAnswers,
 } from "@/lib/types/cms";
 
-/* ────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   FE-13: CMS LESSON FORM SPLIT
+   ──────────────────────────────────────────────────────────────
+   This file contains logically separated sections:
+     1. Utilities (slugify, URL normalization, error flattening)
+     2. Draft persistence (sessionStorage, per-type content bag)
+     3. LessonMetaFields (shared meta form fields)
+     4. EditorRouter (type switch)
+     5. Content editors (grammar, translation, reading, vocabulary, listening)
+     6. LessonForm (composition/shell with validation + save)
+   NOTE: Kept in one file because the task scope allows only this file.
+   ══════════════════════════════════════════════════════════════ */
 
 interface Props {
   initial?: CmsLesson; // undefined → create mode
   backUrl?: string; // where to navigate after save (default: '/cms')
 }
 
+type ContentByType = Partial<Record<LessonType, LessonContent>>;
+
+/* ──────────────────────────────────────────────────────────────
+   Section 1: Utility Functions
+   ────────────────────────────────────────────────────────────── */
+
 function slugify(s: string): string {
   // Normalize unicode letters → ASCII where possible, then remove non-slug chars
-  const latin = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, ""); // strip diacritics
+  const latin = s.normalize("NFKD").replace(/[̀-ͯ]/g, ""); // strip diacritics
   const ascii = latin
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "-")
@@ -81,21 +97,170 @@ function formatErrorPath(path: string): string {
 
 /** Flatten nested zod validation errors into a readable list. */
 function collectErrorMessages(
-  errors: Record<string, any>,
+  errors: Record<string, unknown>,
   prefix = "",
 ): { path: string; message: string }[] {
   const result: { path: string; message: string }[] = [];
   for (const [key, value] of Object.entries(errors ?? {})) {
-    if (!value) continue;
+    if (!value || typeof value !== "object") continue;
+    const node = value as { message?: unknown } & Record<string, unknown>;
     const path = prefix ? `${prefix}.${key}` : key;
-    if (typeof value.message === "string") {
-      result.push({ path, message: value.message });
-    } else if (typeof value === "object") {
-      result.push(...collectErrorMessages(value, path));
+    if (typeof node.message === "string") {
+      result.push({ path, message: node.message });
+    } else {
+      result.push(...collectErrorMessages(node, path));
     }
   }
   return result;
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Section 2: Draft Persistence (Session-scoped)
+   ──────────────────────────────────────────────────────────────
+   Preserves unsaved edits across refreshes. Client-only (effect), keyed
+   by lesson id or 'new'. Stores a per-type content bag so switching
+   lesson types never destroys another type's in-progress content.
+   ────────────────────────────────────────────────────────────── */
+
+const DRAFT_VERSION = 1;
+const DRAFT_KEY_PREFIX = "lesson-form-draft:";
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface DraftData {
+  version: number;
+  updatedAt: number;
+  type: LessonType;
+  contentByType: ContentByType;
+  meta: Partial<LessonFormData>;
+}
+
+function getDraftKey(initial?: CmsLesson): string {
+  return `${DRAFT_KEY_PREFIX}${initial?.id || "new"}`;
+}
+
+function loadDraft(initial?: CmsLesson): DraftData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const key = getDraftKey(initial);
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as DraftData;
+    if (draft?.version !== DRAFT_VERSION) return null;
+    if (Date.now() - draft.updatedAt > DRAFT_MAX_AGE_MS) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    // A newer server version supersedes the local draft.
+    if (initial && draft.updatedAt < new Date(initial.updatedAt).getTime()) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    if (!draft.contentByType || typeof draft.contentByType !== "object") return null;
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(
+  initial: CmsLesson | undefined,
+  type: LessonType,
+  contentByType: ContentByType,
+  meta: Partial<LessonFormData>,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const draft: DraftData = {
+      version: DRAFT_VERSION,
+      updatedAt: Date.now(),
+      type,
+      contentByType,
+      meta,
+    };
+    sessionStorage.setItem(getDraftKey(initial), JSON.stringify(draft));
+  } catch {
+    // Storage full or unavailable — non-fatal.
+  }
+}
+
+function clearDraft(initial?: CmsLesson): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(getDraftKey(initial));
+  } catch {
+    // Ignore.
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Section 3: Reusable UI helpers
+   ────────────────────────────────────────────────────────────── */
+
+function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <h2 className="mb-4 text-lg font-semibold">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+  error?: string;
+}) {
+  return (
+    <div className={className}>
+      <label className="mb-1 block text-sm font-medium text-foreground">
+        {label}
+      </label>
+      {children}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function BtnAdd({ onClick, label }: { onClick: () => void, label?: string }) {
+  const { t } = useLanguageStore();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition"
+    >
+      <Plus className="h-3.5 w-3.5" /> {label || t.admin.addBtnLabel}
+    </button>
+  );
+}
+
+function BtnRemove({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-1 rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 transition"
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Section 4: LessonForm (composition/shell)
+   ══════════════════════════════════════════════════════════════ */
 
 export function LessonForm({ initial, backUrl = "/cms" }: Props) {
   const router = useRouter();
@@ -105,12 +270,24 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
     { path: string; message: string }[]
   >([]);
 
+  // Per-type content bag: switching type never destroys other types' work.
+  const initialType: LessonType = initial?.type ?? "grammar";
+  const initialContent = initial
+    ? (normalizeListeningAnswers(initial).content as LessonContent)
+    : createEmptyContent("grammar");
+  const [contentByType, setContentByType] = useState<ContentByType>(() => ({
+    [initialType]: initialContent,
+  }));
+  const contentByTypeRef = useRef(contentByType);
+  contentByTypeRef.current = contentByType;
+
   // ── React Hook Form setup ─────────────────────────────────
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<LessonFormData>({
     resolver: zodResolver(lessonSchema),
@@ -130,7 +307,7 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
           source: initial.source,
           isPublished: initial.isPublished,
           sortOrder: initial.sortOrder,
-          content: normalizeListeningAnswers(initial).content as LessonFormData["content"],
+          content: initialContent as LessonFormData["content"],
         } as LessonFormData)
       : ({
           type: "grammar",
@@ -156,30 +333,77 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
   const language = watch("language");
   const level = watch("level");
   const title = watch("title");
+  const category = watch("category");
   const isPublished = watch("isPublished");
+  const content = contentByType[type] ?? createEmptyContent(type);
 
-  // ── Content state (managed separately for now) ────────────
-  // Normalize legacy listening answer keys so the editor reads/writes the
-  // same `correctAnswer` field as the student page.
-  const [content, setContent] = useState<LessonContent>(() => {
-    if (!initial) return createEmptyContent(type);
-    const normalized = normalizeListeningAnswers(initial);
-    return normalized.content as LessonContent;
-  });
+  // ── Restore draft (client-only effect — no SSR mismatch) ──
+  const draftRestored = useRef(false);
+  useEffect(() => {
+    if (draftRestored.current) return;
+    draftRestored.current = true;
+    const draft = loadDraft(initial);
+    if (!draft) return;
+    const restoredType = draft.type;
+    const restoredContent = draft.contentByType[restoredType];
+    setContentByType((prev) =>
+      restoredContent ? { ...prev, ...draft.contentByType } : prev,
+    );
+    setValue("type", restoredType);
+    setValue("content", (restoredContent ?? createEmptyContent(restoredType)) as LessonFormData["content"]);
+    const meta = draft.meta;
+    for (const key of Object.keys(meta) as (keyof LessonFormData)[]) {
+      const value = meta[key];
+      if (value !== undefined) setValue(key, value as never);
+    }
+  }, [initial, setValue]);
 
-  // Sync content to form when it changes
+  // ── Sync active content + per-type bag to form ────────────
   useEffect(() => {
     setValue("content", content as LessonFormData["content"]);
-  }, [content, setValue]);
+  }, [content, type, setValue]);
 
-  // When type changes, reset content
-  const handleTypeChange = (t: LessonType) => {
-    setValue("type", t);
-    const newContent = createEmptyContent(t);
-    setContent(newContent);
-    setValue("content", newContent as LessonFormData["content"]);
-    setValue("category", "");
-    setValue("categoryVi", "");
+  // ── Persist draft on change (debounced via effect) ────────
+  useEffect(() => {
+    if (!draftRestored.current) return;
+    const timer = window.setTimeout(() => {
+      const values = getValues();
+      const meta: Partial<LessonFormData> = {};
+      for (const key of [
+        "language", "level", "title", "titleVi", "slug", "category",
+        "categoryVi", "description", "thumbnail", "images", "source",
+        "isPublished", "sortOrder",
+      ] as (keyof LessonFormData)[]) {
+        (meta as Record<string, unknown>)[key] = values[key];
+      }
+      saveDraft(initial, values.type, contentByTypeRef.current, meta);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [initial, type, language, level, title, category, isPublished, content, contentByType, getValues]);
+
+  const handleContentChange = useCallback(
+    (next: LessonContent) => {
+      setContentByType((prev) => ({ ...prev, [type]: next }));
+    },
+    [type],
+  );
+
+  // Switching types preserves each type's in-progress content. Category is
+  // only cleared when it is no longer valid for the new type.
+  const handleTypeChange = (nextType: LessonType) => {
+    const currentCategory = getValues("category");
+    const categoryIsValid = CATEGORY_OPTIONS[nextType].some(
+      (c) => c.id === currentCategory,
+    );
+    setValue("type", nextType);
+    const nextContent = contentByTypeRef.current[nextType] ?? createEmptyContent(nextType);
+    setContentByType((prev) => ({ ...prev, [nextType]: nextContent }));
+    setValue("content", nextContent as LessonFormData["content"]);
+    if (!currentCategory || !categoryIsValid) {
+      setValue("category", "");
+      setValue("categoryVi", "");
+    }
+    setValidationIssues([]);
   };
 
   // When language changes, reset level to first option
@@ -188,7 +412,7 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
     setValue("level", LEVEL_OPTIONS[l][0]);
   };
 
-  // Auto-generate slug from title
+  // Auto-generate slug from title (never in edit mode)
   const handleTitleChange = (v: string) => {
     setValue("title", v);
     if (!isEdit) setValue("slug", slugify(v));
@@ -219,15 +443,16 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
         return;
       }
 
+      clearDraft(initial);
       toast.success(isEdit ? "Lesson updated" : "Lesson created");
       window.location.href = backUrl;
-    } catch (error) {
+    } catch {
       toast.error("An error occurred while saving");
     }
   };
 
   const onError = (formErrors: typeof errors) => {
-    const issues = collectErrorMessages(formErrors as Record<string, any>);
+    const issues = collectErrorMessages(formErrors as unknown as Record<string, unknown>);
     setValidationIssues(issues);
     toast.error(
       issues.length > 0
@@ -315,170 +540,30 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
         {/* ── Left Column: Content ──────────────────────────── */}
         <div className="space-y-6 xl:col-span-2">
-          {/* Meta info card */}
-          <Card title={t.admin.basicInfo}>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={t.admin.lessonType}>
-                <select
-                  value={type}
-                  onChange={(e) =>
-                    handleTypeChange(e.target.value as LessonType)
-                  }
-                  className="input-cls"
-                >
-                  <option value="grammar">{t.admin.typeGrammar}</option>
-                  <option value="translation">{t.admin.typeTranslation}</option>
-                  <option value="reading">{t.admin.typeReading}</option>
-                  <option value="vocabulary">{t.admin.typeVocabulary}</option>
-                  <option value="listening">{t.admin.typeListening}</option>
-                </select>
-              </Field>
+          {/* ── Meta fields (isolated component) ────────────── */}
+          <LessonMetaFields
+            register={register}
+            setValue={setValue}
+            watch={watch}
+            errors={errors}
+            type={type}
+            language={language}
+            level={level}
+            title={title}
+            handleTypeChange={handleTypeChange}
+            handleLanguageChange={handleLanguageChange}
+            handleTitleChange={handleTitleChange}
+          />
 
-              <Field label={t.admin.language}>
-                <select
-                  value={language}
-                  onChange={(e) =>
-                    handleLanguageChange(e.target.value as LessonLanguage)
-                  }
-                  className="input-cls"
-                >
-                  <option value="english">{t.admin.langEnglish}</option>
-                  <option value="chinese">{t.admin.langChinese}</option>
-                  <option value="japanese">{t.admin.langJapanese}</option>
-                </select>
-              </Field>
-
-              <Field label={t.admin.level} error={errors.level?.message}>
-                <select
-                  {...register("level")}
-                  value={level}
-                  onChange={(e) => setValue("level", e.target.value)}
-                  className="input-cls"
-                >
-                  {LEVEL_OPTIONS[language].map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label={t.admin.category} error={errors.category?.message}>
-                <select
-                  {...register("category")}
-                  value={watch("category")}
-                  onChange={(e) => {
-                    setValue("category", e.target.value);
-                    const cat = CATEGORY_OPTIONS[type].find(
-                      (c) => c.id === e.target.value,
-                    );
-                    if (cat) setValue("categoryVi", cat.labelVi);
-                  }}
-                  className="input-cls"
-                >
-                  <option value="">{t.admin.categoryPlaceholder}</option>
-                  {CATEGORY_OPTIONS[type].map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.labelVi} ({c.label})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <Field
-                label={t.admin.titleOriginal}
-                error={errors.title?.message}
-              >
-                <input
-                  {...register("title")}
-                  value={title}
-                  onChange={(e) => handleTitleChange(e.target.value)}
-                  className="input-cls"
-                  placeholder="e.g. て形の使い方"
-                />
-              </Field>
-              <Field
-                label={t.admin.titleVietnamese}
-                error={errors.titleVi?.message}
-              >
-                <input
-                  {...register("titleVi")}
-                  className="input-cls"
-                  placeholder="e.g. Cách dùng thể て"
-                />
-              </Field>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <Field label={t.admin.slugUrl} error={errors.slug?.message}>
-                <input
-                  {...register("slug")}
-                  className="input-cls font-mono text-sm"
-                  placeholder="ten-bai-hoc"
-                />
-              </Field>
-              <Field
-                label={t.admin.source}
-                error={errors.source?.message}
-              >
-                <input
-                  {...register("source")}
-                  className="input-cls"
-                  placeholder="e.g. Minna no Nihongo Ch.1"
-                />
-              </Field>
-            </div>
-
-            <Field
-              label={t.admin.description}
-              className="mt-4"
-              error={errors.description?.message}
-            >
-              <textarea
-                {...register("description")}
-                rows={2}
-                className="input-cls"
-                placeholder={t.admin.descriptionPlaceholder}
-              />
-            </Field>
-          </Card>
-
-          {/* Content editor — varies by type */}
+          {/* ── Content editor router (type switch) ─────────── */}
           <Card title={t.admin.lessonContent}>
-            {type === "grammar" && (
-              <GrammarEditor
-                content={content as GrammarContent}
-                onChange={setContent}
-              />
-            )}
-            {type === "translation" && (
-              <TranslationEditor
-                content={content as TranslationContent}
-                onChange={setContent}
-              />
-            )}
-            {type === "reading" && (
-              <ReadingEditor
-                content={content as ReadingContent}
-                onChange={setContent}
-              />
-            )}
-            {type === "vocabulary" && (
-              <VocabularyEditor
-                content={content as VocabularyContent}
-                onChange={setContent}
-              />
-            )}
-            {type === "listening" && (
-              <ListeningEditor
-                content={content as ListeningContent}
-                onChange={setContent}
-                language={language}
-                level={level}
-              />
-            )}
+            <EditorRouter
+              type={type}
+              content={content}
+              onChange={handleContentChange}
+              language={language}
+              level={level}
+            />
           </Card>
         </div>
 
@@ -529,48 +614,200 @@ export function LessonForm({ initial, backUrl = "/cms" }: Props) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Reusable UI helpers
+   Section 5: LessonMetaFields (shared metadata form)
    ══════════════════════════════════════════════════════════════ */
 
-function Card({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="mb-4 text-lg font-semibold">{title}</h2>
-      {children}
-    </div>
-  );
-}
+type FieldErrors = ReturnType<typeof useForm<LessonFormData>>["formState"]["errors"];
+type UseFormRegister = ReturnType<typeof useForm<LessonFormData>>["register"];
+type UseFormSetValue = ReturnType<typeof useForm<LessonFormData>>["setValue"];
+type UseFormWatch = ReturnType<typeof useForm<LessonFormData>>["watch"];
 
-function Field({
-  label,
-  children,
-  className = "",
-  error,
+function LessonMetaFields({
+  register,
+  setValue,
+  watch,
+  errors,
+  type,
+  language,
+  level,
+  title,
+  handleTypeChange,
+  handleLanguageChange,
+  handleTitleChange,
 }: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-  error?: string;
+  register: UseFormRegister;
+  setValue: UseFormSetValue;
+  watch: UseFormWatch;
+  errors: FieldErrors;
+  type: LessonType;
+  language: LessonLanguage;
+  level: string;
+  title: string;
+  handleTypeChange: (t: LessonType) => void;
+  handleLanguageChange: (l: LessonLanguage) => void;
+  handleTitleChange: (v: string) => void;
 }) {
+  const { t } = useLanguageStore();
+
   return (
-    <div className={className}>
-      <label className="mb-1 block text-sm font-medium text-foreground">
-        {label}
-      </label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-    </div>
+    <Card title={t.admin.basicInfo}>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label={t.admin.lessonType}>
+          <select
+            value={type}
+            onChange={(e) => handleTypeChange(e.target.value as LessonType)}
+            className="input-cls"
+          >
+            <option value="grammar">{t.admin.typeGrammar}</option>
+            <option value="translation">{t.admin.typeTranslation}</option>
+            <option value="reading">{t.admin.typeReading}</option>
+            <option value="vocabulary">{t.admin.typeVocabulary}</option>
+            <option value="listening">{t.admin.typeListening}</option>
+          </select>
+        </Field>
+
+        <Field label={t.admin.language}>
+          <select
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value as LessonLanguage)}
+            className="input-cls"
+          >
+            <option value="english">{t.admin.langEnglish}</option>
+            <option value="chinese">{t.admin.langChinese}</option>
+            <option value="japanese">{t.admin.langJapanese}</option>
+          </select>
+        </Field>
+
+        <Field label={t.admin.level} error={errors.level?.message}>
+          <select
+            {...register("level")}
+            value={level}
+            onChange={(e) => setValue("level", e.target.value)}
+            className="input-cls"
+          >
+            {LEVEL_OPTIONS[language].map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label={t.admin.category} error={errors.category?.message}>
+          <select
+            {...register("category")}
+            value={watch("category")}
+            onChange={(e) => {
+              setValue("category", e.target.value);
+              const cat = CATEGORY_OPTIONS[type].find(
+                (c) => c.id === e.target.value,
+              );
+              if (cat) setValue("categoryVi", cat.labelVi);
+            }}
+            className="input-cls"
+          >
+            <option value="">{t.admin.categoryPlaceholder}</option>
+            {CATEGORY_OPTIONS[type].map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.labelVi} ({c.label})
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <Field label={t.admin.titleOriginal} error={errors.title?.message}>
+          <input
+            {...register("title")}
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="input-cls"
+            placeholder="e.g. て形の使い方"
+          />
+        </Field>
+        <Field label={t.admin.titleVietnamese} error={errors.titleVi?.message}>
+          <input
+            {...register("titleVi")}
+            className="input-cls"
+            placeholder="e.g. Cách dùng thể て"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <Field label={t.admin.slugUrl} error={errors.slug?.message}>
+          <input
+            {...register("slug")}
+            className="input-cls font-mono text-sm"
+            placeholder="ten-bai-hoc"
+          />
+        </Field>
+        <Field label={t.admin.source} error={errors.source?.message}>
+          <input
+            {...register("source")}
+            className="input-cls"
+            placeholder="e.g. Minna no Nihongo Ch.1"
+          />
+        </Field>
+      </div>
+
+      <Field
+        label={t.admin.description}
+        className="mt-4"
+        error={errors.description?.message}
+      >
+        <textarea
+          {...register("description")}
+          rows={2}
+          className="input-cls"
+          placeholder={t.admin.descriptionPlaceholder}
+        />
+      </Field>
+    </Card>
   );
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Type-specific content editors
+   Section 6: EditorRouter (type switch)
+   ══════════════════════════════════════════════════════════════ */
+
+function EditorRouter({
+  type,
+  content,
+  onChange,
+  language,
+  level,
+}: {
+  type: LessonType;
+  content: LessonContent;
+  onChange: (c: LessonContent) => void;
+  language: LessonLanguage;
+  level: string;
+}) {
+  switch (type) {
+    case "grammar":
+      return <GrammarEditor content={content as GrammarContent} onChange={onChange} />;
+    case "translation":
+      return <TranslationEditor content={content as TranslationContent} onChange={onChange} />;
+    case "reading":
+      return <ReadingEditor content={content as ReadingContent} onChange={onChange} />;
+    case "vocabulary":
+      return <VocabularyEditor content={content as VocabularyContent} onChange={onChange} />;
+    case "listening":
+      return (
+        <ListeningEditor
+          content={content as ListeningContent}
+          onChange={onChange}
+          language={language}
+          level={level}
+        />
+      );
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Section 7: Type-specific content editors
    ══════════════════════════════════════════════════════════════ */
 
 /* ── Grammar ───────────────────────────────────────────────── */
@@ -1269,6 +1506,12 @@ function ListeningEditor({
   const { t } = useLanguageStore();
 
   const [aiGenerating, setAiGenerating] = useState(false);
+  // AI-generated content is staged for explicit confirmation so it never
+  // silently overwrites user-edited vocabulary/questions (draft preservation).
+  const [stagedGeneration, setStagedGeneration] = useState<{
+    vocabulary: ListeningContent["vocabulary"];
+    questions: ListeningContent["questions"];
+  } | null>(null);
 
   const handleAiGenerate = async () => {
     if (!content.transcript.trim()) return;
@@ -1297,14 +1540,13 @@ function ListeningEditor({
       const json = await res.json();
       const { data } = json;
       if (data) {
-        onChange({
-          ...content,
+        setStagedGeneration({
           vocabulary: data.vocabulary || [],
           questions: data.questions || [],
         });
         toast.success(t.admin.aiGenerateSuccess);
       }
-    } catch (error) {
+    } catch {
       toast.error(t.admin.aiGenerationError);
     } finally {
       setAiGenerating(false);
@@ -1362,6 +1604,43 @@ function ListeningEditor({
           placeholder={t.admin.transcriptPlaceholder}
         />
       </div>
+
+      {/* AI generation confirmation */}
+      {stagedGeneration && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"
+        >
+          <span>
+            {t.admin.aiGenerateSuccess} — {stagedGeneration.vocabulary.length}{" "}
+            {t.admin.vocabulary.toLowerCase()}, {stagedGeneration.questions.length}{" "}
+            {t.admin.listeningQuestions.toLowerCase()}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-lg px-3 py-1 text-xs font-medium hover:bg-muted"
+              onClick={() => setStagedGeneration(null)}
+            >
+              {t.common.cancel}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+              onClick={() => {
+                onChange({
+                  ...content,
+                  vocabulary: stagedGeneration.vocabulary,
+                  questions: stagedGeneration.questions,
+                });
+                setStagedGeneration(null);
+              }}
+            >
+              {t.admin.saveLesson}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Vocabulary */}
       <div>
@@ -1510,31 +1789,5 @@ function ListeningEditor({
         ))}
       </div>
     </div>
-  );
-}
-
-/* ── Tiny button helpers ───────────────────────────────────── */
-function BtnAdd({ onClick, label }: { onClick: () => void, label?: string }) {
-  const { t } = useLanguageStore();
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition"
-    >
-      <Plus className="h-3.5 w-3.5" /> {label || t.admin.addBtnLabel}
-    </button>
-  );
-}
-
-function BtnRemove({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-1 rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 transition"
-    >
-      <Trash2 className="h-4 w-4" />
-    </button>
   );
 }

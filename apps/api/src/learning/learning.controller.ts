@@ -42,7 +42,10 @@ export class LearningController {
   }
 
   @Post('progress')
-  completeSkillActivity(@CurrentUser('id') userId: string, @Body() body: CompleteSkillActivityDto) {
+  completeSkillActivity(
+    @CurrentUser('id') userId: string,
+    @Body() body: CompleteSkillActivityDto,
+  ) {
     return this.learning.completeSkillActivity(userId, body);
   }
 }

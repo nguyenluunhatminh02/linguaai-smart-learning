@@ -93,7 +93,8 @@ describe('RateLimitMiddleware', () => {
   it('forwards a limiter outage (503) via next(error) and blocks the request', async () => {
     const error = new HttpException(
       {
-        message: 'Rate limiting is temporarily unavailable. Please try again shortly.',
+        message:
+          'Rate limiting is temporarily unavailable. Please try again shortly.',
         limit: 100,
         resetAt: 1_700_000_060,
         retryAfterSeconds: 60,
@@ -132,7 +133,9 @@ describe('RateLimitMiddleware', () => {
     const next = jest.fn() as NextFunction;
 
     await middleware.use(request, res, next);
-    expect(checkRateLimit.mock.calls[0][0]).toContain('10.0.0.1:POST:/api/chat');
+    expect(checkRateLimit.mock.calls[0][0]).toContain(
+      '10.0.0.1:POST:/api/chat',
+    );
 
     process.env.TRUST_PROXY_IPS = '10.0.0.1';
     const trusting = new RateLimitMiddleware({ checkRateLimit } as any);

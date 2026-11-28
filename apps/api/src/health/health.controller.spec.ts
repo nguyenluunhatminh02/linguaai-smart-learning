@@ -20,10 +20,7 @@ describe('HealthController readiness (OPS-01)', () => {
   beforeEach(() => {
     prisma = { $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]) };
     redis = { healthCheck: jest.fn().mockResolvedValue(true) };
-    controller = new HealthController(
-      prisma as never,
-      redis as never,
-    );
+    controller = new HealthController(prisma as never, redis as never);
     res = makeResponse();
   });
 
@@ -39,7 +36,9 @@ describe('HealthController readiness (OPS-01)', () => {
   });
 
   it('returns 503 when the database is down', async () => {
-    prisma.$queryRaw.mockRejectedValue(new Error('connection refused at postgres://db.internal'));
+    prisma.$queryRaw.mockRejectedValue(
+      new Error('connection refused at postgres://db.internal'),
+    );
 
     const body = await controller.readiness(res as never as Response);
 
@@ -62,7 +61,9 @@ describe('HealthController readiness (OPS-01)', () => {
   });
 
   it('returns 503 when the Redis check rejects', async () => {
-    redis.healthCheck.mockRejectedValue(new Error('ECONNREFUSED 127.0.0.1:6379'));
+    redis.healthCheck.mockRejectedValue(
+      new Error('ECONNREFUSED 127.0.0.1:6379'),
+    );
 
     const body = await controller.readiness(res as never as Response);
 

@@ -8,7 +8,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiConsumes,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -30,16 +36,18 @@ export class FilesController {
   @Post('upload')
   // SEC-07/SEC-08: reject oversized or disallowed payloads in the parser,
   // before Multer buffers them, rather than after the file reaches the service.
-  @UseInterceptors(FileInterceptor('file', {
-    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 8 },
-    fileFilter: (_req, file, callback) => {
-      if (!UPLOAD_MIME_TYPES.includes(normalizeMimeType(file.mimetype))) {
-        callback(new BadRequestException(VALIDATION_ERROR_MESSAGE), false);
-        return;
-      }
-      callback(null, true);
-    },
-  }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 8 },
+      fileFilter: (_req, file, callback) => {
+        if (!UPLOAD_MIME_TYPES.includes(normalizeMimeType(file.mimetype))) {
+          callback(new BadRequestException(VALIDATION_ERROR_MESSAGE), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a file (image or audio) to the server' })
   @ApiBody({
@@ -63,7 +71,9 @@ export class FilesController {
     // Defence in depth: the service re-validates the signature and derives the
     // object name and extension server-side from the validated MIME type.
     if (file.size > uploadSizeLimitForMimeType(file.mimetype)) {
-      throw new BadRequestException(`File size exceeds limit (${MAX_UPLOAD_BYTES / 1024 / 1024}MB).`);
+      throw new BadRequestException(
+        `File size exceeds limit (${MAX_UPLOAD_BYTES / 1024 / 1024}MB).`,
+      );
     }
 
     const url = await this.filesService.uploadFile(file, userId);

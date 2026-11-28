@@ -16,7 +16,12 @@ import {
   DefaultValuePipe,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { UsersService } from './users.service';
 import { TokensService } from '../tokens/tokens.service';
@@ -26,7 +31,10 @@ import { User } from './entities/user.entity';
 import { mapToUserResponse } from '../common/mappers/user.mapper';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateLearningPreferencesDto } from './dto/update-learning-preferences.dto';
-import { UpdateNotificationPreferencesDto, UpdatePrivacySettingsDto } from './dto/update-settings.dto';
+import {
+  UpdateNotificationPreferencesDto,
+  UpdatePrivacySettingsDto,
+} from './dto/update-settings.dto';
 import { UpdateFcmTokenDto } from './dto/update-fcm-token.dto';
 import { SetupSecurityQuestionsDto } from './dto/security-questions.dto';
 import { ConsumeTokensDto } from './dto/consume-tokens.dto';
@@ -60,7 +68,9 @@ export class UsersController {
   ) {
     const updated = await this.usersService.updateProfile(user.id, {
       ...dto,
-      dateOfBirth: dto.dateOfBirth ? DateUtil.toDate(dto.dateOfBirth) : undefined,
+      dateOfBirth: dto.dateOfBirth
+        ? DateUtil.toDate(dto.dateOfBirth)
+        : undefined,
     });
     return mapToUserResponse(updated);
   }
@@ -72,7 +82,9 @@ export class UsersController {
   }
 
   @Patch('learning-preferences')
-  @ApiOperation({ summary: 'Update account learning preferences and daily goals' })
+  @ApiOperation({
+    summary: 'Update account learning preferences and daily goals',
+  })
   updateLearningPreferences(
     @CurrentUser('id') userId: string,
     @Body() dto: UpdateLearningPreferencesDto,
@@ -90,11 +102,15 @@ export class UsersController {
     @Req() req: Request,
   ) {
     await this.sessionService.deleteAccount(user, user.accessToken, req);
-    return { message: 'Account deletion requested. You have 30 days to cancel.' };
+    return {
+      message: 'Account deletion requested. You have 30 days to cancel.',
+    };
   }
 
   @Get('export')
-  @ApiOperation({ summary: 'Export all personal data owned by the current user (SEC-11)' })
+  @ApiOperation({
+    summary: 'Export all personal data owned by the current user (SEC-11)',
+  })
   async exportMe(@CurrentUser('id') userId: string, @Res() res: Response) {
     const data = await this.usersService.exportUserData(userId);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -176,7 +192,10 @@ export class UsersController {
 
   @Post('devices/:id/untrust')
   @ApiOperation({ summary: 'Untrust a device' })
-  async untrustDevice(@CurrentUser() user: User, @Param('id') deviceId: string) {
+  async untrustDevice(
+    @CurrentUser() user: User,
+    @Param('id') deviceId: string,
+  ) {
     await this.usersService.untrustDevice(user.id, deviceId);
     return { message: 'Device untrusted' };
   }
@@ -254,7 +273,9 @@ export class UsersController {
       typeof rawKey !== 'string' ||
       !/^[0-9a-zA-Z._:-]{8,128}$/.test(rawKey)
     ) {
-      throw new ForbiddenException('A valid idempotency-key header is required');
+      throw new ForbiddenException(
+        'A valid idempotency-key header is required',
+      );
     }
     const idempotencyKey = `${user.id}:${dto.feature}:${rawKey}`.slice(0, 128);
     try {
@@ -267,7 +288,10 @@ export class UsersController {
       return result;
     } catch (err: any) {
       if (err instanceof ForbiddenException || err.status === 403) {
-        throw new HttpException('Insufficient tokens', HttpStatus.PAYMENT_REQUIRED);
+        throw new HttpException(
+          'Insufficient tokens',
+          HttpStatus.PAYMENT_REQUIRED,
+        );
       }
       throw err;
     }
@@ -296,4 +320,3 @@ export class UsersController {
     return this.usersService.getLoginHistory(user.id, page, cappedSize);
   }
 }
-

@@ -6,7 +6,6 @@ import { TokenBlacklistService } from './token-blacklist.service';
 import { RedisService } from '../../common/services/redis.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { extractRequestContext } from '../../common/utils/request-context.util';
-import { LoginAction } from '../../users/enums/login-action.enum';
 import { DeleteStatus } from '../../users/enums/delete-status.enum';
 import { User } from '../../users/entities/user.entity';
 import { DateUtil } from '../../common/utils/date.util';
@@ -72,7 +71,11 @@ export class SessionService {
     await this.redis.delMany([...new Set(keys)]);
   }
 
-  async deleteAccount(user: User, accessToken: string, req: Request): Promise<void> {
+  async deleteAccount(
+    user: User,
+    accessToken: string,
+    req: Request,
+  ): Promise<void> {
     const { ip } = extractRequestContext(req);
 
     // Revoke tokens before disabling the account so a failure in revocation
@@ -90,15 +93,17 @@ export class SessionService {
     });
 
     await this.invalidateUserCache(user.id);
-    await this.auditLogService.recordAuditLog(user.id, 'ACCOUNT_DELETE_REQUESTED', ip);
+    await this.auditLogService.recordAuditLog(
+      user.id,
+      'ACCOUNT_DELETE_REQUESTED',
+      ip,
+    );
   }
 
   async cancelDeleteAccount(user: User, req?: Request): Promise<void> {
     // `req` is optional for backwards compatibility with callers that do not
     // carry request context; audit then records 'unknown' as the IP.
-    const { ip } = req
-      ? extractRequestContext(req)
-      : { ip: 'unknown' };
+    const { ip } = req ? extractRequestContext(req) : { ip: 'unknown' };
 
     // The JWT-derived user comes from the 60s Redis cache which may still say
     // ACTIVE even though the DB already has DELETE_REQUESTED. Trust the DB.
@@ -119,10 +124,19 @@ export class SessionService {
       },
     });
     await this.invalidateUserCache(user.id);
-    await this.auditLogService.recordAuditLog(user.id, 'ACCOUNT_DELETE_CANCELLED', ip);
+    await this.auditLogService.recordAuditLog(
+      user.id,
+      'ACCOUNT_DELETE_CANCELLED',
+      ip,
+    );
   }
 
-  async logoutSession(accessToken: string, sessionId: string, user: User, req: Request): Promise<void> {
+  async logoutSession(
+    accessToken: string,
+    sessionId: string,
+    user: User,
+    req: Request,
+  ): Promise<void> {
     const { ip } = extractRequestContext(req);
 
     // `sessionId` is a refresh_tokens.id (see users.controller.ts), not a

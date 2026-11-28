@@ -43,7 +43,10 @@ describe('ProficiencyService', () => {
       $transaction: jest.fn((callback) => callback(prisma)),
     };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ProficiencyService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ProficiencyService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
     service = module.get<ProficiencyService>(ProficiencyService);
     jest.spyOn(global, 'Date').mockImplementation(() => NOW as any);
@@ -60,7 +63,11 @@ describe('ProficiencyService', () => {
   describe('ProficiencyService.getSummary', () => {
     it('returns all skills for the authenticated user with mapped CEFR ordinal, confidence, evidenceCount and needsMoreEvidence', async () => {
       prisma.$queryRaw.mockResolvedValue([
-        proficiencyRow({ cefr_estimate: 'b2', confidence: '0.75', evidence_count: '6' }),
+        proficiencyRow({
+          cefr_estimate: 'b2',
+          confidence: '0.75',
+          evidence_count: '6',
+        }),
       ]);
 
       const result = await service.getSummary(USER_ID);
@@ -141,7 +148,9 @@ describe('ProficiencyService', () => {
   describe('ProficiencyService.submitPlacement', () => {
     it('inserts into placement_attempts and upserts skill_proficiency inside one transaction with ON CONFLICT (user_id, language, skill)', async () => {
       prisma.$queryRaw
-        .mockResolvedValueOnce([attemptRow({ score: 2, total: 10, cefr_estimate: 'A1' })])
+        .mockResolvedValueOnce([
+          attemptRow({ score: 2, total: 10, cefr_estimate: 'A1' }),
+        ])
         .mockResolvedValueOnce([]) // advisory lock
         .mockResolvedValueOnce([]) // current row
         .mockResolvedValueOnce([proficiencyRow({ cefr_estimate: 'A2' })]);
@@ -159,10 +168,17 @@ describe('ProficiencyService', () => {
         total: 10,
         cefrEstimate: 'A1',
       });
-      expect(result.proficiency).toMatchObject({ cefrEstimate: 'A2', evidenceCount: 1 });
+      expect(result.proficiency).toMatchObject({
+        cefrEstimate: 'A2',
+        evidenceCount: 1,
+      });
       const queries = queryCalls();
       expect(queries[0]).toContain('INSERT INTO placement_attempts');
-      expect(queries.some((query) => query.includes('ON CONFLICT (user_id, language, skill) DO UPDATE'))).toBe(true);
+      expect(
+        queries.some((query) =>
+          query.includes('ON CONFLICT (user_id, language, skill) DO UPDATE'),
+        ),
+      ).toBe(true);
     });
 
     it('rejects score > total, score < 0, total < 1, non-integers and unknown language/skill before touching the database', async () => {
@@ -254,20 +270,32 @@ describe('ProficiencyService', () => {
       const calls = prisma.$queryRaw.mock.calls;
       const lockKey = calls[0][1];
       expect(lockKey).toBe(`proficiency:${USER_ID}:japanese:listening`);
-      expect(calls[1].slice(1)).toEqual(expect.arrayContaining([USER_ID, 'japanese', 'listening']));
-      expect(calls[2].slice(1)).toEqual(expect.arrayContaining([USER_ID, 'japanese', 'listening']));
-      expect(queryCalls().filter((query) => query.includes('skill_proficiency')).every(
-        (query) => query.includes('::uuid'),
-      )).toBe(true);
+      expect(calls[1].slice(1)).toEqual(
+        expect.arrayContaining([USER_ID, 'japanese', 'listening']),
+      );
+      expect(calls[2].slice(1)).toEqual(
+        expect.arrayContaining([USER_ID, 'japanese', 'listening']),
+      );
+      expect(
+        queryCalls()
+          .filter((query) => query.includes('skill_proficiency'))
+          .every((query) => query.includes('::uuid')),
+      ).toBe(true);
     });
 
     it('increments evidenceCount and reduces needsMoreEvidence only after enough observations', async () => {
       // Sixth observation: confidence = 6/8 = 0.75 and count >= 5.
       prisma.$queryRaw
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([proficiencyRow({ evidence_count: 5, cefr_estimate: 'B1' })])
         .mockResolvedValueOnce([
-          proficiencyRow({ evidence_count: 6, confidence: 0.75, cefr_estimate: 'B1' }),
+          proficiencyRow({ evidence_count: 5, cefr_estimate: 'B1' }),
+        ])
+        .mockResolvedValueOnce([
+          proficiencyRow({
+            evidence_count: 6,
+            confidence: 0.75,
+            cefr_estimate: 'B1',
+          }),
         ]);
 
       const result = await service.recordEvidence(USER_ID, {
@@ -287,10 +315,14 @@ describe('ProficiencyService', () => {
 
   it('propagates raw query and transaction errors instead of returning partial results', async () => {
     prisma.$queryRaw.mockRejectedValue(new Error('database unavailable'));
-    await expect(service.getSummary(USER_ID)).rejects.toThrow('database unavailable');
+    await expect(service.getSummary(USER_ID)).rejects.toThrow(
+      'database unavailable',
+    );
 
     prisma.$queryRaw.mockReset();
-    prisma.$transaction.mockRejectedValueOnce(new Error('transaction rolled back'));
+    prisma.$transaction.mockRejectedValueOnce(
+      new Error('transaction rolled back'),
+    );
     await expect(
       service.recordEvidence(USER_ID, {
         language: 'english',

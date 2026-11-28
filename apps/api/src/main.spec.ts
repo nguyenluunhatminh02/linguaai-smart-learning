@@ -46,17 +46,20 @@ describe('SEC-05 bootstrap helpers', () => {
     });
 
     it('requires at least one origin in production', () => {
-      expect(() => parseAllowedOrigins(undefined, { production: true })).toThrow(
-        /at least one origin/i,
-      );
+      expect(() =>
+        parseAllowedOrigins(undefined, { production: true }),
+      ).toThrow(/at least one origin/i);
       expect(parseAllowedOrigins(undefined, { production: false })).toEqual([]);
     });
 
     it('deduplicates equivalent origins', () => {
       expect(
-        parseAllowedOrigins('https://app.example.com, https://app.example.com/', {
-          production: true,
-        }),
+        parseAllowedOrigins(
+          'https://app.example.com, https://app.example.com/',
+          {
+            production: true,
+          },
+        ),
       ).toEqual(['https://app.example.com']);
     });
   });
@@ -71,7 +74,13 @@ describe('SEC-05 bootstrap helpers', () => {
       expect(
         parseTrustedProxies('127.0.0.1, 10.0.0.0/8, ::1, 2001:db8::/32'),
       ).toEqual(['127.0.0.1', '10.0.0.0/8', '::1', '2001:db8::/32']);
-      for (const raw of ['true', '*', 'example.com', '10.0.0.0/33', '::1/129']) {
+      for (const raw of [
+        'true',
+        '*',
+        'example.com',
+        '10.0.0.0/33',
+        '::1/129',
+      ]) {
         expect(() => parseTrustedProxies(raw)).toThrow(/invalid entry/i);
       }
     });
@@ -97,7 +106,9 @@ describe('SEC-05 bootstrap helpers', () => {
     });
 
     it('leaves malformed headers untouched', () => {
-      expect(hardenSetCookieHeaders(['not-a-cookie'])).toEqual(['not-a-cookie']);
+      expect(hardenSetCookieHeaders(['not-a-cookie'])).toEqual([
+        'not-a-cookie',
+      ]);
     });
   });
 });

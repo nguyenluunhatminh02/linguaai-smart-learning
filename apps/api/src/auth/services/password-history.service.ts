@@ -6,7 +6,7 @@ import { DateUtil } from '../../common/utils/date.util';
 
 /**
  * Password History Service
- * 
+ *
  * Manages password history to prevent password reuse.
  * Users cannot reuse their last N passwords.
  */
@@ -26,19 +26,24 @@ export class PasswordHistoryService {
       this.config.get<string | number>('PASSWORD_HISTORY_LIMIT', 5),
     );
     this.HISTORY_LIMIT =
-      Number.isFinite(configuredLimit) && Number.isInteger(configuredLimit) && configuredLimit >= 1
+      Number.isFinite(configuredLimit) &&
+      Number.isInteger(configuredLimit) &&
+      configuredLimit >= 1
         ? Math.floor(configuredLimit)
         : 5;
   }
 
   /**
    * Check if a password has been used before
-   * 
+   *
    * @param userId - The user ID to check
    * @param newPassword - The new password to check
    * @returns True if the password has been used before, false otherwise
    */
-  async isPasswordReused(userId: string, newPassword: string): Promise<boolean> {
+  async isPasswordReused(
+    userId: string,
+    newPassword: string,
+  ): Promise<boolean> {
     try {
       // Get user's password history
       const history = await this.getPasswordHistory(userId);
@@ -47,7 +52,9 @@ export class PasswordHistoryService {
       for (const entry of history) {
         const isMatch = await bcrypt.compare(newPassword, entry.password_hash);
         if (isMatch) {
-          this.logger.warn(`User ${userId} attempted to reuse a previous password`);
+          this.logger.warn(
+            `User ${userId} attempted to reuse a previous password`,
+          );
           return true;
         }
       }
@@ -63,11 +70,14 @@ export class PasswordHistoryService {
 
   /**
    * Add a password to the user's history
-   * 
+   *
    * @param userId - The user ID
    * @param passwordHash - The hashed password to add
    */
-  async addPasswordToHistory(userId: string, passwordHash: string): Promise<void> {
+  async addPasswordToHistory(
+    userId: string,
+    passwordHash: string,
+  ): Promise<void> {
     try {
       // Add new password to history
       await this.prisma.password_history.create({
@@ -88,7 +98,7 @@ export class PasswordHistoryService {
 
   /**
    * Get user's password history
-   * 
+   *
    * @param userId - The user ID
    * @returns Array of password history entries
    */
@@ -102,7 +112,7 @@ export class PasswordHistoryService {
 
   /**
    * Clear all password history for a user
-   * 
+   *
    * @param userId - The user ID
    */
   async clearPasswordHistory(userId: string): Promise<void> {
@@ -117,7 +127,7 @@ export class PasswordHistoryService {
 
   /**
    * Clean up old passwords beyond the history limit
-   * 
+   *
    * @param userId - The user ID
    */
   private async cleanupOldPasswords(userId: string): Promise<void> {
@@ -134,7 +144,7 @@ export class PasswordHistoryService {
           take: this.HISTORY_LIMIT,
         });
 
-        const keepIdSet = new Set(keepIds.map(h => h.id));
+        const keepIdSet = new Set(keepIds.map((h) => h.id));
 
         await this.prisma.password_history.deleteMany({
           where: {

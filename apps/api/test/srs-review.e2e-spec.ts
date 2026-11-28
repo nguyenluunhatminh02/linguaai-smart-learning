@@ -33,7 +33,9 @@ describe('SRS Review E2E', () => {
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     await app.init();
 
-    const dbUrl = process.env.DATABASE_URL || 'postgresql://linguaai:linguaai_secret@localhost:5432/linguaai_test';
+    const dbUrl =
+      process.env.DATABASE_URL ||
+      'postgresql://linguaai:linguaai_secret@localhost:5432/linguaai_test';
     pool = new Pool({ connectionString: dbUrl });
     const adapter = new PrismaPg(pool);
     prisma = new PrismaClient({ adapter });

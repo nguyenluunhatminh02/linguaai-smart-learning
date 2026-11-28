@@ -29,15 +29,20 @@ describe('FilesService ownership (SEC-02/SEC-08)', () => {
       mimetype: 'image/png',
       size: 8,
       buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    } as Express.Multer.File);
+    }) as Express.Multer.File;
 
   beforeEach(async () => {
     storage = {
-      generateKey: jest.fn((userId: string, ext: string) => `${userId}/test-uuid.${ext}`),
+      generateKey: jest.fn(
+        (userId: string, ext: string) => `${userId}/test-uuid.${ext}`,
+      ),
       put: jest.fn().mockResolvedValue(undefined),
-      urlForKey: jest.fn((key: string, base: string) => `${base}/uploads/${key}`),
+      urlForKey: jest.fn(
+        (key: string, base: string) => `${base}/uploads/${key}`,
+      ),
       assertOwner: jest.fn((key: string, userId: string) => {
-        if (!key.startsWith(`${userId}/`)) throw new BadRequestException('File not found or access denied');
+        if (!key.startsWith(`${userId}/`))
+          throw new BadRequestException('File not found or access denied');
         return key;
       }),
       head: jest.fn().mockResolvedValue({ key: 'k', size: 8 }),
@@ -59,7 +64,10 @@ describe('FilesService ownership (SEC-02/SEC-08)', () => {
 
   describe('uploadFile', () => {
     it('server-generates an owner-scoped key from the authenticated user id', async () => {
-      const url = await service.uploadFile(pngFile('../../../../etc/passwd'), OWNER_ID);
+      const url = await service.uploadFile(
+        pngFile('../../../../etc/passwd'),
+        OWNER_ID,
+      );
 
       expect(storage.generateKey).toHaveBeenCalledWith(OWNER_ID, 'png');
       expect(url).toContain(`http://localhost:3001/uploads/${OWNER_ID}/`);
@@ -68,18 +76,24 @@ describe('FilesService ownership (SEC-02/SEC-08)', () => {
     });
 
     it('rejects an unauthenticated upload before storing any bytes', async () => {
-      await expect(service.uploadFile(pngFile(), undefined as any)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.uploadFile(pngFile(), undefined as any),
+      ).rejects.toThrow(BadRequestException);
       expect(storage.put).not.toHaveBeenCalled();
     });
 
     it('rejects an attacker-supplied owner id with invalid characters', async () => {
-      await expect(service.uploadFile(pngFile(), '../admin')).rejects.toThrow(BadRequestException);
+      await expect(service.uploadFile(pngFile(), '../admin')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(storage.put).not.toHaveBeenCalled();
     });
 
     it('returns a failure when storage.put fails', async () => {
       storage.put.mockRejectedValue(new Error('Disk full'));
-      await expect(service.uploadFile(pngFile(), OWNER_ID)).rejects.toThrow(BadRequestException);
+      await expect(service.uploadFile(pngFile(), OWNER_ID)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -87,14 +101,21 @@ describe('FilesService ownership (SEC-02/SEC-08)', () => {
     const key = `${OWNER_ID}/test-uuid.png`;
 
     it('lets the owner head and delete their own file', async () => {
-      await expect(service.headFile(key, OWNER_ID)).resolves.toEqual({ key: 'k', size: 8 });
+      await expect(service.headFile(key, OWNER_ID)).resolves.toEqual({
+        key: 'k',
+        size: 8,
+      });
       await expect(service.deleteFile(key, OWNER_ID)).resolves.toBeUndefined();
       expect(storage.delete).toHaveBeenCalledWith(key);
     });
 
     it('denies a different user access to the same object key', async () => {
-      await expect(service.headFile(key, OTHER_USER_ID)).rejects.toThrow(BadRequestException);
-      await expect(service.deleteFile(key, OTHER_USER_ID)).rejects.toThrow(BadRequestException);
+      await expect(service.headFile(key, OTHER_USER_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.deleteFile(key, OTHER_USER_ID)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(storage.delete).not.toHaveBeenCalled();
     });
   });

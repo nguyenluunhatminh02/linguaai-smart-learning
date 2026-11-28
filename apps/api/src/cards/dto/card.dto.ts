@@ -1,13 +1,20 @@
-import { IsString, IsOptional, IsNumber, Min, Max, MaxLength } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  Min,
+  Max,
+  MaxLength,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCardDto {
-  @ApiProperty({ example: "Hello", maxLength: 500 })
+  @ApiProperty({ example: 'Hello', maxLength: 500 })
   @IsString()
   @MaxLength(500)
   frontText: string;
 
-  @ApiProperty({ example: "Xin chào", maxLength: 500 })
+  @ApiProperty({ example: 'Xin chào', maxLength: 500 })
   @IsString()
   @MaxLength(500)
   backText: string;
@@ -78,21 +85,21 @@ export class UpdateCardDto {
 export class GenerateCardsDto {
   @ApiProperty({
     description:
-      "Source text to extract vocabulary from (reading passage, article, etc.)",
+      'Source text to extract vocabulary from (reading passage, article, etc.)',
   })
   @IsString()
   text: string;
 
   @ApiPropertyOptional({
-    example: "english",
-    description: "Language of the source text",
+    example: 'english',
+    description: 'Language of the source text',
   })
   @IsString()
   @IsOptional()
   language?: string;
 
   @ApiPropertyOptional({
-    description: "Number of cards to generate (3-20)",
+    description: 'Number of cards to generate (3-20)',
     default: 10,
     minimum: 3,
     maximum: 20,

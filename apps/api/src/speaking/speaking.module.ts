@@ -14,7 +14,9 @@ import { SpeakingService } from './speaking.service';
       useFactory: (config: ConfigService) => {
         const secret = config.get<string>('JWT_SECRET');
         if (!secret) {
-          throw new Error('JWT_SECRET must be defined for SpeakingGateway WS auth.');
+          throw new Error(
+            'JWT_SECRET must be defined for SpeakingGateway WS auth.',
+          );
         }
         return { secret };
       },

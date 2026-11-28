@@ -9,16 +9,36 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
-# NEXT_PUBLIC_* envs are inlined into the client bundle at BUILD time.
-# Require an explicit build arg: a localhost fallback would silently ship a
-# production image that calls the operator's own machine. Runtime env changes
-# cannot rewrite the inlined value; rebuild the web image to change it.
+# NEXT_PUBLIC_* values are inlined into the browser bundle at BUILD time.
+# They are public (non-secret) inputs, but each one must be an explicit build
+# arg: a localhost fallback would silently ship an image that calls the
+# operator's own machine. Changing these at container runtime cannot rewrite
+# the inlined values; rebuild the web image to change any of them.
 ARG NEXT_PUBLIC_API_URL
-RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "NEXT_PUBLIC_API_URL build arg is required" >&2; exit 1)
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-# Server-only route variables are supplied at runtime by compose (never
-# NEXT_PUBLIC_*); no default here, since a wrong host resolves inside this
-# container and hides configuration errors.
+ARG NEXT_PUBLIC_AI_SERVICE_URL
+ARG NEXT_PUBLIC_DISABLE_AUTH=false
+RUN set -eu; \
+    for name in NEXT_PUBLIC_API_URL NEXT_PUBLIC_AI_SERVICE_URL NEXT_PUBLIC_DISABLE_AUTH; do \
+      eval "value=\${$name:-}"; \
+      [ -n "$value" ] || { echo "$name build arg is required" >&2; exit 1; }; \
+    done; \
+    # The browser cannot resolve compose service hostnames such as "api".
+    case "$NEXT_PUBLIC_API_URL" in \
+      *://api:*|*://api/*|*://api) echo "NEXT_PUBLIC_API_URL must be browser-reachable, not a Docker service hostname" >&2; exit 1;; \
+    esac; \
+    case "$NEXT_PUBLIC_AI_SERVICE_URL" in \
+      *://ai:*|*://ai/*|*://ai) echo "NEXT_PUBLIC_AI_SERVICE_URL must be browser-reachable, not a Docker service hostname" >&2; exit 1;; \
+    esac; \
+    case "$NEXT_PUBLIC_DISABLE_AUTH" in \
+      true|false) ;; \
+      *) echo "NEXT_PUBLIC_DISABLE_AUTH must be true or false" >&2; exit 1;; \
+    esac
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_AI_SERVICE_URL=$NEXT_PUBLIC_AI_SERVICE_URL \
+    NEXT_PUBLIC_DISABLE_AUTH=$NEXT_PUBLIC_DISABLE_AUTH
+# Server-only route variables (INTERNAL_API_URL, CMS_BACKEND_URL,
+# GROQ_API_KEY, ...) are supplied at runtime by compose and are deliberately
+# NOT build args or NEXT_PUBLIC_*, so they never enter the client bundle.
 # Standalone output is only emitted in container builds.
 ENV BUILD_STANDALONE=true
 COPY --from=deps /app/node_modules ./node_modules
@@ -38,7 +58,14 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+# Everything the server needs is owned by the unprivileged runtime user, and
+# no writable application directory is left owned by root.
+RUN mkdir -p /app/apps/web/.next/cache && chown -R nextjs:nodejs /app
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+# Readiness smoke check for the standalone server; no secrets are involved.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get({host:'127.0.0.1',port:process.env.PORT||3000,path:'/',timeout:4000},r=>{r.resume();process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"
 CMD ["node", "apps/web/server.js"]

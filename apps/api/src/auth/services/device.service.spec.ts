@@ -28,7 +28,11 @@ describe('DeviceService (SEC-03 device revocation)', () => {
   const mockTokenService = { revokeDeviceSession: jest.fn() };
 
   const req = (userAgent = 'Mozilla/5.0') =>
-    ({ headers: { 'user-agent': userAgent }, ip: '127.0.0.1', socket: {} }) as unknown as Request;
+    ({
+      headers: { 'user-agent': userAgent },
+      ip: '127.0.0.1',
+      socket: {},
+    }) as unknown as Request;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -36,8 +40,12 @@ describe('DeviceService (SEC-03 device revocation)', () => {
     mockPrisma.user_devices.count.mockResolvedValue(0);
     mockPrisma.user_devices.findUnique.mockResolvedValue(null);
     mockPrisma.user_devices.findFirst.mockResolvedValue(null);
-    mockPrisma.user_devices.create.mockImplementation(async ({ data }: any) => data);
-    mockPrisma.user_devices.update.mockImplementation(async ({ data }: any) => data);
+    mockPrisma.user_devices.create.mockImplementation(
+      async ({ data }: any) => data,
+    );
+    mockPrisma.user_devices.update.mockImplementation(
+      async ({ data }: any) => data,
+    );
     mockPrisma.user_devices.updateMany.mockResolvedValue({ count: 1 });
     mockTokenService.revokeDeviceSession.mockResolvedValue(undefined);
 
@@ -79,13 +87,31 @@ describe('DeviceService (SEC-03 device revocation)', () => {
         fingerprint: hash('correct-secret'),
       });
 
-      await service.registerDevice(USER, req(), DEVICE, undefined, undefined, 'wrong-secret');
+      await service.registerDevice(
+        USER,
+        req(),
+        DEVICE,
+        undefined,
+        undefined,
+        'wrong-secret',
+      );
       expect(mockPrisma.user_devices.update).not.toHaveBeenCalled();
 
-      await service.registerDevice(USER, req(), DEVICE, undefined, undefined, 'correct-secret');
+      await service.registerDevice(
+        USER,
+        req(),
+        DEVICE,
+        undefined,
+        undefined,
+        'correct-secret',
+      );
       expect(mockPrisma.user_devices.update).toHaveBeenCalledWith({
         where: { device_id: DEVICE },
-        data: { last_active_at: expect.any(Date), ip_address: '127.0.0.1', active: true },
+        data: {
+          last_active_at: expect.any(Date),
+          ip_address: '127.0.0.1',
+          active: true,
+        },
       });
     });
 
@@ -96,7 +122,14 @@ describe('DeviceService (SEC-03 device revocation)', () => {
         fingerprint: hash('secret'),
       });
       await expect(
-        service.registerDevice(USER, req(), DEVICE, undefined, undefined, 'secret'),
+        service.registerDevice(
+          USER,
+          req(),
+          DEVICE,
+          undefined,
+          undefined,
+          'secret',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -111,21 +144,28 @@ describe('DeviceService (SEC-03 device revocation)', () => {
 
     it('evicts the oldest devices, revoking their sessions through TokenService', async () => {
       mockPrisma.user_devices.count.mockResolvedValue(3);
-      mockPrisma.user_devices.findMany.mockImplementation(async ({ take }: any) =>
-        [
-          { device_id: 'old-1' },
-          { device_id: 'old-2' },
-          { device_id: 'old-3' },
-        ].slice(0, take),
+      mockPrisma.user_devices.findMany.mockImplementation(
+        async ({ take }: any) =>
+          [
+            { device_id: 'old-1' },
+            { device_id: 'old-2' },
+            { device_id: 'old-3' },
+          ].slice(0, take),
       );
 
       await service.registerDevice(USER, req(), 'new-device');
 
       expect(mockPrisma.user_devices.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 1, orderBy: { last_active_at: 'asc' } }),
+        expect.objectContaining({
+          take: 1,
+          orderBy: { last_active_at: 'asc' },
+        }),
       );
       expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledTimes(1);
-      expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledWith(USER, 'old-1');
+      expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledWith(
+        USER,
+        'old-1',
+      );
       expect(mockPrisma.user_devices.updateMany).toHaveBeenCalledWith({
         where: { user_id: USER, device_id: { in: ['old-1'] } },
         data: { active: false },
@@ -134,9 +174,13 @@ describe('DeviceService (SEC-03 device revocation)', () => {
 
     it('still creates the device when a session revocation fails', async () => {
       mockPrisma.user_devices.count.mockResolvedValue(3);
-      mockTokenService.revokeDeviceSession.mockRejectedValue(new Error('Redis down'));
+      mockTokenService.revokeDeviceSession.mockRejectedValue(
+        new Error('Redis down'),
+      );
 
-      await expect(service.registerDevice(USER, req(), 'new-device')).resolves.toMatchObject({
+      await expect(
+        service.registerDevice(USER, req(), 'new-device'),
+      ).resolves.toMatchObject({
         device_id: 'new-device',
       });
       expect(mockPrisma.user_devices.create).toHaveBeenCalled();
@@ -153,11 +197,26 @@ describe('DeviceService (SEC-03 device revocation)', () => {
         expect.objectContaining({ take: 3 }),
       );
       expect(mockTokenService.revokeDeviceSession).toHaveBeenCalledTimes(3);
-      expect(mockTokenService.revokeDeviceSession).toHaveBeenNthCalledWith(1, USER, 'old-1');
-      expect(mockTokenService.revokeDeviceSession).toHaveBeenNthCalledWith(2, USER, 'old-2');
-      expect(mockTokenService.revokeDeviceSession).toHaveBeenNthCalledWith(3, USER, 'old-3');
+      expect(mockTokenService.revokeDeviceSession).toHaveBeenNthCalledWith(
+        1,
+        USER,
+        'old-1',
+      );
+      expect(mockTokenService.revokeDeviceSession).toHaveBeenNthCalledWith(
+        2,
+        USER,
+        'old-2',
+      );
+      expect(mockTokenService.revokeDeviceSession).toHaveBeenNthCalledWith(
+        3,
+        USER,
+        'old-3',
+      );
       expect(mockPrisma.user_devices.updateMany).toHaveBeenCalledWith({
-        where: { user_id: USER, device_id: { in: ['old-1', 'old-2', 'old-3'] } },
+        where: {
+          user_id: USER,
+          device_id: { in: ['old-1', 'old-2', 'old-3'] },
+        },
         data: { active: false },
       });
     });
@@ -170,20 +229,28 @@ describe('DeviceService (SEC-03 device revocation)', () => {
         fingerprint: hash('correct-secret'),
       });
       expect(await service.isDeviceTrusted(USER, DEVICE)).toBe(false);
-      expect(await service.isDeviceTrusted(USER, DEVICE, 'wrong-secret')).toBe(false);
-      expect(await service.isDeviceTrusted(USER, DEVICE, 'correct-secret')).toBe(true);
+      expect(await service.isDeviceTrusted(USER, DEVICE, 'wrong-secret')).toBe(
+        false,
+      );
+      expect(
+        await service.isDeviceTrusted(USER, DEVICE, 'correct-secret'),
+      ).toBe(true);
 
       mockPrisma.user_devices.findFirst.mockResolvedValue({
         trusted: false,
         fingerprint: hash('correct-secret'),
       });
-      expect(await service.isDeviceTrusted(USER, DEVICE, 'correct-secret')).toBe(false);
+      expect(
+        await service.isDeviceTrusted(USER, DEVICE, 'correct-secret'),
+      ).toBe(false);
     });
   });
 
   describe('deactivation and ownership guards', () => {
     it('deactivates a device belonging to the user', async () => {
-      mockPrisma.user_devices.findFirst.mockResolvedValue({ device_id: DEVICE });
+      mockPrisma.user_devices.findFirst.mockResolvedValue({
+        device_id: DEVICE,
+      });
       await service.deactivateDevice(USER, DEVICE);
       expect(mockPrisma.user_devices.updateMany).toHaveBeenCalledWith({
         where: { user_id: USER, device_id: DEVICE },
@@ -215,8 +282,12 @@ describe('DeviceService (SEC-03 device revocation)', () => {
 
     it('guards trust changes with the same ownership check', async () => {
       mockPrisma.user_devices.findFirst.mockResolvedValue(null);
-      await expect(service.trustDevice(USER, DEVICE)).rejects.toThrow(NotFoundException);
-      mockPrisma.user_devices.findFirst.mockResolvedValue({ device_id: DEVICE });
+      await expect(service.trustDevice(USER, DEVICE)).rejects.toThrow(
+        NotFoundException,
+      );
+      mockPrisma.user_devices.findFirst.mockResolvedValue({
+        device_id: DEVICE,
+      });
       await service.untrustDevice(USER, DEVICE);
       expect(mockPrisma.user_devices.updateMany).toHaveBeenCalledWith({
         where: { user_id: USER, device_id: DEVICE },

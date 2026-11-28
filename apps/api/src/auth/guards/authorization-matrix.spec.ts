@@ -27,7 +27,7 @@ const makeContext = (user: any): ExecutionContext =>
       getRequest: () => (user === undefined ? {} : { user }),
       getResponse: () => ({}),
     }),
-  } as any);
+  }) as any;
 
 describe('authorization matrix (auth guard + role guard)', () => {
   let rolesGuard: RolesGuard;
@@ -35,21 +35,29 @@ describe('authorization matrix (auth guard + role guard)', () => {
   let reflector: Reflector;
 
   const setMetadata = (required: Role[] | undefined, isPublic?: boolean) => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key: string) => {
-      if (key === ROLES_KEY) return required;
-      if (key === PUBLIC_KEY) return isPublic;
-      return undefined;
-    });
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key: string) => {
+        if (key === ROLES_KEY) return required;
+        if (key === PUBLIC_KEY) return isPublic;
+        return undefined;
+      });
   };
 
   beforeEach(async () => {
     // The base AuthGuard delegates to Passport's global registry; a registered
     // jwt strategy is supplied so protected-route delegation can be asserted
     // without booting the whole Nest app.
-    jest.spyOn(AuthGuard('jwt').prototype, 'canActivate').mockReturnValue(false);
+    jest
+      .spyOn(AuthGuard('jwt').prototype, 'canActivate')
+      .mockReturnValue(false);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RolesGuard, JwtAuthGuard, { provide: Reflector, useValue: new Reflector() }],
+      providers: [
+        RolesGuard,
+        JwtAuthGuard,
+        { provide: Reflector, useValue: new Reflector() },
+      ],
     }).compile();
     rolesGuard = module.get(RolesGuard);
     jwtGuard = module.get(JwtAuthGuard);
@@ -76,7 +84,9 @@ describe('authorization matrix (auth guard + role guard)', () => {
     });
 
     it('uses the isPublic metadata key rather than the roles key', () => {
-      const spy = jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
+      const spy = jest
+        .spyOn(reflector, 'getAllAndOverride')
+        .mockReturnValue(undefined);
       jwtGuard.canActivate(makeContext(undefined));
       expect(spy).toHaveBeenCalledWith('isPublic', expect.any(Array));
     });
@@ -86,21 +96,27 @@ describe('authorization matrix (auth guard + role guard)', () => {
     it('allows a matching role', () => {
       setMetadata([Role.ADMIN]);
       expect(
-        rolesGuard.canActivate(makeContext({ id: 'admin-1', roles: [Role.ADMIN] })),
+        rolesGuard.canActivate(
+          makeContext({ id: 'admin-1', roles: [Role.ADMIN] }),
+        ),
       ).toBe(true);
     });
 
     it('allows any one of several required roles', () => {
       setMetadata([Role.ADMIN, Role.MODERATOR]);
       expect(
-        rolesGuard.canActivate(makeContext({ id: 'mod-1', roles: [Role.MODERATOR] })),
+        rolesGuard.canActivate(
+          makeContext({ id: 'mod-1', roles: [Role.MODERATOR] }),
+        ),
       ).toBe(true);
     });
 
     it('denies a wrong-role user with ForbiddenException', () => {
       setMetadata([Role.ADMIN]);
       expect(() =>
-        rolesGuard.canActivate(makeContext({ id: 'user-1', roles: [Role.USER] })),
+        rolesGuard.canActivate(
+          makeContext({ id: 'user-1', roles: [Role.USER] }),
+        ),
       ).toThrow(ForbiddenException);
     });
 
@@ -114,14 +130,18 @@ describe('authorization matrix (auth guard + role guard)', () => {
     it('fails closed when @Roles() is missing instead of defaulting to USER', () => {
       setMetadata(undefined);
       expect(() =>
-        rolesGuard.canActivate(makeContext({ id: 'user-1', roles: [Role.USER] })),
+        rolesGuard.canActivate(
+          makeContext({ id: 'user-1', roles: [Role.USER] }),
+        ),
       ).toThrow('no role requirements configured');
     });
 
     it('fails closed when @Roles() has an empty list', () => {
       setMetadata([]);
       expect(() =>
-        rolesGuard.canActivate(makeContext({ id: 'admin-1', roles: [Role.ADMIN] })),
+        rolesGuard.canActivate(
+          makeContext({ id: 'admin-1', roles: [Role.ADMIN] }),
+        ),
       ).toThrow('no role requirements configured');
     });
 
@@ -142,7 +162,9 @@ describe('authorization matrix (auth guard + role guard)', () => {
     it('accepts role objects as well as role-name strings', () => {
       setMetadata([Role.ADMIN]);
       expect(
-        rolesGuard.canActivate(makeContext({ id: 'admin-2', roles: [{ name: 'ADMIN' }] })),
+        rolesGuard.canActivate(
+          makeContext({ id: 'admin-2', roles: [{ name: 'ADMIN' }] }),
+        ),
       ).toBe(true);
     });
   });

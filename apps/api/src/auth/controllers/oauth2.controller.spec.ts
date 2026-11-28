@@ -49,7 +49,7 @@ const makeReq = (overrides: any = {}) =>
     headers: {},
     socket: { remoteAddress: '127.0.0.1' },
     ...overrides,
-  } as any);
+  }) as any;
 
 const makeRes = () => {
   const res: any = {
@@ -139,7 +139,9 @@ describe('OAuth2Controller', () => {
 
     it('rejects an empty provider', () => {
       const res = makeRes();
-      expect(() => controller.createState('', res)).toThrow(BadRequestException);
+      expect(() => controller.createState('', res)).toThrow(
+        BadRequestException,
+      );
     });
 
     it('sets an httpOnly, sameSite=lax cookie with the TTL', () => {
@@ -180,7 +182,10 @@ describe('OAuth2Controller', () => {
 
     it('accepts a valid state and delegates to AuthService.handleOAuthLogin', async () => {
       const { state, cookie } = issueState();
-      const req = makeReq({ cookies: { oauth_state: cookie }, query: { state } });
+      const req = makeReq({
+        cookies: { oauth_state: cookie },
+        query: { state },
+      });
       const res = makeRes();
       (req as any).user = { provider: 'google', sub: 'abc' };
 
@@ -190,7 +195,9 @@ describe('OAuth2Controller', () => {
         (req as any).user,
         req,
       );
-      expect(res.clearCookie).toHaveBeenCalledWith('oauth_state', { path: '/' });
+      expect(res.clearCookie).toHaveBeenCalledWith('oauth_state', {
+        path: '/',
+      });
     });
 
     it('throws ForbiddenException when state query param is missing', async () => {
@@ -198,9 +205,9 @@ describe('OAuth2Controller', () => {
       const req = makeReq({ cookies: { oauth_state: cookie } });
       const res = makeRes();
 
-      await expect(controller.googleCallback(req, res, undefined)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        controller.googleCallback(req, res, undefined),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws ForbiddenException when the cookie is missing', async () => {
@@ -216,7 +223,10 @@ describe('OAuth2Controller', () => {
     it('throws ForbiddenException when the signature is tampered', async () => {
       const { state } = issueState();
       const tampered = `${state}.deadbeef0000`;
-      const req = makeReq({ cookies: { oauth_state: tampered }, query: { state } });
+      const req = makeReq({
+        cookies: { oauth_state: tampered },
+        query: { state },
+      });
       const res = makeRes();
 
       await expect(controller.googleCallback(req, res, state)).rejects.toThrow(
@@ -227,7 +237,10 @@ describe('OAuth2Controller', () => {
     it('throws ForbiddenException when the state was signed with a different secret', async () => {
       const { state } = issueState();
       const cookie = buildCookie(state, 'a-completely-different-secret!!');
-      const req = makeReq({ cookies: { oauth_state: cookie }, query: { state } });
+      const req = makeReq({
+        cookies: { oauth_state: cookie },
+        query: { state },
+      });
       const res = makeRes();
 
       await expect(controller.googleCallback(req, res, state)).rejects.toThrow(
@@ -251,7 +264,10 @@ describe('OAuth2Controller', () => {
 
     it('throws ForbiddenException when the state has expired', async () => {
       const { state, cookie } = issueState('google', OAUTH_STATE_TTL_MS + 1000);
-      const req = makeReq({ cookies: { oauth_state: cookie }, query: { state } });
+      const req = makeReq({
+        cookies: { oauth_state: cookie },
+        query: { state },
+      });
       const res = makeRes();
 
       await expect(controller.googleCallback(req, res, state)).rejects.toThrow(
@@ -261,12 +277,17 @@ describe('OAuth2Controller', () => {
 
     it('consumes the cookie so a captured callback URL cannot be replayed', async () => {
       const { state, cookie } = issueState();
-      const req = makeReq({ cookies: { oauth_state: cookie }, query: { state } });
+      const req = makeReq({
+        cookies: { oauth_state: cookie },
+        query: { state },
+      });
       const res = makeRes();
       (req as any).user = {};
 
       await controller.googleCallback(req, res, state);
-      expect(res.clearCookie).toHaveBeenCalledWith('oauth_state', { path: '/' });
+      expect(res.clearCookie).toHaveBeenCalledWith('oauth_state', {
+        path: '/',
+      });
     });
 
     it('throws when the cookie has no signature separator', async () => {
@@ -288,7 +309,13 @@ describe('OAuth2Controller', () => {
   describe('getConnectedAccounts', () => {
     it('returns the accounts for the authenticated user', async () => {
       const accounts = [
-        { id: '1', provider: 'GOOGLE', email: 'a@b.com', name: null, image_url: null },
+        {
+          id: '1',
+          provider: 'GOOGLE',
+          email: 'a@b.com',
+          name: null,
+          image_url: null,
+        },
       ];
       mockPrisma.oauth_accounts.findMany.mockResolvedValue(accounts);
 

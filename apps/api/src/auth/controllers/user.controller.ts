@@ -5,16 +5,19 @@ import {
   Post,
   Delete,
   Body,
-  Req,
   UseInterceptors,
   UploadedFile,
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Request } from 'express';
 import { UsersService } from '../../users/users.service';
 import { TokenService } from '../services/token.service';
 import { RedisService } from '../../common/services/redis.service';

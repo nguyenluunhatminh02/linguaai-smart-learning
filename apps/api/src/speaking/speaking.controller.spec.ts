@@ -22,12 +22,16 @@ describe('SpeakingController ownership (SEC-02)', () => {
   });
 
   it('declares JwtAuthGuard on the controller', () => {
-    const guards = Reflect.getMetadata(GUARDS_METADATA, SpeakingController) ?? [];
+    const guards =
+      Reflect.getMetadata(GUARDS_METADATA, SpeakingController) ?? [];
     expect(guards).toContain(JwtAuthGuard);
   });
 
   it('forwards the caller id into transcribe', async () => {
-    await controller.transcribe(OWNER_ID, { audio: 'dGVzdA==', mimeType: 'audio/webm' });
+    await controller.transcribe(OWNER_ID, {
+      audio: 'dGVzdA==',
+      mimeType: 'audio/webm',
+    });
     expect(service.transcribe).toHaveBeenCalledWith(
       OWNER_ID,
       'dGVzdA==',

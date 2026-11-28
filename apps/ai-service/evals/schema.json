@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:linguai:ai-service:evals:case:v1",
+  "title": "LinguaAI golden eval case (v1)",
+  "description": "One synthetic or licensed golden case for the AI evaluation suite (AI-05, TEST-13). A dataset is a JSON array of these cases; use a unique case id per dataset (cross-case checks belong to the eval runner).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "feature", "language", "level", "input", "expected"],
+  "properties": {
+    "id": {
+      "description": "Stable, dataset-unique case identifier: <feature>-<language>-<level>-<sequence> is recommended.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "feature": {
+      "description": "Evaluated capability; restricted to features the AI service actually exposes (model_router.Feature, app/routers and roadmap AI-05).",
+      "type": "string",
+      "enum": [
+        "writing_feedback",
+        "speaking_feedback",
+        "reading_generation",
+        "grammar",
+        "error_analysis",
+        "chat",
+        "card_generation",
+        "quiz_generation",
+        "nlp"
+      ]
+    },
+    "language": {
+      "description": "Mirrors SUPPORTED_LANGUAGES in app/models/schemas.py.",
+      "type": "string",
+      "enum": [
+        "english",
+        "vietnamese",
+        "japanese",
+        "chinese",
+        "korean",
+        "spanish",
+        "french",
+        "german"
+      ]
+    },
+    "level": {
+      "description": "CEFR level; mirrors LevelLiteral in app/models/schemas.py.",
+      "type": "string",
+      "enum": ["A1", "A2", "B1", "B2", "C1", "C2"]
+    },
+    "input": {
+      "description": "Bounded case payload: prompt text and structured context/options only. No credentials, no provider instructions and no live learner data.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 16,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "user_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "grammar_point": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "user_question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "transcript": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 1000
+        },
+        "target_level": {
+          "type": "string",
+          "enum": ["A1", "A2", "B1", "B2", "C1", "C2"]
+        },
+        "options": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "errors": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "content"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": ["user", "assistant"]
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 5000
+              }
+            }
+          }
+        },
+        "metadata": {
+          "$ref": "#/$defs/boundedMetadata"
+        }
+      }
+    },
+    "expected": {
+      "description": "Deterministic checks first; reference answers and human labels are data, not instructions. schemaValid must be the literal boolean true.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 12,
+      "properties": {
+        "mustDetect": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "mustNotClaim": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "mustContain": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "mustNotContain": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "mustAnswer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "mustCorrectTo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "expectedScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "levelAppropriate": {
+          "type": "boolean"
+        },
+        "groundedIn": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "schemaValid": {
+          "const": true
+        },
+        "rubric": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 8,
+          "properties": {
+            "correctness": { "$ref": "#/$defs/rubricLevel" },
+            "helpfulness": { "$ref": "#/$defs/rubricLevel" },
+            "specificity": { "$ref": "#/$defs/rubricLevel" },
+            "language_level": { "$ref": "#/$defs/rubricLevel" },
+            "factual_grounding": { "$ref": "#/$defs/rubricLevel" },
+            "safety": { "$ref": "#/$defs/rubricLevel" },
+            "schema_validity": { "$ref": "#/$defs/rubricLevel" },
+            "notes": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "source": {
+      "description": "Provenance for AI-05: synthetic cases or licensed material only; no live learner data and no API keys or secrets.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["synthetic", "licensed"]
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "attribution": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    }
+  },
+  "$defs": {
+    "boundedStringArray": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "uniqueItems": true
+    },
+    "rubricLevel": {
+      "description": "Roadmap AI-05 rubric dimensions are graded as pass/partial/fail; use expected.notes for partial results or human-labeled references.",
+      "type": "string",
+      "enum": ["pass", "partial", "fail"]
+    },
+    "boundedMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 8,
+      "properties": {
+        "prompt_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "model_policy_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "schema_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35
+        },
+        "tags": {
+          "$ref": "#/$defs/boundedStringArray"
+        },
+        "critical": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    }
+  }
+}

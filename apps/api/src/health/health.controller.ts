@@ -75,7 +75,9 @@ export class HealthController {
         name,
         {
           status: result.status,
-          ...(result.latencyMs !== undefined && { latencyMs: result.latencyMs }),
+          ...(result.latencyMs !== undefined && {
+            latencyMs: result.latencyMs,
+          }),
         },
       ]),
     );
@@ -96,7 +98,10 @@ export class HealthController {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`${name} health check timed out after ${timeoutMs}ms`)),
+        () =>
+          reject(
+            new Error(`${name} health check timed out after ${timeoutMs}ms`),
+          ),
         timeoutMs,
       );
     });

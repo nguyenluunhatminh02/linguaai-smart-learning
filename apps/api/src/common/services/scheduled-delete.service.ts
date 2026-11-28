@@ -1,9 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
-import { DeleteStatus } from "../../users/enums/delete-status.enum";
-import { DELETE_GRACE_PERIOD_MS } from "../constants/auth.constants";
-import { PrismaService } from "../../prisma/prisma.service";
-import { DateUtil } from "../utils/date.util";
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { DeleteStatus } from '../../users/enums/delete-status.enum';
+import { DELETE_GRACE_PERIOD_MS } from '../constants/auth.constants';
+import { PrismaService } from '../../prisma/prisma.service';
+import { DateUtil } from '../utils/date.util';
 
 @Injectable()
 export class ScheduledDeleteService {
@@ -37,7 +37,9 @@ export class ScheduledDeleteService {
           await tx.login_attempts.deleteMany({ where: { user_id: user.id } });
           await tx.refresh_tokens.deleteMany({ where: { user_id: user.id } });
           await tx.password_history.deleteMany({ where: { user_id: user.id } });
-          await tx.security_questions.deleteMany({ where: { user_id: user.id } });
+          await tx.security_questions.deleteMany({
+            where: { user_id: user.id },
+          });
           await tx.login_history.deleteMany({ where: { user_id: user.id } });
 
           await tx.users.update({
@@ -47,8 +49,8 @@ export class ScheduledDeleteService {
               is_deleted: true,
               is_active: false,
               email: `deleted_${user.id}@deleted.local`,
-              first_name: "Deleted",
-              last_name: "User",
+              first_name: 'Deleted',
+              last_name: 'User',
               phone: null,
               avatar_url: null,
               password: null,
@@ -60,7 +62,7 @@ export class ScheduledDeleteService {
       } catch (error) {
         failureCount++;
         this.logger.error(
-          `Failed to permanently delete user ${user.id}: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to permanently delete user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -70,7 +72,7 @@ export class ScheduledDeleteService {
     }
     if (failureCount > 0) {
       this.logger.warn(
-        `Failed to permanently delete ${failureCount} expired account(s); they will be retried on the next run`
+        `Failed to permanently delete ${failureCount} expired account(s); they will be retried on the next run`,
       );
     }
   }

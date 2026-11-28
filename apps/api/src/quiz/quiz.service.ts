@@ -1,36 +1,63 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { Prisma, quiz_attempts, quiz_questions } from "../generated/prisma";
-import { AiClientService } from "../common/services/ai-client.service";
-import { AnalyticsService } from "../analytics/analytics.service";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { Prisma, quiz_attempts, quiz_questions } from '../generated/prisma';
+import { AiClientService } from '../common/services/ai-client.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import {
   CreateQuizDto,
   SubmitQuizDto,
   AdaptiveNextDto,
   GenerateQuizDto,
-} from "./dto/quiz.dto";
+} from './dto/quiz.dto';
 
 function normalizeAnswer(value: string) {
-  return value.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!?,;:]+$/, "");
+  return value
+    .normalize('NFC')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?,;:]+$/, '');
 }
 
-function questionOptions(question: Pick<quiz_questions, "options" | "question_type">): string[] {
-  if (Array.isArray(question.options) && question.options.every((option) => typeof option === "string") && question.options.length) {
+function questionOptions(
+  question: Pick<quiz_questions, 'options' | 'question_type'>,
+): string[] {
+  if (
+    Array.isArray(question.options) &&
+    question.options.every((option) => typeof option === 'string') &&
+    question.options.length
+  ) {
     return question.options;
   }
-  return question.question_type === "true_false" ? ["True", "False"] : [];
+  return question.question_type === 'true_false' ? ['True', 'False'] : [];
 }
 
-export function correctOptionIndex(options: string[], answer: string): number | null {
+export function correctOptionIndex(
+  options: string[],
+  answer: string,
+): number | null {
   const normalized = normalizeAnswer(answer);
-  const matches = options.flatMap((option, index) => (
-    [option, option.replace(/^\s*[a-z][.)]\s+/i, "")].some((text) => normalizeAnswer(text) === normalized) ? [index] : []
-  ));
+  const matches = options.flatMap((option, index) =>
+    [option, option.replace(/^\s*[a-z][.)]\s+/i, '')].some(
+      (text) => normalizeAnswer(text) === normalized,
+    )
+      ? [index]
+      : [],
+  );
   if (matches.length) return matches.length === 1 ? matches[0] : null;
   const marker = answer.trim().match(/^([a-z])(?:[.)](?:\s.*)?)?$/i);
   const index = marker
     ? marker[1].toUpperCase().charCodeAt(0) - 65
-    : /^\d+$/.test(answer.trim()) ? Number(answer) : -1;
+    : /^\d+$/.test(answer.trim())
+      ? Number(answer)
+      : -1;
   return index >= 0 && index < options.length ? index : null;
 }
 
@@ -48,7 +75,7 @@ interface StoredAnswer extends GradedAnswer {
   explanation: string;
 }
 
-const QUIZ_QUESTION_TYPES = new Set(["mcq", "true_false", "fill_blank"]);
+const QUIZ_QUESTION_TYPES = new Set(['mcq', 'true_false', 'fill_blank']);
 
 // Activity rewards are computed server-side from persisted attempt data so a
 // client cannot inflate XP by submitting a forged score or duration.
@@ -62,50 +89,70 @@ const MAX_ABS_MINUTES = 24 * 60;
  * malformed items so a bad AI response cannot create an ungradeable quiz.
  */
 function validateGeneratedQuestion(q: any, index: number) {
-  if (!q || typeof q !== "object") {
+  if (!q || typeof q !== 'object') {
     throw new BadRequestException(`Generated question ${index + 1} is invalid`);
   }
-  const questionText = typeof q.questionText === "string" ? q.questionText.trim() : "";
+  const questionText =
+    typeof q.questionText === 'string' ? q.questionText.trim() : '';
   if (!questionText) {
-    throw new BadRequestException(`Generated question ${index + 1} has no text`);
+    throw new BadRequestException(
+      `Generated question ${index + 1} has no text`,
+    );
   }
-  const questionType = typeof q.questionType === "string" && q.questionType
-    ? q.questionType.toLowerCase()
-    : "mcq";
+  const questionType =
+    typeof q.questionType === 'string' && q.questionType
+      ? q.questionType.toLowerCase()
+      : 'mcq';
   if (!QUIZ_QUESTION_TYPES.has(questionType)) {
-    throw new BadRequestException(`Generated question ${index + 1} has an invalid type`);
+    throw new BadRequestException(
+      `Generated question ${index + 1} has an invalid type`,
+    );
   }
   const difficulty = Number.isInteger(q.difficulty) ? q.difficulty : 3;
   if (difficulty < 1 || difficulty > 5) {
-    throw new BadRequestException(`Generated question ${index + 1} has an invalid difficulty`);
+    throw new BadRequestException(
+      `Generated question ${index + 1} has an invalid difficulty`,
+    );
   }
-  const correctAnswer = typeof q.correctAnswer === "string" ? q.correctAnswer.trim() : "";
+  const correctAnswer =
+    typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : '';
   if (!correctAnswer) {
-    throw new BadRequestException(`Generated question ${index + 1} has no correct answer`);
+    throw new BadRequestException(
+      `Generated question ${index + 1} has no correct answer`,
+    );
   }
   const options = Array.isArray(q.options) ? q.options : [];
-  if (!options.every((option: unknown) => typeof option === "string")) {
-    throw new BadRequestException(`Generated question ${index + 1} has invalid options`);
+  if (!options.every((option: unknown) => typeof option === 'string')) {
+    throw new BadRequestException(
+      `Generated question ${index + 1} has invalid options`,
+    );
   }
   const stringOptions = options as string[];
-  if (questionType === "true_false" && stringOptions.length === 0) {
-    stringOptions.push("True", "False");
+  if (questionType === 'true_false' && stringOptions.length === 0) {
+    stringOptions.push('True', 'False');
   }
-  if (questionType === "mcq" && stringOptions.length === 0) {
+  if (questionType === 'mcq' && stringOptions.length === 0) {
     throw new BadRequestException(`Generated MCQ ${index + 1} has no options`);
   }
   if (stringOptions.length > 5) {
-    throw new BadRequestException(`Generated question ${index + 1} has too many options`);
+    throw new BadRequestException(
+      `Generated question ${index + 1} has too many options`,
+    );
   }
-  if (stringOptions.length > 0 && correctOptionIndex(stringOptions, correctAnswer) === null) {
-    throw new BadRequestException(`Generated question ${index + 1} has an answer outside its options`);
+  if (
+    stringOptions.length > 0 &&
+    correctOptionIndex(stringOptions, correctAnswer) === null
+  ) {
+    throw new BadRequestException(
+      `Generated question ${index + 1} has an answer outside its options`,
+    );
   }
   return {
     question_text: questionText,
     question_type: questionType,
     options: stringOptions,
     correct_answer: correctAnswer,
-    explanation: typeof q.explanation === "string" ? q.explanation : "",
+    explanation: typeof q.explanation === 'string' ? q.explanation : '',
     difficulty,
   };
 }
@@ -122,26 +169,40 @@ export class QuizService {
   ) {}
 
   private xpForAttempt(score: number, total: number): number {
-    if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0) return QUIZ_BASE_XP;
+    if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0)
+      return QUIZ_BASE_XP;
     const bounded = Math.min(Math.max(0, Math.floor(score)), Math.floor(total));
     return QUIZ_BASE_XP + bounded * XP_PER_CORRECT_ANSWER;
   }
 
-  private minutesForAttempt(durationSeconds: number, timeLimitMinutes?: number | null): number {
-    const seconds = Number.isFinite(durationSeconds) && durationSeconds > 0 ? Math.floor(durationSeconds) : 0;
-    const configured = Number(timeLimitMinutes) || DEFAULT_QUIZ_TIME_LIMIT_MINUTES;
+  private minutesForAttempt(
+    durationSeconds: number,
+    timeLimitMinutes?: number | null,
+  ): number {
+    const seconds =
+      Number.isFinite(durationSeconds) && durationSeconds > 0
+        ? Math.floor(durationSeconds)
+        : 0;
+    const configured =
+      Number(timeLimitMinutes) || DEFAULT_QUIZ_TIME_LIMIT_MINUTES;
     const cap = Math.min(Math.max(1, configured), MAX_ABS_MINUTES);
     return Math.min(Math.max(1, Math.ceil(seconds / 60)), cap);
   }
 
-  private async awardActivity(userId: string, xp: number, minutes: number): Promise<void> {
+  private async awardActivity(
+    userId: string,
+    xp: number,
+    minutes: number,
+  ): Promise<void> {
     if (!this.analytics) return;
     try {
       await this.analytics.recordActivity(userId, xp, minutes, 0);
     } catch (error) {
       // A failed analytics write must not turn a committed submission into a 500
       // or fall through into the P2002 replay handler below.
-      this.logger.warn(`Quiz activity recording failed for user ${userId}: ${String(error)}`);
+      this.logger.warn(
+        `Quiz activity recording failed for user ${userId}: ${String(error)}`,
+      );
     }
   }
 
@@ -189,7 +250,7 @@ export class QuizService {
         where,
         skip,
         take: limit,
-        orderBy: { created_at: "desc" },
+        orderBy: { created_at: 'desc' },
         include: {
           _count: { select: { quiz_questions: true } },
           decks: { select: { language: true } },
@@ -216,7 +277,7 @@ export class QuizService {
       where: { id },
       include: { quiz_questions: true },
     });
-    if (!quiz) throw new NotFoundException("Quiz not found");
+    if (!quiz) throw new NotFoundException('Quiz not found');
     return quiz;
   }
 
@@ -236,36 +297,48 @@ export class QuizService {
 
   async submit(userId: string, dto: SubmitQuizDto) {
     if (dto.attemptId) {
-      const existing = await this.prisma.quiz_attempts.findUnique({ where: { id: dto.attemptId } });
+      const existing = await this.prisma.quiz_attempts.findUnique({
+        where: { id: dto.attemptId },
+      });
       if (existing) return this.submissionResult(existing, userId, dto.quizId);
     }
 
     const quiz = await this.findById(dto.quizId);
     const questions = quiz.quiz_questions;
-    if (questions.length === 0) throw new BadRequestException("Quiz has no questions");
+    if (questions.length === 0)
+      throw new BadRequestException('Quiz has no questions');
     const byId = new Map(questions.map((question) => [question.id, question]));
     const submitted = new Set<string>();
     const gradedAnswers = dto.answers.map((answer): StoredAnswer => {
       const question = byId.get(answer.questionId);
       if (!question || submitted.has(answer.questionId)) {
-        throw new BadRequestException("Invalid or duplicate quiz question");
+        throw new BadRequestException('Invalid or duplicate quiz question');
       }
       submitted.add(answer.questionId);
       const options = questionOptions(question);
-      const expected = options.length ? correctOptionIndex(options, question.correct_answer) : null;
+      const expected = options.length
+        ? correctOptionIndex(options, question.correct_answer)
+        : null;
       if (options.length && expected === null) {
-        throw new BadRequestException("Quiz has an invalid answer key");
+        throw new BadRequestException('Quiz has an invalid answer key');
       }
-      const selected = answer.optionIndex ?? (options.length ? correctOptionIndex(options, answer.answer) : null);
-      if (answer.optionIndex !== undefined && answer.optionIndex >= options.length) {
-        throw new BadRequestException("Invalid quiz choice");
+      const selected =
+        answer.optionIndex ??
+        (options.length ? correctOptionIndex(options, answer.answer) : null);
+      if (
+        answer.optionIndex !== undefined &&
+        answer.optionIndex >= options.length
+      ) {
+        throw new BadRequestException('Invalid quiz choice');
       }
       return {
         ...answer,
         isCorrect: options.length
           ? selected === expected
-          : normalizeAnswer(question.correct_answer) === normalizeAnswer(answer.answer),
-        correctAnswer: expected === null ? question.correct_answer : options[expected],
+          : normalizeAnswer(question.correct_answer) ===
+            normalizeAnswer(answer.answer),
+        correctAnswer:
+          expected === null ? question.correct_answer : options[expected],
         correctOptionIndex: expected,
         explanation: question.explanation,
       };
@@ -291,34 +364,57 @@ export class QuizService {
       );
       return this.submissionResult(attempt, userId, dto.quizId);
     } catch (error) {
-      if (!dto.attemptId || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-      const existing = await this.prisma.quiz_attempts.findUnique({ where: { id: dto.attemptId } });
+      if (
+        !dto.attemptId ||
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      )
+        throw error;
+      const existing = await this.prisma.quiz_attempts.findUnique({
+        where: { id: dto.attemptId },
+      });
       if (!existing) throw error;
       return this.submissionResult(existing, userId, dto.quizId);
     }
   }
 
-  private submissionResult(attempt: quiz_attempts, userId: string, quizId: string) {
-    if (attempt.user_id !== userId || attempt.quiz_id !== quizId) throw new ConflictException("Attempt operation already exists");
+  private submissionResult(
+    attempt: quiz_attempts,
+    userId: string,
+    quizId: string,
+  ) {
+    if (attempt.user_id !== userId || attempt.quiz_id !== quizId)
+      throw new ConflictException('Attempt operation already exists');
     const answers: unknown = attempt.answers;
     const results: GradedAnswer[] = Array.isArray(answers)
       ? answers.flatMap((item: any): GradedAnswer[] => {
-          if (!item || typeof item !== "object" || typeof item.questionId !== "string") return [];
-          return [{
-            questionId: item.questionId,
-            answer: typeof item.answer === "string" ? item.answer : "",
-            optionIndex: typeof item.optionIndex === "number" ? item.optionIndex : undefined,
-            isCorrect: item.isCorrect === true,
-          }];
+          if (
+            !item ||
+            typeof item !== 'object' ||
+            typeof item.questionId !== 'string'
+          )
+            return [];
+          return [
+            {
+              questionId: item.questionId,
+              answer: typeof item.answer === 'string' ? item.answer : '',
+              optionIndex:
+                typeof item.optionIndex === 'number'
+                  ? item.optionIndex
+                  : undefined,
+              isCorrect: item.isCorrect === true,
+            },
+          ];
         })
       : [];
     return {
       attemptId: attempt.id,
       score: attempt.score,
       total: attempt.total_questions,
-      percentage: attempt.total_questions > 0
-        ? Math.round((attempt.score / attempt.total_questions) * 100)
-        : 0,
+      percentage:
+        attempt.total_questions > 0
+          ? Math.round((attempt.score / attempt.total_questions) * 100)
+          : 0,
       results,
     };
   }
@@ -326,10 +422,12 @@ export class QuizService {
   async getAttempts(userId: string, quizId: string) {
     const attempts = await this.prisma.quiz_attempts.findMany({
       where: { user_id: userId, quiz_id: quizId },
-      orderBy: { completed_at: "desc" },
+      orderBy: { completed_at: 'desc' },
     });
     // Strip stored answer-key fields before returning history to clients.
-    return attempts.map((attempt) => this.submissionResult(attempt, userId, quizId));
+    return attempts.map((attempt) =>
+      this.submissionResult(attempt, userId, quizId),
+    );
   }
 
   async remove(id: string) {
@@ -352,25 +450,25 @@ export class QuizService {
         explanation: string;
         difficulty: number;
       }>;
-    }>("/ai/content/generate-quiz-questions", {
+    }>('/ai/content/generate-quiz-questions', {
       topic: dto.topic,
-      language: dto.language || "english",
-      level: dto.level || "B1",
+      language: dto.language || 'english',
+      level: dto.level || 'B1',
       count: dto.count || 10,
     });
 
     const quiz = await this.prisma.quizzes.create({
       data: {
         title: dto.title || aiResult.title || `Quiz: ${dto.topic}`,
-        description: `Auto-generated quiz about "${dto.topic}" for ${dto.level || "B1"} level`,
+        description: `Auto-generated quiz about "${dto.topic}" for ${dto.level || 'B1'} level`,
         creator_id: userId,
-        language: (dto.language || "english").trim().toLowerCase(),
+        language: (dto.language || 'english').trim().toLowerCase(),
         time_limit_minutes: 15,
       },
     });
 
     if (!Array.isArray(aiResult.questions) || aiResult.questions.length === 0) {
-      throw new BadRequestException("AI service returned no quiz questions");
+      throw new BadRequestException('AI service returned no quiz questions');
     }
     // Validate before creating anything so a malformed AI response cannot leave
     // an empty or ungradeable quiz behind.
@@ -390,7 +488,7 @@ export class QuizService {
       questions,
       generated: questions.length,
       topic: dto.topic,
-      language: dto.language || "english",
+      language: dto.language || 'english',
     };
   }
 
@@ -398,13 +496,15 @@ export class QuizService {
     const quiz = await this.findById(quizId);
     const validIds = new Set(quiz.quiz_questions.map((q) => q.id));
     // Ignore unknown/forged IDs rather than treating them as answered questions.
-    const answeredIds = (dto.answeredIds ?? []).filter((id) => validIds.has(id));
+    const answeredIds = (dto.answeredIds ?? []).filter((id) =>
+      validIds.has(id),
+    );
     const remaining = quiz.quiz_questions.filter(
       (q) => !answeredIds.includes(q.id),
     );
 
     if (remaining.length === 0) {
-      return { done: true, message: "All questions answered" };
+      return { done: true, message: 'All questions answered' };
     }
 
     // Determine target difficulty. The client supplies session progress for the
@@ -418,8 +518,7 @@ export class QuizService {
       Math.max(0, Math.floor(dto.correctCount || 0)),
       answeredCount,
     );
-    const correctRate =
-      answeredCount > 0 ? correctCount / answeredCount : 0.5;
+    const correctRate = answeredCount > 0 ? correctCount / answeredCount : 0.5;
 
     // Infer current average difficulty from already-answered questions
     const answeredQuestions = quiz.quiz_questions.filter((q) =>

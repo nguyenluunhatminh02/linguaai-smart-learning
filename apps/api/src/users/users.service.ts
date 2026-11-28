@@ -3,11 +3,11 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
-} from "@nestjs/common";
-import * as bcrypt from "bcrypt";
-import * as fs from "fs";
-import * as path from "path";
-import { User } from "./entities/user.entity";
+} from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import * as fs from 'fs';
+import * as path from 'path';
+import { User } from './entities/user.entity';
 import {
   UserResponse,
   UserSessionResponse,
@@ -15,15 +15,15 @@ import {
   NotificationPreferencesResponse,
   PrivacySettingsResponse,
   DeviceFingerprintResponse,
-} from "../auth/dto/auth-response.dto";
+} from '../auth/dto/auth-response.dto';
 import {
   PageResponse,
   buildPageResponse,
-} from "../common/utils/pagination.util";
-import { JwtService } from "@nestjs/jwt";
-import { PrismaService } from "../prisma/prisma.service";
-import { toAppUser, mapToUserResponse } from "../common/mappers/user.mapper";
-import type { UpdateLearningPreferencesDto } from "./dto/update-learning-preferences.dto";
+} from '../common/utils/pagination.util';
+import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma/prisma.service';
+import { toAppUser, mapToUserResponse } from '../common/mappers/user.mapper';
+import type { UpdateLearningPreferencesDto } from './dto/update-learning-preferences.dto';
 
 const learningPreferencesSelect = {
   learning_level: true,
@@ -43,7 +43,8 @@ function mapLearningPreferences(settings: {
     dailyStudyMinutes: settings.daily_study_minutes ?? 10,
     dailyWordGoal: settings.daily_word_goal,
     dailyReviewGoal: settings.daily_goal,
-    configured: settings.learning_level !== null && settings.daily_study_minutes !== null,
+    configured:
+      settings.learning_level !== null && settings.daily_study_minutes !== null,
   };
 }
 
@@ -66,7 +67,7 @@ export class UsersService {
         user_roles: { include: { roles: true } },
       },
     });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
     return mapToUserResponse(toAppUser(user));
   }
 
@@ -75,11 +76,14 @@ export class UsersService {
       where: { id: userId },
       select: learningPreferencesSelect,
     });
-    if (!settings) throw new NotFoundException("User not found");
+    if (!settings) throw new NotFoundException('User not found');
     return mapLearningPreferences(settings);
   }
 
-  async updateLearningPreferences(userId: string, dto: UpdateLearningPreferencesDto) {
+  async updateLearningPreferences(
+    userId: string,
+    dto: UpdateLearningPreferencesDto,
+  ) {
     const settings = await this.prisma.users.update({
       where: { id: userId },
       data: {
@@ -103,29 +107,29 @@ export class UsersService {
     // Đơn giản: lưu file vào uploads/ và trả URL
     // Trong production dùng FilesService (MinIO)
     if (!file || !file.originalname) {
-      throw new BadRequestException("Avatar file is required");
+      throw new BadRequestException('Avatar file is required');
     }
     const allowedMime = new Set([
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "image/gif",
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
     ]);
     if (!file.mimetype || !allowedMime.has(file.mimetype)) {
-      throw new BadRequestException("Unsupported avatar mime type");
+      throw new BadRequestException('Unsupported avatar mime type');
     }
     if (file.size != null && file.size > 5 * 1024 * 1024) {
-      throw new BadRequestException("Avatar must be ≤ 5MB");
+      throw new BadRequestException('Avatar must be ≤ 5MB');
     }
     const extByMime: Record<string, string> = {
-      "image/jpeg": "jpg",
-      "image/png": "png",
-      "image/webp": "webp",
-      "image/gif": "gif",
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
     };
     // Derive extension from mime, never from user-controlled filename, to avoid
     // path traversal / spoofed extensions. Also sanitize the userId segment.
-    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
     const ext = extByMime[file.mimetype];
     const filename = `${safeUserId}-${Date.now()}.${ext}`;
     const avatarUrl = `/uploads/${filename}`;
@@ -143,12 +147,12 @@ export class UsersService {
       where: { id: userId },
       select: { avatar_url: true },
     });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     // Remove the physical file if it exists and is under the uploads directory.
     if (user.avatar_url) {
-      const filename = user.avatar_url.replace(/^\/uploads\//, "");
-      const uploadDir = path.join(process.cwd(), "uploads");
+      const filename = user.avatar_url.replace(/^\/uploads\//, '');
+      const uploadDir = path.join(process.cwd(), 'uploads');
       const filePath = path.join(uploadDir, filename);
       // Validate the resolved path is still under uploads to prevent traversal.
       const resolvedPath = path.resolve(filePath);
@@ -168,7 +172,7 @@ export class UsersService {
       where: { id: userId },
       data: { avatar_url: null },
     });
-    return { message: "Avatar deleted" };
+    return { message: 'Avatar deleted' };
   }
 
   /** Deactivate account (soft) */
@@ -177,7 +181,7 @@ export class UsersService {
       where: { id: userId },
       data: { is_active: false },
     });
-    return { message: "Account deactivated" };
+    return { message: 'Account deactivated' };
   }
 
   async updateProfile(
@@ -195,7 +199,7 @@ export class UsersService {
     },
   ): Promise<User> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     const updated = await this.prisma.users.update({
       where: { id: userId },
@@ -220,7 +224,7 @@ export class UsersService {
 
   async updateAvatar(userId: string, avatarUrl: string): Promise<User> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     const updated = await this.prisma.users.update({
       where: { id: userId },
@@ -239,7 +243,7 @@ export class UsersService {
     userId: string,
   ): Promise<NotificationPreferencesResponse> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
     return {
       notificationEmailEnabled: user.notification_email_enabled,
       notificationPushEnabled: user.notification_push_enabled,
@@ -258,7 +262,7 @@ export class UsersService {
     }>,
   ): Promise<NotificationPreferencesResponse> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.users.update({
       where: { id: userId },
@@ -277,7 +281,7 @@ export class UsersService {
 
   async getPrivacySettings(userId: string): Promise<PrivacySettingsResponse> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
     return {
       profilePublic: user.profile_public,
       showEmail: user.show_email,
@@ -296,7 +300,7 @@ export class UsersService {
     }>,
   ): Promise<PrivacySettingsResponse> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.users.update({
       where: { id: userId },
@@ -315,7 +319,7 @@ export class UsersService {
 
   async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.users.update({
       where: { id: userId },
@@ -328,11 +332,11 @@ export class UsersService {
   async getDevices(userId: string): Promise<DeviceFingerprintResponse[]> {
     const devices = await this.prisma.user_devices.findMany({
       where: { user_id: userId },
-      orderBy: { last_active_at: "desc" },
+      orderBy: { last_active_at: 'desc' },
     });
     return devices.map((d) => ({
       id: d.id,
-      fingerprint: d.fingerprint ?? "",
+      fingerprint: d.fingerprint ?? '',
       deviceName: d.device_name ?? undefined,
       browser: d.browser ?? undefined,
       os: d.operating_system ?? undefined,
@@ -347,7 +351,7 @@ export class UsersService {
     const device = await this.prisma.user_devices.findFirst({
       where: { id: deviceId, user_id: userId },
     });
-    if (!device) throw new NotFoundException("Device not found");
+    if (!device) throw new NotFoundException('Device not found');
     await this.prisma.user_devices.update({
       where: { id: deviceId },
       data: { trusted: true },
@@ -358,7 +362,7 @@ export class UsersService {
     const device = await this.prisma.user_devices.findFirst({
       where: { id: deviceId, user_id: userId },
     });
-    if (!device) throw new NotFoundException("Device not found");
+    if (!device) throw new NotFoundException('Device not found');
     await this.prisma.user_devices.update({
       where: { id: deviceId },
       data: { trusted: false },
@@ -369,7 +373,7 @@ export class UsersService {
     const result = await this.prisma.user_devices.deleteMany({
       where: { id: deviceId, user_id: userId },
     });
-    if (!result.count) throw new NotFoundException("Device not found");
+    if (!result.count) throw new NotFoundException('Device not found');
   }
 
   // ── Security questions ────────────────────────────────────────────────────────
@@ -380,7 +384,7 @@ export class UsersService {
   ): Promise<void> {
     if (!questions.length || questions.length > 3) {
       throw new BadRequestException(
-        "Provide between 1 and 3 security questions",
+        'Provide between 1 and 3 security questions',
       );
     }
 
@@ -391,18 +395,18 @@ export class UsersService {
       const normalizedAnswer = q.answer.toLowerCase().trim();
       if (normalizedAnswer.length < 8) {
         throw new BadRequestException(
-          "Security question answers must be at least 8 characters",
+          'Security question answers must be at least 8 characters',
         );
       }
       if (!q.question || q.question.trim().length < 10) {
         throw new BadRequestException(
-          "Security questions must be at least 10 characters",
+          'Security questions must be at least 10 characters',
         );
       }
     }
 
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException('User not found');
 
     // Replace existing questions atomically so a partial failure never leaves
     // the user with fewer questions than they submitted.
@@ -427,7 +431,7 @@ export class UsersService {
   async getSecurityQuestions(userId: string): Promise<string[]> {
     const sqs = await this.prisma.security_questions.findMany({
       where: { user_id: userId },
-      orderBy: { sort_order: "asc" },
+      orderBy: { sort_order: 'asc' },
     });
     return sqs.map((s) => s.question);
   }
@@ -440,20 +444,20 @@ export class UsersService {
   ): Promise<UserSessionResponse[]> {
     const sessions = await this.prisma.refresh_tokens.findMany({
       where: { user_id: userId, is_revoked: false },
-      orderBy: { last_active_at: "desc" },
+      orderBy: { last_active_at: 'desc' },
     });
 
     const decodeJti = (token: string): string | null => {
       try {
         const decoded = this.jwtService.decode(token);
-        if (decoded && typeof decoded === "object" && "jti" in decoded) {
+        if (decoded && typeof decoded === 'object' && 'jti' in decoded) {
           const jti = (decoded as { jti?: unknown }).jti;
-          return typeof jti === "string" ? jti : null;
+          return typeof jti === 'string' ? jti : null;
         }
         return null;
       } catch (error) {
         this.logger.debug(
-          `Failed to decode JWT: ${error instanceof Error ? error.message : "unknown"}`,
+          `Failed to decode JWT: ${error instanceof Error ? error.message : 'unknown'}`,
         );
         return null;
       }
@@ -468,9 +472,9 @@ export class UsersService {
       }
       return {
         id: s.id,
-        deviceInfo: s.device_info ?? "Unknown",
-        ipAddress: s.ip_address ?? "Unknown",
-        userAgent: s.user_agent ?? "",
+        deviceInfo: s.device_info ?? 'Unknown',
+        ipAddress: s.ip_address ?? 'Unknown',
+        userAgent: s.user_agent ?? '',
         createdAt: s.created_at,
         lastActiveAt: s.last_active_at ?? s.created_at,
         current: isCurrent,
@@ -559,14 +563,19 @@ export class UsersService {
       this.prisma.notifications.findMany({ where: { user_id: userId } }),
       this.prisma.user_token_balance.findUnique({ where: { user_id: userId } }),
       this.prisma.token_transactions.findMany({ where: { user_id: userId } }),
-      this.prisma.decks.findMany({ where: { creator_id: userId }, include: { cards: true } }),
+      this.prisma.decks.findMany({
+        where: { creator_id: userId },
+        include: { cards: true },
+      }),
       this.prisma.learning_completions.findMany({ where: { user_id: userId } }),
       this.prisma.srs_review_events.findMany({ where: { user_id: userId } }),
       this.prisma.user_card_progress.findMany({ where: { user_id: userId } }),
       this.prisma.review_sessions.findMany({ where: { user_id: userId } }),
       this.prisma.writing_submissions.findMany({ where: { user_id: userId } }),
       this.prisma.speaking_submissions.findMany({ where: { user_id: userId } }),
-      this.prisma.reading_passages.findMany({ where: { generated_by_user_id: userId } }),
+      this.prisma.reading_passages.findMany({
+        where: { generated_by_user_id: userId },
+      }),
       this.prisma.chat_conversations.findMany({
         where: { user_id: userId },
         include: { chat_messages: true },
@@ -696,7 +705,7 @@ export class UsersService {
     });
     const items = await this.prisma.login_history.findMany({
       where: { user_id: userId },
-      orderBy: { created_at: "desc" },
+      orderBy: { created_at: 'desc' },
       skip: page * size,
       take: size,
     });
@@ -706,9 +715,9 @@ export class UsersService {
       (h) => ({
         id: h.id,
         action: h.action as string,
-        ipAddress: h.ip_address ?? "Unknown",
-        userAgent: h.user_agent ?? "",
-        deviceInfo: h.device_info ?? "Unknown",
+        ipAddress: h.ip_address ?? 'Unknown',
+        userAgent: h.user_agent ?? '',
+        deviceInfo: h.device_info ?? 'Unknown',
         success: h.success ?? true,
         failureReason: h.failure_reason ?? undefined,
         createdAt: h.created_at,

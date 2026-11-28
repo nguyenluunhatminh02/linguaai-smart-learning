@@ -91,7 +91,10 @@ async def test_chat_maps_llm_failure_to_503():
         )
 
         assert response.status_code == 503
-        assert response.json() == {"detail": "AI service temporarily unavailable"}
+        error = response.json()["error"]
+        assert error["code"] == "PROVIDER_UNAVAILABLE"
+        assert error["message"] == "AI service temporarily unavailable"
+        assert error["retryable"] is True
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -240,7 +243,9 @@ async def test_writing_invalid_json_twice_returns_502():
         )
 
     assert response.status_code == 502
-    assert response.json() == {"detail": "AI returned invalid JSON"}
+    error = response.json()["error"]
+    assert error["code"] == "INVALID_AI_OUTPUT"
+    assert error["retryable"] is False
     # The retry uses temperature 0.1 and must not hit the cache between attempts.
     assert mock_generate.await_count == 2
     assert [c.kwargs.get("temperature") for c in mock_generate.await_args_list] == [0.3, 0.1]

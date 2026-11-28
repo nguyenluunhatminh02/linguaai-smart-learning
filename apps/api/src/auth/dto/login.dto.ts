@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsBoolean, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -32,7 +39,10 @@ export class LoginDto {
   @MaxLength(50)
   deviceType?: string;
 
-  @ApiPropertyOptional({ description: 'Keep logged in for 28 days', default: false })
+  @ApiPropertyOptional({
+    description: 'Keep logged in for 28 days',
+    default: false,
+  })
   @IsOptional()
   @IsBoolean()
   @Transform(({ value }) => value === true || value === 'true')

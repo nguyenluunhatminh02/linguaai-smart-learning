@@ -14,9 +14,9 @@
 export type FsrsGrade = 1 | 2 | 3 | 4;
 
 export interface FsrsResult {
-  stability: number;   // S — days until 90% forgetting probability; stored in easeFactor column
-  difficulty: number;  // D — card difficulty [1–10]; stored in new difficulty column
-  interval: number;    // scheduled days until next review
+  stability: number; // S — days until 90% forgetting probability; stored in easeFactor column
+  difficulty: number; // D — card difficulty [1–10]; stored in new difficulty column
+  interval: number; // scheduled days until next review
   repetitions: number; // total successful reviews
 }
 
@@ -27,11 +27,25 @@ export interface FsrsResult {
 // w[11-14]: forgotten stability formula
 // w[15-16]: hard / easy modifiers for recall stability
 const W = [
-  0.4072, 1.1829, 3.1262, 15.4722, // initial stability by grade
-  7.2102, 0.5316, 1.0651, 0.0589,  // difficulty parameters
-  1.5330, 0.1544, 1.0070, 1.9395,  // recall stability formula
-  0.1100, 0.2900, 2.2700, 0.2900,  // forgotten stability formula + hard/easy
-  2.9898, 0.5100, 0.3400,          // unused in this build (reserved)
+  0.4072,
+  1.1829,
+  3.1262,
+  15.4722, // initial stability by grade
+  7.2102,
+  0.5316,
+  1.0651,
+  0.0589, // difficulty parameters
+  1.533,
+  0.1544,
+  1.007,
+  1.9395, // recall stability formula
+  0.11,
+  0.29,
+  2.27,
+  0.29, // forgotten stability formula + hard/easy
+  2.9898,
+  0.51,
+  0.34, // unused in this build (reserved)
 ] as const;
 
 /** FSRS forgetting curve constants */
@@ -77,7 +91,12 @@ export class FsrsAlgorithm {
    * Stability after a SUCCESSFUL recall (grade 2, 3, or 4).
    * S'_r = S * (1 + exp(w8)*(11-D)*S^(-w9)*(exp((1-R)*w10)-1) * hard_penalty * easy_bonus)
    */
-  static stabilityAfterRecall(D: number, S: number, R: number, grade: FsrsGrade): number {
+  static stabilityAfterRecall(
+    D: number,
+    S: number,
+    R: number,
+    grade: FsrsGrade,
+  ): number {
     const hardPenalty = grade === 2 ? W[15] : 1;
     const easyBonus = grade === 4 ? W[16] : 1;
     const newS =
@@ -110,7 +129,8 @@ export class FsrsAlgorithm {
    * For DESIRED_RETENTION=0.9: interval ≈ S (exact derivation from forgetting curve).
    */
   static nextInterval(stability: number): number {
-    const interval = (stability / FACTOR) * (Math.pow(DESIRED_RETENTION, 1 / DECAY) - 1);
+    const interval =
+      (stability / FACTOR) * (Math.pow(DESIRED_RETENTION, 1 / DECAY) - 1);
     return clamp(Math.round(interval), 1, MAX_INTERVAL);
   }
 
@@ -153,11 +173,20 @@ export class FsrsAlgorithm {
         // Forgotten — reset to relearning
         stability = Math.min(
           prevStability,
-          FsrsAlgorithm.stabilityAfterForgetting(prevDifficulty, prevStability, R),
+          FsrsAlgorithm.stabilityAfterForgetting(
+            prevDifficulty,
+            prevStability,
+            R,
+          ),
         );
         repetitions = 0;
       } else {
-        stability = FsrsAlgorithm.stabilityAfterRecall(prevDifficulty, prevStability, R, grade);
+        stability = FsrsAlgorithm.stabilityAfterRecall(
+          prevDifficulty,
+          prevStability,
+          R,
+          grade,
+        );
         repetitions = prevRepetitions + 1;
       }
     }

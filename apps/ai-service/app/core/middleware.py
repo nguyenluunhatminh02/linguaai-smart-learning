@@ -1,13 +1,15 @@
 """Request-level middleware for the AI service.
 
-Two responsibilities:
+Three responsibilities:
 
-1. Assign a server-sanitized request id before any downstream code runs, and
+1. Propagate the gateway correlation id (``X-Request-ID`` / ``X-AI-Request-ID``)
+   after server-side sanitization, preferring the gateway-generated value, and
    reset the contextvar in ``finally`` so a pooled worker never leaks the
    previous request's id into the next one.
 2. Reject oversized ``Content-Length`` headers with a safe 413 before the
    body is read or validated. Chunked bodies are not covered here — schema
    caps remain mandatory — but this stops trivial amplification attempts.
+3. Echo the resolved id in the response header and structured completion logs.
 """
 
 from __future__ import annotations
@@ -35,13 +37,39 @@ _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9\-_.]{1,64}$")
 MAX_CONTENT_LENGTH = MAX_CONTEXT_CHARS * 4  # generous: ~48 KB
 
 
+def _is_valid_request_id(raw: str | None) -> bool:
+    """Return whether a caller-supplied id is within the strict allow-list."""
+    return bool(raw and _REQUEST_ID_RE.fullmatch(raw))
+
+
 def _sanitize_request_id(raw: str | None) -> str:
     """Return a safe request ID. Always generate server-side when the client
     value is missing or does not match the strict allow-list, preventing log
     forging, header injection, and storage amplification."""
-    if raw and _REQUEST_ID_RE.match(raw):
-        return raw
+    if _is_valid_request_id(raw):
+        return raw  # type: ignore[return-value]
     return str(uuid.uuid4())
+
+
+def _gateway_request_id(request: Request) -> str:
+    """Resolve the gateway-supplied correlation id without trusting it blindly.
+
+    ``X-Request-ID`` is the canonical NestJS request id; ``X-AI-Request-ID``
+    is the metadata header emitted for AI calls. Both must pass the same
+    strict allow-list. When both are present and disagree, neither is trusted
+    and a fresh server id is generated so logs cannot be split across two
+    unrelated callers.
+    """
+    canonical = request.headers.get("x-request-id")
+    metadata = request.headers.get("x-ai-request-id")
+    candidates = [
+        value for value in (canonical, metadata) if _is_valid_request_id(value)
+    ]
+    if not candidates:
+        return str(uuid.uuid4())
+    if len(set(candidates)) > 1:
+        return str(uuid.uuid4())
+    return candidates[0]
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -67,8 +95,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
                     },
                 )
 
-        # Lấy hoặc tạo mới request ID (luôn validate phía server)
-        request_id = _sanitize_request_id(request.headers.get("x-request-id"))
+        # Lấy correlation ID từ gateway (luôn validate phía server).
+        request_id = _gateway_request_id(request)
         token = set_request_id(request_id)
         request.state.request_id = request_id
 
@@ -88,8 +116,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
         # Ghi log request hoàn tất dưới dạng JSON structured
         logger.info(
-            f"HTTP {request.method} {request.url.path} finished with status {response.status_code}",
+            "HTTP %s %s finished with status %s requestId=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            request_id,
             extra={
+                "requestId": request_id,
                 "method": request.method,
                 "path": request.url.path,
                 "status_code": response.status_code,

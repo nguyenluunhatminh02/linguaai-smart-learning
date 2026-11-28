@@ -157,43 +157,70 @@ export class FakeLlmProvider {
  * Minimal in-memory stand-in for RedisService. The billing matrix only needs
  * `get`/`set`/`del` and `incrWithExpiry`; the fake satisfies those and
  * records calls so tests can assert cache invalidation happened.
+ *
+ * The `outage` toggle (T16) makes every read/write throw, simulating a Redis
+ * failure. Billing must remain correct because daily grant and debit are
+ * DB-backed, not Redis-backed; only the rate limiter's fail-open/fail-closed
+ * behaviour is affected, and that is asserted in a dedicated unit spec.
  */
 export class FakeRedis {
   public store = new Map<string, string>();
   public delCalls: string[] = [];
+  /** When true, every operation rejects with a Redis-shaped error. */
+  public outage = false;
+
+  private guard(method: string): void {
+    if (this.outage) {
+      const err = new Error(`Redis ${method}: ECONNREFUSED (fake outage)`);
+      (err as Error & { code?: string }).code = 'ECONNREFUSED';
+      throw err;
+    }
+  }
 
   async get(key: string): Promise<string | null> {
+    this.guard('get');
     return this.store.get(key) ?? null;
   }
   async set(key: string, value: string, _ttl?: number): Promise<void> {
+    this.guard('set');
     this.store.set(key, value);
   }
   async del(key: string): Promise<void> {
+    this.guard('del');
     this.store.delete(key);
     this.delCalls.push(key);
   }
   async exists(key: string): Promise<boolean> {
+    this.guard('exists');
     return this.store.has(key);
   }
   async setNx(key: string, value: string, _ttl?: number): Promise<boolean> {
+    this.guard('setNx');
     if (this.store.has(key)) return false;
     this.store.set(key, value);
     return true;
   }
   async incrWithExpiry(key: string, _windowSeconds: number): Promise<number> {
+    this.guard('incrWithExpiry');
     const current = parseInt(this.store.get(key) ?? '0', 10) + 1;
     this.store.set(key, String(current));
     return current;
   }
+  async ttl(_key: string): Promise<number> {
+    this.guard('ttl');
+    return -1;
+  }
   async keys(_pattern: string): Promise<string[]> {
+    this.guard('keys');
     return [...this.store.keys()];
   }
   async delMany(keys: string[]): Promise<void> {
+    this.guard('delMany');
     for (const k of keys) this.store.delete(k);
     this.delCalls.push(...keys);
   }
   isAvailable(): boolean {
-    return true;
+    return !this.outage;
   }
 }
 
@@ -237,9 +264,8 @@ export async function seedChatBillingFixtures(prisma: any): Promise<void> {
     data: { user_id: FIXTURE.lowBalanceUser.id, balance: 1 },
   });
   const today = new Date().toISOString().slice(0, 10);
-  const grantStore = (globalThis as Record<string, unknown>).__CHAT_BILLING_FAKE_REDIS__ as
-    | Map<string, string>
-    | undefined;
+  const grantStore = (globalThis as Record<string, unknown>)
+    .__CHAT_BILLING_FAKE_REDIS__ as Map<string, string> | undefined;
   if (grantStore) {
     grantStore.set(`token:last_topup:${FIXTURE.lowBalanceUser.id}`, today);
     grantStore.set(`token:last_topup:${FIXTURE.userA.id}`, today);
@@ -307,17 +333,54 @@ export async function readChatBillingState(
 }
 
 /**
+ * Count ledger entries for a user, optionally filtered by transaction type
+ * (`consumption`/`refund`/`purchase`/`bonus`) and/or feature. Used by the
+ * at-most-once refund assertion (T18) and the Redis-outage billing check
+ * (T16) to prove the DB ledger stayed consistent without a working Redis.
+ */
+export async function countLedgerEntries(
+  prisma: any,
+  userId: string,
+  filter: { type?: string; feature?: string } = {},
+): Promise<number> {
+  const where: Record<string, unknown> = { user_id: userId };
+  if (filter.type) where.type = filter.type;
+  if (filter.feature) where.feature = filter.feature;
+  const rows = await prisma.token_transactions.findMany({ where });
+  return rows.length;
+}
+
+/**
+ * Force the `lease_until` of an ai_operations row into the past so the
+ * repository's expired-lease predicate matches it. Used by the simulated
+ * recovery tests (T13/T14 contract assertions) to exercise the
+ * findExpired/markUnknown primitives without waiting for a real timeout.
+ */
+export async function markLeaseExpired(
+  prisma: any,
+  operationId: string,
+): Promise<void> {
+  const past = new Date(Date.now() - 60_000);
+  await prisma.ai_operations.updateMany({
+    where: { id: operationId },
+    data: { lease_until: past },
+  });
+}
+
+/**
  * Raw SSE reader that tolerates arbitrary chunk splits. The production
  * parser lives in the web app; this minimal version is just enough to drive
  * the matrix assertions (event name + JSON payload per event).
  */
-export function parseSseEvents(raw: string): Array<{ event: string; data: any }> {
+export function parseSseEvents(
+  raw: string,
+): Array<{ event: string; data: any }> {
   const events: Array<{ event: string; data: any }> = [];
   const blocks = raw.split(/\n\n+/).filter(Boolean);
   let currentEvent = 'message';
   for (const block of blocks) {
     const lines = block.split(/\r?\n/);
-    let dataLines: string[] = [];
+    const dataLines: string[] = [];
     for (const line of lines) {
       if (line.startsWith('event:')) {
         currentEvent = line.slice(6).trim();

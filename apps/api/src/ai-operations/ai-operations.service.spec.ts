@@ -5,7 +5,10 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { AiOperationsService } from './ai-operations.service';
-import { AiOperationsRepository, AiOperationRecord } from './ai-operations.repository';
+import {
+  AiOperationsRepository,
+  AiOperationRecord,
+} from './ai-operations.repository';
 import { AiOperationsPolicy } from './ai-operations.policy';
 import { TokensService } from '../tokens/tokens.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,7 +33,9 @@ describe('AiOperationsService', () => {
     message: 'How do I use the past simple?',
   });
 
-  function makeOperation(overrides: Partial<AiOperationRecord> = {}): AiOperationRecord {
+  function makeOperation(
+    overrides: Partial<AiOperationRecord> = {},
+  ): AiOperationRecord {
     return {
       id: operationId,
       user_id: userId,
@@ -67,10 +72,21 @@ describe('AiOperationsService', () => {
         created: true,
       })),
       claimLease: jest.fn().mockImplementation(async (input) =>
-        makeOperation({ status: 'RUNNING', lease_token: input.leaseToken, lease_until: input.leaseUntil, version: input.expectedVersion + 1, attempt_count: 1 }),
+        makeOperation({
+          status: 'RUNNING',
+          lease_token: input.leaseToken,
+          lease_until: input.leaseUntil,
+          version: input.expectedVersion + 1,
+          attempt_count: 1,
+        }),
       ),
       markTerminal: jest.fn().mockImplementation(async () =>
-        makeOperation({ status: 'SUCCEEDED', lease_token: null, version: 2, charged_credits: 5 }),
+        makeOperation({
+          status: 'SUCCEEDED',
+          lease_token: null,
+          version: 2,
+          charged_credits: 5,
+        }),
       ),
       hasActiveLease: jest.fn(),
       markUnknown: jest.fn(),
@@ -78,7 +94,9 @@ describe('AiOperationsService', () => {
       isKnownRequestError: jest.fn(),
     } as unknown as jest.Mocked<AiOperationsRepository>;
 
-    tokens = { addTokens: jest.fn().mockResolvedValue({ balance: 10, added: 5 }) };
+    tokens = {
+      addTokens: jest.fn().mockResolvedValue({ balance: 10, added: 5 }),
+    };
     policy = new AiOperationsPolicy();
     jest.spyOn(policy, 'computeRequestHash').mockReturnValue(requestHash);
 
@@ -131,7 +149,9 @@ describe('AiOperationsService', () => {
       repository.findByScope.mockResolvedValueOnce(
         makeOperation({ request_hash: 'different-hash' }),
       );
-      await expect(service.findOrCreate(userId, dto)).rejects.toThrow(ConflictException);
+      await expect(service.findOrCreate(userId, dto)).rejects.toThrow(
+        ConflictException,
+      );
       expect(repository.create).not.toHaveBeenCalled();
     });
 
@@ -152,7 +172,8 @@ describe('AiOperationsService', () => {
       const result = await service.claimLease(userId, operationId, 0);
       expect(result.alreadyClaimed).toBe(false);
       expect(result.leaseToken).toBe(
-        (repository.claimLease.mock.calls[0][0] as { leaseToken: string }).leaseToken,
+        (repository.claimLease.mock.calls[0][0] as { leaseToken: string })
+          .leaseToken,
       );
       expect(repository.claimLease).toHaveBeenCalledTimes(1);
     });
@@ -176,13 +197,19 @@ describe('AiOperationsService', () => {
     });
 
     it('rejects a stale worker whose version has moved on', async () => {
-      repository.findByIdForUser.mockResolvedValueOnce(makeOperation({ version: 2 }));
-      await expect(service.claimLease(userId, operationId, 1)).rejects.toThrow(ConflictException);
+      repository.findByIdForUser.mockResolvedValueOnce(
+        makeOperation({ version: 2 }),
+      );
+      await expect(service.claimLease(userId, operationId, 1)).rejects.toThrow(
+        ConflictException,
+      );
       expect(repository.claimLease).not.toHaveBeenCalled();
     });
 
     it('rejects a worker that cannot find the operation', async () => {
-      await expect(service.claimLease(userId, operationId, 0)).rejects.toThrow(NotFoundException);
+      await expect(service.claimLease(userId, operationId, 0)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('refuses to restart a terminal operation', async () => {
@@ -198,11 +225,21 @@ describe('AiOperationsService', () => {
   describe('markTerminal', () => {
     it('refuses stale fencing tokens', async () => {
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'RUNNING', version: 1, lease_token: 'other-token', lease_until: new Date(Date.now() + 60_000) }),
+        makeOperation({
+          status: 'RUNNING',
+          version: 1,
+          lease_token: 'other-token',
+          lease_until: new Date(Date.now() + 60_000),
+        }),
       );
       repository.markTerminal.mockResolvedValueOnce(null);
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'RUNNING', version: 2, lease_token: 'newer-token', lease_until: new Date(Date.now() + 60_000) }),
+        makeOperation({
+          status: 'RUNNING',
+          version: 2,
+          lease_token: 'newer-token',
+          lease_until: new Date(Date.now() + 60_000),
+        }),
       );
       await expect(
         service.markTerminal(userId, operationId, 1, leaseToken, 'SUCCEEDED'),
@@ -212,7 +249,11 @@ describe('AiOperationsService', () => {
 
     it('never lets a terminal operation return to RUNNING', async () => {
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'FAILED', version: 2, error_code: 'PROVIDER_UNAVAILABLE' }),
+        makeOperation({
+          status: 'FAILED',
+          version: 2,
+          error_code: 'PROVIDER_UNAVAILABLE',
+        }),
       );
       await expect(
         service.markTerminal(userId, operationId, 2, leaseToken, 'SUCCEEDED'),
@@ -222,7 +263,12 @@ describe('AiOperationsService', () => {
 
     it('refunds exactly once on a known failure', async () => {
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'RUNNING', version: 1, lease_token: leaseToken, lease_until: new Date(Date.now() + 60_000) }),
+        makeOperation({
+          status: 'RUNNING',
+          version: 1,
+          lease_token: leaseToken,
+          lease_until: new Date(Date.now() + 60_000),
+        }),
       );
       repository.markTerminal.mockResolvedValueOnce(
         makeOperation({
@@ -233,9 +279,16 @@ describe('AiOperationsService', () => {
         }),
       );
 
-      const result = await service.markTerminal(userId, operationId, 1, leaseToken, 'FAILED', {
-        errorCode: 'INVALID_AI_OUTPUT',
-      });
+      const result = await service.markTerminal(
+        userId,
+        operationId,
+        1,
+        leaseToken,
+        'FAILED',
+        {
+          errorCode: 'INVALID_AI_OUTPUT',
+        },
+      );
       expect(result.refunded).toBe(true);
       expect(tokens.addTokens).toHaveBeenCalledTimes(1);
       expect(tokens.addTokens).toHaveBeenCalledWith(
@@ -249,33 +302,68 @@ describe('AiOperationsService', () => {
 
     it('does not refund twice when markTerminal is replayed', async () => {
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'RUNNING', version: 1, lease_token: leaseToken, lease_until: new Date(Date.now() + 60_000) }),
+        makeOperation({
+          status: 'RUNNING',
+          version: 1,
+          lease_token: leaseToken,
+          lease_until: new Date(Date.now() + 60_000),
+        }),
       );
       repository.markTerminal.mockResolvedValueOnce(
-        makeOperation({ status: 'FAILED', version: 2, error_code: 'PROVIDER_UNAVAILABLE' }),
+        makeOperation({
+          status: 'FAILED',
+          version: 2,
+          error_code: 'PROVIDER_UNAVAILABLE',
+        }),
       );
       await service.markTerminal(userId, operationId, 1, leaseToken, 'FAILED', {
         errorCode: 'PROVIDER_UNAVAILABLE',
       });
 
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'FAILED', version: 2, error_code: 'PROVIDER_UNAVAILABLE' }),
+        makeOperation({
+          status: 'FAILED',
+          version: 2,
+          error_code: 'PROVIDER_UNAVAILABLE',
+        }),
       );
-      const replay = await service.markTerminal(userId, operationId, 2, leaseToken, 'FAILED');
+      const replay = await service.markTerminal(
+        userId,
+        operationId,
+        2,
+        leaseToken,
+        'FAILED',
+      );
       expect(replay.refunded).toBe(false);
       expect(tokens.addTokens).toHaveBeenCalledTimes(1);
     });
 
     it('does not refund an ambiguous UNKNOWN outcome', async () => {
       repository.findByIdForUser.mockResolvedValueOnce(
-        makeOperation({ status: 'RUNNING', version: 1, lease_token: leaseToken, lease_until: new Date(Date.now() + 60_000) }),
+        makeOperation({
+          status: 'RUNNING',
+          version: 1,
+          lease_token: leaseToken,
+          lease_until: new Date(Date.now() + 60_000),
+        }),
       );
       repository.markTerminal.mockResolvedValueOnce(
-        makeOperation({ status: 'UNKNOWN', version: 2, error_code: 'PROVIDER_TIMEOUT' }),
+        makeOperation({
+          status: 'UNKNOWN',
+          version: 2,
+          error_code: 'PROVIDER_TIMEOUT',
+        }),
       );
-      const result = await service.markTerminal(userId, operationId, 1, leaseToken, 'UNKNOWN', {
-        errorCode: 'PROVIDER_TIMEOUT',
-      });
+      const result = await service.markTerminal(
+        userId,
+        operationId,
+        1,
+        leaseToken,
+        'UNKNOWN',
+        {
+          errorCode: 'PROVIDER_TIMEOUT',
+        },
+      );
       expect(result.operation.status).toBe('UNKNOWN');
       expect(tokens.addTokens).not.toHaveBeenCalled();
     });

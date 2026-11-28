@@ -17,7 +17,9 @@ export class ReviewCardDto {
   @Max(4)
   grade: number;
 
-  @ApiPropertyOptional({ description: 'Stable ID for safely retrying this review' })
+  @ApiPropertyOptional({
+    description: 'Stable ID for safely retrying this review',
+  })
   @IsOptional()
   @IsUUID()
   operationId?: string;
@@ -28,7 +30,9 @@ export class StartSessionDto {
   @IsUUID()
   deckId: string;
 
-  @ApiPropertyOptional({ description: 'Stable ID for safely retrying session creation' })
+  @ApiPropertyOptional({
+    description: 'Stable ID for safely retrying session creation',
+  })
   @IsOptional()
   @IsUUID()
   sessionId?: string;

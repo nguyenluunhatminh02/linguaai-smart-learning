@@ -28,13 +28,15 @@ function isInCidr(ip: string, network: string, bits: number): boolean {
     }
     if (remainder) {
       const mask = 0xff << (8 - remainder);
-      if ((ipBytes[fullBytes] & mask) !== (netBytes[fullBytes] & mask)) return false;
+      if ((ipBytes[fullBytes] & mask) !== (netBytes[fullBytes] & mask))
+        return false;
     }
     return true;
   }
 
   const toInt = (address: string) =>
-    address.split('.').reduce((acc, part) => (acc << 8) | Number(part), 0) >>> 0;
+    address.split('.').reduce((acc, part) => (acc << 8) | Number(part), 0) >>>
+    0;
   const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
   return (toInt(ip) & mask) === (toInt(network) & mask);
 }
@@ -44,10 +46,18 @@ function expandIPv6(address: string): Uint8Array | null {
   const leftGroups = parts[0] ? parts[0].split(':') : [];
   const rightGroups = parts.length > 1 && parts[1] ? parts[1].split(':') : [];
   const missing = 8 - leftGroups.length - rightGroups.length;
-  if (parts.length > 1 ? missing < 0 : leftGroups.length + rightGroups.length !== 8) {
+  if (
+    parts.length > 1
+      ? missing < 0
+      : leftGroups.length + rightGroups.length !== 8
+  ) {
     return null;
   }
-  const groups = [...leftGroups, ...Array(Math.max(0, missing)).fill('0'), ...rightGroups];
+  const groups = [
+    ...leftGroups,
+    ...Array(Math.max(0, missing)).fill('0'),
+    ...rightGroups,
+  ];
   const bytes = new Uint8Array(16);
   for (let i = 0; i < 8; i++) {
     const value = parseInt(groups[i], 16);
@@ -80,8 +90,13 @@ function isTrustedProxy(ip: string, trustedProxies: string[]): boolean {
  * With no trusted proxy configured, the socket address is authoritative.
  */
 function extractClientIp(req: Request): string {
-  const socketIp = normalizeIp(req.socket?.remoteAddress ?? '') || req.ip || 'unknown';
-  const trustedProxies = (process.env.TRUSTED_PROXY_IPS || process.env.TRUST_PROXY_IPS || '')
+  const socketIp =
+    normalizeIp(req.socket?.remoteAddress ?? '') || req.ip || 'unknown';
+  const trustedProxies = (
+    process.env.TRUSTED_PROXY_IPS ||
+    process.env.TRUST_PROXY_IPS ||
+    ''
+  )
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);

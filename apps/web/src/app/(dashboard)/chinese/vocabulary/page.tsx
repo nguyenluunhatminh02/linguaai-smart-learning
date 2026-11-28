@@ -45,6 +45,28 @@ function cmsToZhVocabPack(lesson: Record<string, unknown>): ZhVocabPack {
   };
 }
 
+interface DeckSummary {
+  id: string;
+  title?: string;
+  name?: string;
+  language?: string;
+}
+
+interface CardResponse {
+  id: string;
+  frontText?: string;
+  front_text?: string;
+  front?: string;
+  backText?: string;
+  back_text?: string;
+  back?: string;
+  exampleSentence?: string;
+  example_sentence?: string;
+  createdAt?: string;
+  created_at?: string;
+  progress?: { repetitionCount?: number } | null;
+}
+
 interface Word {
   id: string;
   word: string;
@@ -76,7 +98,7 @@ export default function ChineseVocabularyPage() {
       const decks = Array.isArray(decksRes.data) ? decksRes.data : [];
       
       const vocabDeck = decks.find(
-        (d: any) =>
+        (d: DeckSummary) =>
           d.language === 'chinese' ||
           d.title === 'Từ vựng tiếng Trung của tôi' ||
           d.title === 'Từ vựng tiếng Trung' ||
@@ -88,7 +110,7 @@ export default function ChineseVocabularyPage() {
         const cardsRes = await apiClient.get(`/decks/${vocabDeck.id}/cards`);
         const cardsData = Array.isArray(cardsRes.data) ? cardsRes.data : [];
         
-        const mappedWords: Word[] = cardsData.map((c: any) => {
+        const mappedWords: Word[] = cardsData.map((c: CardResponse) => {
           let status: Word['status'] = 'new';
           if (c.progress) {
             const count = c.progress.repetitionCount ?? 0;

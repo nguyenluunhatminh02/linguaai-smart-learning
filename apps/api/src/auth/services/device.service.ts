@@ -58,7 +58,9 @@ export class DeviceService {
       });
       if (existing) {
         if (existing.user_id !== userId) {
-          throw new BadRequestException('Device ID is not registered to this user');
+          throw new BadRequestException(
+            'Device ID is not registered to this user',
+          );
         }
         const verified =
           !!deviceSecret &&
@@ -71,7 +73,11 @@ export class DeviceService {
         if (!verified) return existing;
         return this.prisma.user_devices.update({
           where: { device_id: deviceId },
-          data: { last_active_at: DateUtil.now(), ip_address: ip, active: true },
+          data: {
+            last_active_at: DateUtil.now(),
+            ip_address: ip,
+            active: true,
+          },
         });
       }
     }
@@ -104,7 +110,7 @@ export class DeviceService {
           }
         }
 
-        const oldestIds = oldestActiveDevices.map(d => d.device_id);
+        const oldestIds = oldestActiveDevices.map((d) => d.device_id);
         await this.prisma.user_devices.updateMany({
           where: { user_id: userId, device_id: { in: oldestIds } },
           data: { active: false },
@@ -121,26 +127,30 @@ export class DeviceService {
     // so the client can present it on subsequent logins.
     const newDeviceId = deviceId || uuidv4();
     const newDeviceSecret = crypto.randomBytes(32).toString('hex');
-    const defaultName = [browser.name, 'on', os.name].filter(Boolean).join(' ') || 'Unknown Device';
+    const defaultName =
+      [browser.name, 'on', os.name].filter(Boolean).join(' ') ||
+      'Unknown Device';
 
-    return this.prisma.user_devices.create({
-      data: {
-        user_id: userId,
-        device_id: newDeviceId,
-        device_name: deviceName || defaultName,
-        device_type: deviceType || 'unknown',
-        browser: browser.name || null,
-        browser_version: browser.version || null,
-        operating_system: os.name || null,
-        os_version: os.version || null,
-        ip_address: ip || null,
-        user_agent: ua || null,
-        active: true,
-        trusted: false,
-        fingerprint: this.hashDeviceSecret(newDeviceSecret),
-        last_active_at: DateUtil.now(),
-      },
-    }).then((device) => ({ ...device, deviceSecret: newDeviceSecret }));
+    return this.prisma.user_devices
+      .create({
+        data: {
+          user_id: userId,
+          device_id: newDeviceId,
+          device_name: deviceName || defaultName,
+          device_type: deviceType || 'unknown',
+          browser: browser.name || null,
+          browser_version: browser.version || null,
+          operating_system: os.name || null,
+          os_version: os.version || null,
+          ip_address: ip || null,
+          user_agent: ua || null,
+          active: true,
+          trusted: false,
+          fingerprint: this.hashDeviceSecret(newDeviceSecret),
+          last_active_at: DateUtil.now(),
+        },
+      })
+      .then((device) => ({ ...device, deviceSecret: newDeviceSecret }));
   }
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -242,7 +252,9 @@ export class DeviceService {
       where: { device_id: deviceId, user_id: userId },
     });
     if (!device) {
-      throw new NotFoundException('Device not found or does not belong to this user');
+      throw new NotFoundException(
+        'Device not found or does not belong to this user',
+      );
     }
     return device;
   }

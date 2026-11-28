@@ -1,8 +1,23 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, UseGuards, ParseUUIDPipe, DefaultValuePipe, ParseIntPipe,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { DecksService } from './decks.service';
 import { CreateDeckDto, UpdateDeckDto } from './dto/deck.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -66,7 +81,10 @@ export class DecksController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a deck' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
     return this.decksService.remove(id, userId);
   }
 }

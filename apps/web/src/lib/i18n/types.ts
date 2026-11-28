@@ -6,6 +6,13 @@ export interface Translations {
     appName: string;
     loading: string;
     loadingDesc: string;
+    loadingShort: string;
+    retry: string;
+    emptyTitle: string;
+    errorTitle: string;
+    errorDescription: string;
+    offlineTitle: string;
+    offlineDescription: string;
     poweredBy: string;
     poweredByDesc: string;
     save: string;

@@ -9,7 +9,6 @@
  * and the 404 behaviour for foreign ids.
  */
 import { NotFoundException } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 
 import { ReadingService } from './reading.service';
 
@@ -51,7 +50,9 @@ describe('ReadingService ownership (SEC-02)', () => {
       };
       prisma.reading_passages.findFirst.mockResolvedValue(passage);
 
-      await expect(service.getById(OWNER_ID, PASSAGE_ID)).resolves.toBe(passage);
+      await expect(service.getById(OWNER_ID, PASSAGE_ID)).resolves.toBe(
+        passage,
+      );
       expect(prisma.reading_passages.findFirst).toHaveBeenCalledWith({
         where: { id: PASSAGE_ID, generated_by_user_id: OWNER_ID },
       });
@@ -59,7 +60,7 @@ describe('ReadingService ownership (SEC-02)', () => {
       expect(prisma.reading_passages.findUnique).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundException for another user\'s valid passage UUID', async () => {
+    it("throws NotFoundException for another user's valid passage UUID", async () => {
       // The row exists, but an owner-scoped query must never see it.
       prisma.reading_passages.findFirst.mockResolvedValue(null);
 
@@ -73,14 +74,14 @@ describe('ReadingService ownership (SEC-02)', () => {
 
     it('throws NotFoundException for a missing passage', async () => {
       prisma.reading_passages.findFirst.mockResolvedValue(null);
-      await expect(service.getById(OWNER_ID, FOREIGN_PASSAGE_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getById(OWNER_ID, FOREIGN_PASSAGE_ID),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('owner-scoped reads and writes', () => {
-    it('getHistory filters and counts only the caller\'s passages', async () => {
+    it("getHistory filters and counts only the caller's passages", async () => {
       prisma.reading_passages.findMany.mockResolvedValue([
         { id: PASSAGE_ID, generated_by_user_id: OWNER_ID, topic: 'travel' },
       ]);
@@ -89,7 +90,11 @@ describe('ReadingService ownership (SEC-02)', () => {
       const result = await service.getHistory(OWNER_ID, 2, 5);
 
       expect(prisma.reading_passages.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { generated_by_user_id: OWNER_ID }, skip: 5, take: 5 }),
+        expect.objectContaining({
+          where: { generated_by_user_id: OWNER_ID },
+          skip: 5,
+          take: 5,
+        }),
       );
       expect(prisma.reading_passages.count).toHaveBeenCalledWith({
         where: { generated_by_user_id: OWNER_ID },
@@ -102,7 +107,11 @@ describe('ReadingService ownership (SEC-02)', () => {
         passage: 'A short passage.',
         vocabulary: [{ word: 'passage', definition: 'a section of text' }],
         questions: [
-          { question: 'What is it?', options: ['passage', 'book'], correctAnswer: 'passage' },
+          {
+            question: 'What is it?',
+            options: ['passage', 'book'],
+            correctAnswer: 'passage',
+          },
         ],
       });
       prisma.reading_passages.create.mockResolvedValue({ id: PASSAGE_ID });
@@ -122,7 +131,7 @@ describe('ReadingService ownership (SEC-02)', () => {
       expect(result.id).toBe(PASSAGE_ID);
     });
 
-    it('getRecommendations reads only the caller\'s history', async () => {
+    it("getRecommendations reads only the caller's history", async () => {
       await service.getRecommendations(OWNER_ID, 'english', 5);
 
       expect(prisma.reading_passages.findMany).toHaveBeenCalledWith(

@@ -70,9 +70,9 @@ describe('ChatService ownership (SEC-02)', () => {
       // The owner-scoped lookup finds nothing for B even though the UUID exists.
       mockPrisma.chat_conversations.findFirst.mockResolvedValue(null);
 
-      await expect(service.sendMessage(USER_B, ownedTurn)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.sendMessage(USER_B, ownedTurn),
+      ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(prisma.chat_conversations.findFirst).toHaveBeenCalledWith({
         where: { id: CONVERSATION_A, user_id: USER_B },
@@ -132,7 +132,9 @@ describe('ChatService ownership (SEC-02)', () => {
         select: { id: true },
       });
       expect(prisma.chat_conversations.create).not.toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ user_id: USER_A }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ user_id: USER_A }),
+        }),
       );
     });
   });
@@ -141,9 +143,9 @@ describe('ChatService ownership (SEC-02)', () => {
     it("rejects a stream on user A's conversation for user B before opening the provider stream", async () => {
       mockPrisma.chat_conversations.findFirst.mockResolvedValue(null);
 
-      await expect(service.sendStream(USER_B, ownedTurn)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.sendStream(USER_B, ownedTurn),
+      ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(prisma.chat_conversations.findFirst).toHaveBeenCalledWith({
         where: { id: CONVERSATION_A, user_id: USER_B },
@@ -169,15 +171,17 @@ describe('ChatService ownership (SEC-02)', () => {
     });
 
     it('returns history to the owner of the conversation', async () => {
-      const history = [{ role: 'user', content: 'Hello', created_at: new Date() }];
+      const history = [
+        { role: 'user', content: 'Hello', created_at: new Date() },
+      ];
       mockPrisma.chat_conversations.findFirst.mockResolvedValue({
         id: CONVERSATION_A,
       });
       mockPrisma.chat_messages.findMany.mockResolvedValue(history);
 
-      await expect(service.getMessages(USER_A, CONVERSATION_A)).resolves.toEqual(
-        history,
-      );
+      await expect(
+        service.getMessages(USER_A, CONVERSATION_A),
+      ).resolves.toEqual(history);
       expect(prisma.chat_messages.findMany).toHaveBeenCalledWith({
         where: { conversation_id: CONVERSATION_A },
         orderBy: { created_at: 'asc' },
@@ -220,7 +224,9 @@ describe('ChatService ownership (SEC-02)', () => {
       mockPrisma.chat_conversations.findFirst.mockResolvedValue({
         id: CONVERSATION_A,
       });
-      mockPrisma.chat_conversations.delete.mockResolvedValue({ id: CONVERSATION_A });
+      mockPrisma.chat_conversations.delete.mockResolvedValue({
+        id: CONVERSATION_A,
+      });
 
       await service.deleteConversation(USER_A, CONVERSATION_A);
 

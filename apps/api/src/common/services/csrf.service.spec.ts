@@ -42,7 +42,9 @@ describe('CsrfService', () => {
       const stored = redis.store.get('csrf:session-a');
       expect(stored).toBe(service.hashToken(token));
       expect(stored).not.toBe(token);
-      await expect(service.validateToken(token, 'session-a')).resolves.toBe(true);
+      await expect(service.validateToken(token, 'session-a')).resolves.toBe(
+        true,
+      );
     });
 
     it('rejects malformed, cross-session and missing tokens', async () => {
@@ -50,8 +52,12 @@ describe('CsrfService', () => {
       const token = await service.generateToken('session-a');
 
       await expect(service.validateToken('', 'session-a')).resolves.toBe(false);
-      await expect(service.validateToken('short', 'session-a')).resolves.toBe(false);
-      await expect(service.validateToken(token, 'session-b')).resolves.toBe(false);
+      await expect(service.validateToken('short', 'session-a')).resolves.toBe(
+        false,
+      );
+      await expect(service.validateToken(token, 'session-b')).resolves.toBe(
+        false,
+      );
       await expect(service.validateToken(token, '')).resolves.toBe(false);
     });
 
@@ -60,7 +66,9 @@ describe('CsrfService', () => {
       const token = await service.generateToken('session-a');
       redis.get.mockResolvedValueOnce(null);
 
-      await expect(service.validateToken(token, 'session-a')).resolves.toBe(false);
+      await expect(service.validateToken(token, 'session-a')).resolves.toBe(
+        false,
+      );
     });
 
     it('fails closed when Redis throws', async () => {
@@ -68,17 +76,23 @@ describe('CsrfService', () => {
       const token = await service.generateToken('session-a');
       redis.get.mockRejectedValueOnce(new Error('redis down'));
 
-      await expect(service.validateToken(token, 'session-a')).resolves.toBe(false);
+      await expect(service.validateToken(token, 'session-a')).resolves.toBe(
+        false,
+      );
     });
 
     it('does not log the session identifier', async () => {
       const { service } = setup({ secret: 'test-secret' });
-      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      const warn = jest
+        .spyOn((service as any).logger, 'warn')
+        .mockImplementation(() => undefined);
 
       await service.validateToken('a'.repeat(64), 'sensitive-session-id');
 
       expect(warn).toHaveBeenCalled();
-      expect(JSON.stringify(warn.mock.calls)).not.toContain('sensitive-session-id');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(
+        'sensitive-session-id',
+      );
     });
   });
 
@@ -88,19 +102,29 @@ describe('CsrfService', () => {
       const signed = await service.generateSignedToken('session-a');
       const [token] = signed.split(':');
 
-      expect(redis.store.get('csrf:signed:session-a')).toBe(service.hashToken(token));
-      await expect(service.verifySignedToken(signed, 'session-a')).resolves.toBe(true);
-      await expect(service.verifySignedToken(signed, 'session-a')).resolves.toBe(false);
+      expect(redis.store.get('csrf:signed:session-a')).toBe(
+        service.hashToken(token),
+      );
+      await expect(
+        service.verifySignedToken(signed, 'session-a'),
+      ).resolves.toBe(true);
+      await expect(
+        service.verifySignedToken(signed, 'session-a'),
+      ).resolves.toBe(false);
     });
 
     it('rejects cross-session replay and tampering', async () => {
       const { service } = setup({ secret: 'test-secret' });
       const signed = await service.generateSignedToken('session-a');
 
-      await expect(service.verifySignedToken(signed, 'session-b')).resolves.toBe(false);
-      const [token, timestamp, signature] = signed.split(':');
+      await expect(
+        service.verifySignedToken(signed, 'session-b'),
+      ).resolves.toBe(false);
+      const [, timestamp, signature] = signed.split(':');
       const tampered = `${'f'.repeat(64)}:${timestamp}:${signature}`;
-      await expect(service.verifySignedToken(tampered, 'session-a')).resolves.toBe(false);
+      await expect(
+        service.verifySignedToken(tampered, 'session-a'),
+      ).resolves.toBe(false);
     });
 
     it('rejects expired and malformed tokens', async () => {
@@ -109,9 +133,15 @@ describe('CsrfService', () => {
       const signed = await service.generateSignedToken('session-a');
 
       jest.setSystemTime(new Date('2026-01-01T02:00:00Z'));
-      await expect(service.verifySignedToken(signed, 'session-a')).resolves.toBe(false);
-      await expect(service.verifySignedToken('garbage', 'session-a')).resolves.toBe(false);
-      await expect(service.verifySignedToken(signed + ':extra', 'session-a')).resolves.toBe(false);
+      await expect(
+        service.verifySignedToken(signed, 'session-a'),
+      ).resolves.toBe(false);
+      await expect(
+        service.verifySignedToken('garbage', 'session-a'),
+      ).resolves.toBe(false);
+      await expect(
+        service.verifySignedToken(signed + ':extra', 'session-a'),
+      ).resolves.toBe(false);
       jest.useRealTimers();
     });
 
@@ -127,7 +157,9 @@ describe('CsrfService', () => {
       const signed = await service.generateSignedToken('session-a');
       redis.get.mockResolvedValueOnce(null);
 
-      await expect(service.verifySignedToken(signed, 'session-a')).resolves.toBe(false);
+      await expect(
+        service.verifySignedToken(signed, 'session-a'),
+      ).resolves.toBe(false);
     });
 
     it('refuses to issue or verify tokens without a configured secret', async () => {
@@ -137,7 +169,10 @@ describe('CsrfService', () => {
         'JWT_SECRET is required',
       );
       await expect(
-        service.verifySignedToken(`${'a'.repeat(64)}:1767225600000:${'b'.repeat(64)}`, 'session-a'),
+        service.verifySignedToken(
+          `${'a'.repeat(64)}:1767225600000:${'b'.repeat(64)}`,
+          'session-a',
+        ),
       ).rejects.toThrow('JWT_SECRET is required');
     });
   });

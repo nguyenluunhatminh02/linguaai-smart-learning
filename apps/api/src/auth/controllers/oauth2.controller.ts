@@ -141,7 +141,11 @@ export class OAuth2Controller {
     return crypto.createHmac('sha256', secret).update(state).digest('hex');
   }
 
-  private verifyState(req: Request, state: string | undefined, res: Response): void {
+  private verifyState(
+    req: Request,
+    state: string | undefined,
+    res: Response,
+  ): void {
     const rawCookie = (req as any).cookies?.[OAUTH_STATE_COOKIE] as
       | string
       | undefined;
@@ -168,7 +172,10 @@ export class OAuth2Controller {
       throw new ForbiddenException('Invalid OAuth2 state');
     }
     const issuedAt = Number(state.split('.')[1]);
-    if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > OAUTH_STATE_TTL_MS) {
+    if (
+      !Number.isFinite(issuedAt) ||
+      Date.now() - issuedAt > OAUTH_STATE_TTL_MS
+    ) {
       throw new ForbiddenException('OAuth2 state expired');
     }
   }
@@ -200,7 +207,9 @@ export class OAuth2Controller {
     @CurrentUser('id') userId: string,
     @Param('provider') provider: string,
   ) {
-    const normalized = String(provider ?? '').trim().toUpperCase();
+    const normalized = String(provider ?? '')
+      .trim()
+      .toUpperCase();
     if (!ALLOWED_PROVIDERS.has(normalized)) {
       throw new BadRequestException('Unsupported OAuth2 provider');
     }

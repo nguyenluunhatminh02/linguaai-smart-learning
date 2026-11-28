@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, ArrayMaxSize, ArrayMinSize, ValidateNested, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  ArrayMaxSize,
+  ArrayMinSize,
+  ValidateNested,
+  IsArray,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class SecurityQuestionItemDto {

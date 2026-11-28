@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   IsString,
   IsOptional,
-  IsBoolean,
   MaxLength,
   MinLength,
   Matches,
@@ -21,7 +20,10 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).+$/;
 class MatchPropertyConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
     const [property] = args.constraints as [string];
-    return typeof value === 'string' && value === (args.object as Record<string, unknown>)[property];
+    return (
+      typeof value === 'string' &&
+      value === (args.object as Record<string, unknown>)[property]
+    );
   }
 
   defaultMessage(args: ValidationArguments): string {
@@ -30,7 +32,10 @@ class MatchPropertyConstraint implements ValidatorConstraintInterface {
   }
 }
 
-function MatchProperty(property: string, validationOptions?: ValidationOptions): PropertyDecorator {
+function MatchProperty(
+  property: string,
+  validationOptions?: ValidationOptions,
+): PropertyDecorator {
   return (object: object, propertyName: string | symbol) => {
     registerDecorator({
       target: object.constructor,
@@ -63,13 +68,16 @@ export class ResetPasswordDto {
   @MinLength(8)
   @MaxLength(128)
   @Matches(PASSWORD_REGEX, {
-    message: 'Password must contain uppercase, lowercase, number and special character',
+    message:
+      'Password must contain uppercase, lowercase, number and special character',
   })
   newPassword: string;
 
   @ApiProperty({ example: 'NewP@ssw0rd!' })
   @IsString()
-  @MatchProperty('newPassword', { message: 'confirmPassword must match newPassword' })
+  @MatchProperty('newPassword', {
+    message: 'confirmPassword must match newPassword',
+  })
   confirmPassword: string;
 }
 

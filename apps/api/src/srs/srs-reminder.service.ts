@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 
@@ -50,7 +50,10 @@ export class SrsReminderService {
     // Count due cards per user
     const dueCounts = await this.prisma.user_card_progress.groupBy({
       by: ['user_id'],
-      where: { user_id: { in: users.map((u) => u.id) }, next_review_date: { lte: now } },
+      where: {
+        user_id: { in: users.map((u) => u.id) },
+        next_review_date: { lte: now },
+      },
       _count: { user_id: true },
     });
 
@@ -62,10 +65,16 @@ export class SrsReminderService {
       if (dueCount === 0) continue;
       const firstName = user.first_name || user.email.split('@')[0];
       try {
-        await this.emailService.sendSrsReminderEmail(user.email, firstName, dueCount);
+        await this.emailService.sendSrsReminderEmail(
+          user.email,
+          firstName,
+          dueCount,
+        );
         sent++;
       } catch (err: unknown) {
-        this.logger.warn(`Failed to send reminder to ${user.email}: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to send reminder to ${user.email}: ${(err as Error).message}`,
+        );
       }
     }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -223,46 +224,160 @@ function getDeviceIdFromToken(token: string | null): string | null {
 
 
 
+interface LoginHistoryEntry {
+  id: string;
+  device_info?: string;
+  deviceInfo?: string;
+  success?: boolean;
+  ip_address?: string;
+  ipAddress?: string;
+  failure_reason?: string;
+  failureReason?: string;
+  attempted_at?: string;
+  attemptedAt?: string;
+}
+
+interface SecurityEventEntry {
+  id: string;
+  action: string;
+  success?: boolean;
+  ip_address?: string;
+  ipAddress?: string;
+  details?: string;
+  created_at?: string;
+  createdAt?: string;
+}
+
+interface MfaSetupResponse {
+  secret: string;
+  qrCodeUrl: string;
+  backupCodes?: string[];
+}
+
+const AUDIT_PAGE_SIZE = 10;
+const auditLogsKey = (userId?: string) => ["profile", "audit-logs", userId, { page: 1, size: AUDIT_PAGE_SIZE }] as const;
+
+type AuditPayload<T> = T[] | { items?: T[]; data?: T[] | { items?: T[] } };
+
+function normalizeAuditPayload<T>(payload: AuditPayload<T> | undefined | null): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return payload?.items ?? (Array.isArray(payload?.data?.items) ? payload.data.items : []);
+}
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === "object" && err !== null && "response" in err) {
+    const response = (err as { response?: { data?: { message?: unknown } } }).response;
+    if (typeof response?.data?.message === "string" && response.data.message) {
+      return response.data.message;
+    }
+  }
+  return fallback;
+}
+
+async function fetchLoginHistory(): Promise<LoginHistoryEntry[]> {
+  const response = await apiClient.get<AuditPayload<LoginHistoryEntry>>(
+    `/auth/login-history?page=1&size=${AUDIT_PAGE_SIZE}`,
+  );
+  return normalizeAuditPayload(response.data);
+}
+
+async function fetchSecurityEvents(): Promise<SecurityEventEntry[]> {
+  const response = await apiClient.get<AuditPayload<SecurityEventEntry>>(
+    `/auth/security-events?page=1&size=${AUDIT_PAGE_SIZE}`,
+  );
+  return normalizeAuditPayload(response.data);
+}
+
+/** Audit history is user-scoped: never reuse one account's logs for another. */
+function useAuditLogs() {
+  const userId = useAuthStore((state) => state.user?.id);
+  const query = useQuery({
+    queryKey: auditLogsKey(userId),
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const [loginHistory, securityEvents] = await Promise.all([
+        fetchLoginHistory(),
+        fetchSecurityEvents(),
+      ]);
+      return { loginHistory, securityEvents };
+    },
+  });
+
+  return {
+    loginHistory: query.data?.loginHistory ?? [],
+    securityEvents: query.data?.securityEvents ?? [],
+    // isFetching also covers refreshes, matching the old fetchAuditLogs spinner.
+    isLoading: query.isFetching,
+    hasError: query.isError,
+    refetch: query.refetch,
+  };
+}
+
+const mfaApi = {
+  setup: async () => {
+    const response = await apiClient.post<MfaSetupResponse & { data?: MfaSetupResponse }>("/mfa/setup");
+    // apiClient unwraps the standard envelope; keep the legacy nested fallback.
+    return response.data.data ?? response.data;
+  },
+  confirm: async (code: string) => {
+    await apiClient.post("/mfa/setup/confirm", { code });
+  },
+  disable: async (code: string) => {
+    await apiClient.post("/mfa/disable", { code });
+  },
+};
+
+function useMfa() {
+  const userId = useAuthStore((state) => state.user?.id);
+  const loadUser = useAuthStore((state) => state.loadUser);
+  const queryClient = useQueryClient();
+
+  const refreshAfterChange = async () => {
+    await loadUser();
+    // MFA changes write new security events; refresh this page's logs.
+    await queryClient.invalidateQueries({ queryKey: ["profile", "audit-logs", userId] });
+    // invalidateQueries is fire-and-forget; await the refetch so a following
+    // navigation cannot render the stale security log.
+    await queryClient.refetchQueries({ queryKey: ["profile", "audit-logs", userId] });
+  };
+
+  const setupMutation = useMutation({ mutationFn: mfaApi.setup });
+  const confirmMutation = useMutation({
+    mutationFn: mfaApi.confirm,
+    onSuccess: refreshAfterChange,
+  });
+  const disableMutation = useMutation({
+    mutationFn: mfaApi.disable,
+    onSuccess: refreshAfterChange,
+  });
+
+  return {
+    setup: setupMutation.mutateAsync,
+    confirm: confirmMutation.mutateAsync,
+    disable: disableMutation.mutateAsync,
+    isPending: setupMutation.isPending || confirmMutation.isPending || disableMutation.isPending,
+  };
+}
+
 export default function ProfilePage() {
   const { t, locale } = useLanguageStore();
   const { user } = useAuthStore();
   const [saved, setSaved] = useState(false);
   const updateProfileMutation = useUpdateProfile();
 
-  // Audit Log & Security Events States
+  // Audit Log & Security Events from TanStack Query (user-scoped cache)
   const [activeAuditTab, setActiveAuditTab] = useState<"audit" | "login">("audit");
-  const [loginHistory, setLoginHistory] = useState<any[]>([]);
-  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
-  const [isAuditLoading, setIsAuditLoading] = useState(false);
-  const [auditError, setAuditError] = useState<string | null>(null);
-
+  const {
+    loginHistory,
+    securityEvents,
+    isLoading: isAuditLoading,
+    hasError: hasAuditError,
+    refetch: refetchAuditLogs,
+  } = useAuditLogs();
   const tAudit = auditTranslations[locale as "en" | "vi"] || auditTranslations["en"];
-
-  const fetchAuditLogs = async () => {
-    setIsAuditLoading(true);
-    setAuditError(null);
-    try {
-      const [loginRes, securityRes] = await Promise.all([
-        apiClient.get("/auth/login-history?page=1&size=10"),
-        apiClient.get("/auth/security-events?page=1&size=10"),
-      ]);
-      
-      const loginData = loginRes.data?.data || loginRes.data;
-      const securityData = securityRes.data?.data || securityRes.data;
-      
-      setLoginHistory(Array.isArray(loginData) ? loginData : loginData?.items || []);
-      setSecurityEvents(Array.isArray(securityData) ? securityData : securityData?.items || []);
-    } catch (err: any) {
-      console.error("Failed to load audit logs:", err);
-      setAuditError("Failed to load activity logs");
-    } finally {
-      setIsAuditLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAuditLogs();
-  }, []);
+  // The old fetch cleared its error when a refresh started.
+  const auditError = hasAuditError && !isAuditLoading ? "Failed to load activity logs" : null;
 
   // Device States & Hooks
   const tDev = deviceTranslations[locale as "en" | "vi"] || deviceTranslations["en"];
@@ -298,8 +413,8 @@ export default function ProfilePage() {
       setRenamingDeviceId(null);
       setNewDeviceName("");
       setTimeout(() => setDeviceSuccess(null), 3000);
-    } catch (err: any) {
-      setDeviceError(err.response?.data?.message || "Failed to rename device");
+    } catch (err) {
+      setDeviceError(apiErrorMessage(err, "Failed to rename device"));
       setTimeout(() => setDeviceError(null), 3000);
     }
   };
@@ -315,8 +430,8 @@ export default function ProfilePage() {
       }
       setDeviceSuccess(tDev.trustSuccess);
       setTimeout(() => setDeviceSuccess(null), 3000);
-    } catch (err: any) {
-      setDeviceError(err.response?.data?.message || "Failed to update trust status");
+    } catch (err) {
+      setDeviceError(apiErrorMessage(err, "Failed to update trust status"));
       setTimeout(() => setDeviceError(null), 3000);
     }
   };
@@ -329,8 +444,8 @@ export default function ProfilePage() {
       await removeDevice(deviceId);
       setDeviceSuccess(tDev.logoutSuccess);
       setTimeout(() => setDeviceSuccess(null), 3000);
-    } catch (err: any) {
-      setDeviceError(err.response?.data?.message || "Failed to log out device");
+    } catch (err) {
+      setDeviceError(apiErrorMessage(err, "Failed to log out device"));
       setTimeout(() => setDeviceError(null), 3000);
     }
   };
@@ -343,20 +458,19 @@ export default function ProfilePage() {
       await removeOthers();
       setDeviceSuccess(tDev.logoutOtherSuccess);
       setTimeout(() => setDeviceSuccess(null), 3000);
-    } catch (err: any) {
-      setDeviceError(err.response?.data?.message || "Failed to log out other devices");
+    } catch (err) {
+      setDeviceError(apiErrorMessage(err, "Failed to log out other devices"));
       setTimeout(() => setDeviceError(null), 3000);
     }
   };
 
-  // MFA States
-  const { loadUser } = useAuthStore();
+  // MFA state: secrets/codes stay in local component state, never in the query cache
+  const mfa = useMfa();
   const [mfaStep, setMfaStep] = useState<"idle" | "setup" | "disable">("idle");
   const [totpSecret, setTotpSecret] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [verifyCode, setVerifyCode] = useState("");
-  const [mfaLoading, setMfaLoading] = useState(false);
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [mfaSuccess, setMfaSuccess] = useState<string | null>(null);
   const [copiedSecret, setCopiedSecret] = useState(false);
@@ -365,37 +479,29 @@ export default function ProfilePage() {
   const tMfa = mfaTranslations[locale as "en" | "vi"] || mfaTranslations["en"];
 
   const handleInitiateSetup = async () => {
-    setMfaLoading(true);
     setMfaError(null);
     setMfaSuccess(null);
     try {
-      const { data } = await apiClient.post("/mfa/setup");
-      const res = data.data ?? data;
+      const res = await mfa.setup();
       setTotpSecret(res.secret);
       setQrCodeUrl(res.qrCodeUrl);
       setBackupCodes(res.backupCodes || []);
       setMfaStep("setup");
-    } catch (err: any) {
-      setMfaError(err.response?.data?.message || "Failed to initiate MFA setup");
-    } finally {
-      setMfaLoading(false);
+    } catch (err) {
+      setMfaError(apiErrorMessage(err, "Failed to initiate MFA setup"));
     }
   };
 
   const handleConfirmSetup = async () => {
     if (!verifyCode.trim()) return;
-    setMfaLoading(true);
     setMfaError(null);
     try {
-      await apiClient.post("/mfa/setup/confirm", { code: verifyCode });
+      await mfa.confirm(verifyCode);
       setMfaSuccess(tMfa.mfaSuccessEnabled);
       setMfaStep("idle");
       setVerifyCode("");
-      await loadUser();
-    } catch (err: any) {
-      setMfaError(err.response?.data?.message || tMfa.mfaErrorInvalidCode);
-    } finally {
-      setMfaLoading(false);
+    } catch (err) {
+      setMfaError(apiErrorMessage(err, tMfa.mfaErrorInvalidCode));
     }
   };
 
@@ -408,18 +514,14 @@ export default function ProfilePage() {
 
   const handleConfirmDisable = async () => {
     if (!verifyCode.trim()) return;
-    setMfaLoading(true);
     setMfaError(null);
     try {
-      await apiClient.post("/mfa/disable", { code: verifyCode });
+      await mfa.disable(verifyCode);
       setMfaSuccess(tMfa.mfaSuccessDisabled);
       setMfaStep("idle");
       setVerifyCode("");
-      await loadUser();
-    } catch (err: any) {
-      setMfaError(err.response?.data?.message || tMfa.mfaErrorInvalidCode);
-    } finally {
-      setMfaLoading(false);
+    } catch (err) {
+      setMfaError(apiErrorMessage(err, tMfa.mfaErrorInvalidCode));
     }
   };
 
@@ -751,9 +853,9 @@ export default function ProfilePage() {
                     onClick={handleInitiateSetup}
                     variant="gradient"
                     className="w-full sm:w-auto text-sm"
-                    disabled={mfaLoading}
+                    disabled={mfa.isPending}
                   >
-                    {mfaLoading ? (
+                    {mfa.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       tMfa.mfaEnableBtn
@@ -874,9 +976,9 @@ export default function ProfilePage() {
                     type="button"
                     onClick={handleConfirmSetup}
                     variant="gradient"
-                    disabled={verifyCode.length < 6 || mfaLoading}
+                    disabled={verifyCode.length < 6 || mfa.isPending}
                   >
-                    {mfaLoading ? (
+                    {mfa.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Verifying...
@@ -885,7 +987,7 @@ export default function ProfilePage() {
                       tMfa.mfaVerifyBtn
                     )}
                   </Button>
-                  <Button type="button" onClick={handleCancel} variant="ghost" disabled={mfaLoading}>
+                  <Button type="button" onClick={handleCancel} variant="ghost" disabled={mfa.isPending}>
                     {tMfa.mfaCancelBtn}
                   </Button>
                 </div>
@@ -922,9 +1024,9 @@ export default function ProfilePage() {
                   type="button"
                   onClick={handleConfirmDisable}
                   variant="destructive"
-                  disabled={verifyCode.length < 6 || mfaLoading}
+                  disabled={verifyCode.length < 6 || mfa.isPending}
                 >
-                  {mfaLoading ? (
+                  {mfa.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Disabling...
@@ -933,7 +1035,7 @@ export default function ProfilePage() {
                     tMfa.mfaDisableConfirmBtn
                   )}
                 </Button>
-                <Button type="button" onClick={handleCancel} variant="ghost" disabled={mfaLoading}>
+                <Button type="button" onClick={handleCancel} variant="ghost" disabled={mfa.isPending}>
                   {tMfa.mfaCancelBtn}
                 </Button>
               </div>
@@ -1154,7 +1256,7 @@ export default function ProfilePage() {
               variant="outline"
               size="sm"
               className="h-8 text-xs font-semibold rounded-lg gap-1.5 px-3"
-              onClick={fetchAuditLogs}
+              onClick={() => void refetchAuditLogs()}
               disabled={isAuditLoading}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isAuditLoading ? "animate-spin" : ""}`} />
@@ -1213,7 +1315,7 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="divide-y divide-border/30 max-h-[350px] overflow-y-auto pr-1">
-                {securityEvents.map((evt: any) => (
+                {securityEvents.map((evt: SecurityEventEntry) => (
                   <div key={evt.id} className="py-3 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -1240,7 +1342,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     <span className="text-[10px] text-muted-foreground/80 font-semibold shrink-0">
-                      {new Date(evt.created_at || evt.createdAt).toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US')}
+                      {new Date(evt.created_at || evt.createdAt || 0).toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US')}
                     </span>
                   </div>
                 ))}
@@ -1254,7 +1356,7 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="divide-y divide-border/30 max-h-[350px] overflow-y-auto pr-1">
-                {loginHistory.map((attempt: any) => (
+                {loginHistory.map((attempt: LoginHistoryEntry) => (
                   <div key={attempt.id} className="py-3 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -1279,7 +1381,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     <span className="text-[10px] text-muted-foreground/80 font-semibold shrink-0">
-                      {new Date(attempt.attempted_at || attempt.attemptedAt).toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US')}
+                      {new Date(attempt.attempted_at || attempt.attemptedAt || 0).toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US')}
                     </span>
                   </div>
                 ))}

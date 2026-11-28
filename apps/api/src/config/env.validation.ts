@@ -4,7 +4,7 @@ export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
     .default('development'),
-  
+
   // Database — DATABASE_URL is the source of truth (PaaS providers usually only inject this).
   // Individual host/user/password fields are optional fallbacks for local dev.
   DATABASE_HOST: Joi.string().optional(),
@@ -56,11 +56,12 @@ export const envValidationSchema = Joi.object({
   EMAIL_FROM: Joi.string().allow(''),
 
   // CORS — REQUIRED in production to prevent unauthorized cross-origin requests
-  CORS_ORIGINS: Joi.string()
-    .when('NODE_ENV', {
-      is: 'production',
-      then: Joi.string().required().min(1).error(new Error('CORS_ORIGINS is required in production')),
-      otherwise: Joi.string().allow(''),
-    }),
-})
-.options({ stripUnknown: true });
+  CORS_ORIGINS: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string()
+      .required()
+      .min(1)
+      .error(new Error('CORS_ORIGINS is required in production')),
+    otherwise: Joi.string().allow(''),
+  }),
+}).options({ stripUnknown: true });

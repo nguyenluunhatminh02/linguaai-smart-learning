@@ -1,7 +1,26 @@
-import { Controller, DefaultValuePipe, Get, ParseIntPipe, ParseUUIDPipe, Post, Body, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  DefaultValuePipe,
+  Get,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SrsService } from './srs.service';
-import { ReviewCardDto, StartSessionDto, FinishSessionDto } from './dto/srs.dto';
+import {
+  ReviewCardDto,
+  StartSessionDto,
+  FinishSessionDto,
+} from './dto/srs.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -21,7 +40,11 @@ export class SrsController {
     @Query('deckId', ParseUUIDPipe) deckId: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
-    return this.srsService.getDueCards(userId, deckId, Math.min(100, Math.max(1, limit)));
+    return this.srsService.getDueCards(
+      userId,
+      deckId,
+      Math.min(100, Math.max(1, limit)),
+    );
   }
 
   @Post('review')
@@ -32,13 +55,19 @@ export class SrsController {
 
   @Post('session/start')
   @ApiOperation({ summary: 'Start a review session' })
-  startSession(@CurrentUser('id') userId: string, @Body() dto: StartSessionDto) {
+  startSession(
+    @CurrentUser('id') userId: string,
+    @Body() dto: StartSessionDto,
+  ) {
     return this.srsService.startSession(userId, dto);
   }
 
   @Post('session/finish')
   @ApiOperation({ summary: 'Finish a review session' })
-  finishSession(@CurrentUser('id') userId: string, @Body() dto: FinishSessionDto) {
+  finishSession(
+    @CurrentUser('id') userId: string,
+    @Body() dto: FinishSessionDto,
+  ) {
     return this.srsService.finishSession(userId, dto);
   }
 
@@ -66,6 +95,9 @@ export class SrsController {
     @CurrentUser('id') userId: string,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
   ) {
-    return this.srsService.getForecast(userId, Math.min(365, Math.max(1, days)));
+    return this.srsService.getForecast(
+      userId,
+      Math.min(365, Math.max(1, days)),
+    );
   }
 }

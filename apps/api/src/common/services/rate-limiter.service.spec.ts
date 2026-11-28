@@ -15,7 +15,10 @@ class SharedAtomicStore {
   now = 0;
   readonly ttlSets: number[] = [];
 
-  incrWithExpiry = async (key: string, windowSeconds: number): Promise<number> => {
+  incrWithExpiry = async (
+    key: string,
+    windowSeconds: number,
+  ): Promise<number> => {
     if (this.failures > 0) {
       this.failures -= 1;
       throw new Error('Redis connection lost');
@@ -28,7 +31,10 @@ class SharedAtomicStore {
       return existing.count;
     }
     this.ttlSets.push(windowSeconds);
-    this.buckets.set(key, { count: 1, expiresAt: this.now + windowSeconds * 1000 });
+    this.buckets.set(key, {
+      count: 1,
+      expiresAt: this.now + windowSeconds * 1000,
+    });
     return 1;
   };
 
@@ -139,7 +145,9 @@ describe('RateLimiterService — distributed SEC-06', () => {
     await expect(other.checkRateLimit('user-2', config)).rejects.toMatchObject({
       status: HttpStatus.TOO_MANY_REQUESTS,
     });
-    await expect(service.checkRateLimit('user-2', config)).rejects.toMatchObject({
+    await expect(
+      service.checkRateLimit('user-2', config),
+    ).rejects.toMatchObject({
       status: HttpStatus.TOO_MANY_REQUESTS,
     });
   });
@@ -163,16 +171,23 @@ describe('RateLimiterService — distributed SEC-06', () => {
 
   it('fails closed when the TTL read fails or the atomic script left no TTL', async () => {
     store.ttlFailures = 1;
-    await expect(service.checkRateLimit('user-4', aiWriteConfig)).rejects.toMatchObject({
+    await expect(
+      service.checkRateLimit('user-4', aiWriteConfig),
+    ).rejects.toMatchObject({
       status: HttpStatus.SERVICE_UNAVAILABLE,
     });
 
     store.noTtlKeys.add('rate_limit:chat:user:no-ttl');
-    store.buckets.set('rate_limit:chat:user:no-ttl', { count: 1, expiresAt: store.now + 86_400_000 });
-    const noTtl = { ...aiWriteConfig, keyPrefix: 'chat:user' };
-    await expect(service.checkRateLimit('no-ttl', noTtl)).rejects.toMatchObject({
-      status: HttpStatus.SERVICE_UNAVAILABLE,
+    store.buckets.set('rate_limit:chat:user:no-ttl', {
+      count: 1,
+      expiresAt: store.now + 86_400_000,
     });
+    const noTtl = { ...aiWriteConfig, keyPrefix: 'chat:user' };
+    await expect(service.checkRateLimit('no-ttl', noTtl)).rejects.toMatchObject(
+      {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      },
+    );
   });
 
   it('honours an explicitly configured fail-open policy for non-sensitive paths', async () => {
@@ -187,10 +202,17 @@ describe('RateLimiterService — distributed SEC-06', () => {
   });
 
   it('rejects invalid configuration instead of silently disabling the limiter', async () => {
-    await expect(service.checkRateLimit('u', { ...aiWriteConfig, limit: 0 })).rejects.toThrow(/limit/);
-    await expect(service.checkRateLimit('u', { ...aiWriteConfig, window: 0 })).rejects.toThrow(/window/);
     await expect(
-      service.checkRateLimit('u', { ...aiWriteConfig, failurePolicy: 'bogus' as any }),
+      service.checkRateLimit('u', { ...aiWriteConfig, limit: 0 }),
+    ).rejects.toThrow(/limit/);
+    await expect(
+      service.checkRateLimit('u', { ...aiWriteConfig, window: 0 }),
+    ).rejects.toThrow(/window/);
+    await expect(
+      service.checkRateLimit('u', {
+        ...aiWriteConfig,
+        failurePolicy: 'bogus' as any,
+      }),
     ).rejects.toThrow(/failurePolicy/);
     expect(store.buckets.size).toBe(0);
   });

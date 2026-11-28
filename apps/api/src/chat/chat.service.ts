@@ -108,7 +108,10 @@ function createAbortController(signal?: AbortSignal): AbortController {
   const controller = new AbortController();
   if (!signal) return controller;
   if (signal.aborted) controller.abort(signal.reason);
-  else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  else
+    signal.addEventListener('abort', () => controller.abort(signal.reason), {
+      once: true,
+    });
   return controller;
 }
 
@@ -161,9 +164,11 @@ export class ChatService {
   ) {}
 
   /** Extract the single user turn from either the legacy or new DTO shape. */
-  resolveTurn(
-    dto: SendChatDto | StreamChatDto,
-  ): { conversationId?: string | null; language?: string; message: string } {
+  resolveTurn(dto: SendChatDto | StreamChatDto): {
+    conversationId?: string | null;
+    language?: string;
+    message: string;
+  } {
     const candidate = dto as StreamChatDto & SendChatDto;
     if (typeof candidate.message === 'string') {
       return {
@@ -176,7 +181,9 @@ export class ChatService {
     // Compatibility path for the legacy { messages: [...] } contract: only a
     // trailing user message can become a new turn; assistant/history entries
     // from the client are discarded and history is re-read from the DB.
-    const legacyMessages = Array.isArray(candidate.messages) ? candidate.messages : [];
+    const legacyMessages = Array.isArray(candidate.messages)
+      ? candidate.messages
+      : [];
     const last = legacyMessages[legacyMessages.length - 1];
     if (!last || last.role !== 'user' || typeof last.content !== 'string') {
       throw new BadRequestException('A user message is required');
@@ -204,14 +211,19 @@ export class ChatService {
     }
 
     const conv = await this.prisma.chat_conversations.create({
-      data: { user_id: userId, title: title.slice(0, TITLE_LENGTH) || 'New Conversation' },
+      data: {
+        user_id: userId,
+        title: title.slice(0, TITLE_LENGTH) || 'New Conversation',
+      },
       select: { id: true },
     });
     return conv.id;
   }
 
   /** Read a bounded, ordered history from the database for this conversation. */
-  private async loadHistory(conversationId: string): Promise<ProviderMessage[]> {
+  private async loadHistory(
+    conversationId: string,
+  ): Promise<ProviderMessage[]> {
     const rows = await this.prisma.chat_messages.findMany({
       where: { conversation_id: conversationId },
       orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
@@ -235,11 +247,19 @@ export class ChatService {
   ): Promise<{ userMessageId: string; assistantMessageId: string }> {
     return this.prisma.$transaction(async (tx) => {
       const userMessage = await tx.chat_messages.create({
-        data: { conversation_id: conversationId, role: 'user', content: userContent },
+        data: {
+          conversation_id: conversationId,
+          role: 'user',
+          content: userContent,
+        },
         select: { id: true },
       });
       const assistantMessage = await tx.chat_messages.create({
-        data: { conversation_id: conversationId, role: 'assistant', content: assistantContent },
+        data: {
+          conversation_id: conversationId,
+          role: 'assistant',
+          content: assistantContent,
+        },
         select: { id: true },
       });
       return {
@@ -252,14 +272,26 @@ export class ChatService {
   private async runTurn(
     userId: string,
     dto: SendChatDto | StreamChatDto,
-    collect: (messages: ProviderMessage[], systemPrompt: string) => Promise<string>,
-  ): Promise<{ conversationId: string; messageId: string; assistantContent: string }> {
+    collect: (
+      messages: ProviderMessage[],
+      systemPrompt: string,
+    ) => Promise<string>,
+  ): Promise<{
+    conversationId: string;
+    messageId: string;
+    assistantContent: string;
+  }> {
     const turn = this.resolveTurn(dto);
     const message = normalizeChatInput(turn.message);
-    if (!message) throw new BadRequestException('A non-empty user message is required');
+    if (!message)
+      throw new BadRequestException('A non-empty user message is required');
     const language = resolveLanguage(turn.language);
 
-    const conversationId = await this.resolveOwnedConversation(userId, turn.conversationId, message);
+    const conversationId = await this.resolveOwnedConversation(
+      userId,
+      turn.conversationId,
+      message,
+    );
     const history = await this.loadHistory(conversationId);
     const assistantContent = await collect(
       history,
@@ -280,7 +312,10 @@ export class ChatService {
    * Non-streaming entry point. Kept under the original name for callers that
    * already invoke `sendMessage`, with `sendNonStream` as the explicit alias.
    */
-  async sendMessage(userId: string, dto: SendChatDto | StreamChatDto): Promise<ChatCompletionMeta> {
+  async sendMessage(
+    userId: string,
+    dto: SendChatDto | StreamChatDto,
+  ): Promise<ChatCompletionMeta> {
     return this.sendNonStream(userId, dto);
   }
 
@@ -292,7 +327,9 @@ export class ChatService {
     return this.runTurn(userId, dto, async (messages, systemPrompt) => {
       const content = await this.groqService.chat(messages, systemPrompt);
       if (typeof content !== 'string') {
-        throw new ServiceUnavailableException('AI service returned an invalid response');
+        throw new ServiceUnavailableException(
+          'AI service returned an invalid response',
+        );
       }
       return content.slice(0, MAX_ASSISTANT_CONTENT_LENGTH);
     });
@@ -316,10 +353,15 @@ export class ChatService {
 
     const turn = this.resolveTurn(dto);
     const message = normalizeChatInput(turn.message);
-    if (!message) throw new BadRequestException('A non-empty user message is required');
+    if (!message)
+      throw new BadRequestException('A non-empty user message is required');
     const language = resolveLanguage(turn.language);
 
-    const conversationId = await this.resolveOwnedConversation(userId, turn.conversationId, message);
+    const conversationId = await this.resolveOwnedConversation(
+      userId,
+      turn.conversationId,
+      message,
+    );
     if (signal?.aborted) throw new BadRequestException('Request was cancelled');
     const history = await this.loadHistory(conversationId);
 
@@ -339,12 +381,14 @@ export class ChatService {
 
     try {
       while (true) {
-        if (signal.aborted) throw new BadRequestException('Request was cancelled');
+        if (signal.aborted)
+          throw new BadRequestException('Request was cancelled');
         const next = await nextDelta(iterator, signal);
         if (next.done) break;
         if (next.value === undefined) continue; // periodic cancellation poll
         const delta = next.value;
-        if (signal.aborted) throw new BadRequestException('Request was cancelled');
+        if (signal.aborted)
+          throw new BadRequestException('Request was cancelled');
         if (!delta) continue;
         deltas += 1;
         let forwarded = delta;
@@ -362,7 +406,10 @@ export class ChatService {
         if (forwarded) await onDelta?.(forwarded);
       }
 
-      if (!content) throw new ServiceUnavailableException('AI service returned an empty response');
+      if (!content)
+        throw new ServiceUnavailableException(
+          'AI service returned an empty response',
+        );
 
       const { assistantMessageId } = await this.persistTurn(
         conversationId,
@@ -375,15 +422,23 @@ export class ChatService {
         assistantContent: content,
       };
       if (!signal.aborted) await onCompleted?.(meta);
-      return { conversationId, messageId: assistantMessageId, deltas, truncated };
+      return {
+        conversationId,
+        messageId: assistantMessageId,
+        deltas,
+        truncated,
+      };
     } catch (err) {
       const errorCode = toChatErrorCode(err);
       this.logger.warn(`Chat stream failed: ${errorCode}`);
       return { conversationId, messageId: '', deltas, truncated, errorCode };
     } finally {
       // A cancelled or failed run must not leave a half-open provider request.
-      const close = (iterator as { return?: (value?: unknown) => Promise<unknown> }).return;
-      if (close) await Promise.resolve(close.call(iterator)).catch(() => undefined);
+      const close = (
+        iterator as { return?: (value?: unknown) => Promise<unknown> }
+      ).return;
+      if (close)
+        await Promise.resolve(close.call(iterator)).catch(() => undefined);
       controller.abort();
     }
   }
@@ -413,6 +468,8 @@ export class ChatService {
       where: { id: conversationId, user_id: userId },
     });
     if (!conv) throw new NotFoundException('Conversation not found');
-    await this.prisma.chat_conversations.delete({ where: { id: conversationId } });
+    await this.prisma.chat_conversations.delete({
+      where: { id: conversationId },
+    });
   }
 }

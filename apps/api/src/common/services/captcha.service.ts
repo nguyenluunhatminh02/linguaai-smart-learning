@@ -36,7 +36,7 @@ export interface CaptchaOptions {
 
 /**
  * Captcha Service
- * 
+ *
  * Generates and validates CAPTCHA challenges to prevent automated attacks.
  * Stores CAPTCHA tokens in Redis for distributed environments.
  */
@@ -56,13 +56,11 @@ export class CaptchaService {
     fontSize: 50,
   };
 
-  constructor(
-    private readonly redisService: RedisService,
-  ) {}
+  constructor(private readonly redisService: RedisService) {}
 
   /**
    * Generate a new CAPTCHA
-   * 
+   *
    * @param options - Optional CAPTCHA configuration
    * @param ttlSeconds - Optional TTL in seconds (default: 5 minutes)
    * @returns The CAPTCHA response with image, text, and ID
@@ -93,7 +91,7 @@ export class CaptchaService {
       await this.redisService.set(key, captcha.text, ttl);
 
       this.logger.log(`Generated CAPTCHA with ID: ${id}`);
-      
+
       return {
         image: captcha.data,
         id,
@@ -106,7 +104,7 @@ export class CaptchaService {
 
   /**
    * Validate a CAPTCHA response
-   * 
+   *
    * @param id - The CAPTCHA ID
    * @param text - The user's CAPTCHA response
    * @returns True if the CAPTCHA is valid, false otherwise
@@ -120,7 +118,7 @@ export class CaptchaService {
     try {
       const key = `${this.PREFIX}${id}`;
       const storedText = await this.redisService.get(key);
-      
+
       if (!storedText) {
         this.logger.warn(`CAPTCHA not found or expired: ${id}`);
         return false;
@@ -128,7 +126,7 @@ export class CaptchaService {
 
       // Case-insensitive comparison
       const isValid = storedText.toLowerCase() === text.toLowerCase();
-      
+
       if (isValid) {
         // Delete the CAPTCHA after successful validation
         await this.redisService.del(key);
@@ -146,7 +144,7 @@ export class CaptchaService {
 
   /**
    * Generate a simple text-based CAPTCHA (for API responses)
-   * 
+   *
    * @param options - Optional CAPTCHA configuration
    * @param ttlSeconds - Optional TTL in seconds (default: 5 minutes)
    * @returns The CAPTCHA response with text and ID
@@ -168,7 +166,7 @@ export class CaptchaService {
         mathMax: 9,
         mathOperator: '+-',
       });
-      
+
       // Generate a unique ID for this CAPTCHA
       const id = this.generateCaptchaId();
 
@@ -181,7 +179,7 @@ export class CaptchaService {
       await this.redisService.set(key, captcha.text, ttl);
 
       this.logger.log(`Generated text CAPTCHA with ID: ${id}`);
-      
+
       return {
         text: captcha.text,
         id,
@@ -194,7 +192,7 @@ export class CaptchaService {
 
   /**
    * Revoke a CAPTCHA
-   * 
+   *
    * @param id - The CAPTCHA ID to revoke
    */
   async revokeCaptcha(id: string): Promise<void> {
@@ -213,7 +211,7 @@ export class CaptchaService {
 
   /**
    * Generate a unique CAPTCHA ID
-   * 
+   *
    * @returns A unique CAPTCHA ID
    */
   private generateCaptchaId(): string {

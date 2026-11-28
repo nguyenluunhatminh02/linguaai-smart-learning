@@ -4,6 +4,14 @@ import * as bcrypt from 'bcrypt';
 import { PasswordHistoryService } from './password-history.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
+// Keep this suite independent of bcrypt's native binding (the checked-in
+// binary may not match the host platform). A deterministic hash/compare pair
+// preserves the reuse semantics these tests assert.
+jest.mock('bcrypt', () => ({
+  hash: async (value: string) => `hashed:${value}`,
+  compare: async (value: string, hash: string) => hash === `hashed:${value}`,
+}));
+
 describe('PasswordHistoryService', () => {
   let service: PasswordHistoryService;
 
@@ -47,7 +55,9 @@ describe('PasswordHistoryService', () => {
   describe('isPasswordReused', () => {
     it('returns false when password history is empty', async () => {
       mockPrisma.password_history.findMany.mockResolvedValue([]);
-      expect(await service.isPasswordReused('user-123', 'NewPass1!')).toBe(false);
+      expect(await service.isPasswordReused('user-123', 'NewPass1!')).toBe(
+        false,
+      );
     });
 
     it('returns true when the new password matches one in history', async () => {
@@ -55,7 +65,9 @@ describe('PasswordHistoryService', () => {
       mockPrisma.password_history.findMany.mockResolvedValue([
         { id: 'ph-1', password_hash: oldHash },
       ]);
-      expect(await service.isPasswordReused('user-123', 'OldPass123!')).toBe(true);
+      expect(await service.isPasswordReused('user-123', 'OldPass123!')).toBe(
+        true,
+      );
     });
 
     it('returns false when the new password does not match history', async () => {
@@ -63,14 +75,20 @@ describe('PasswordHistoryService', () => {
       mockPrisma.password_history.findMany.mockResolvedValue([
         { id: 'ph-1', password_hash: otherHash },
       ]);
-      expect(await service.isPasswordReused('user-123', 'NewPass123!')).toBe(false);
+      expect(await service.isPasswordReused('user-123', 'NewPass123!')).toBe(
+        false,
+      );
     });
 
     it('rethrows DB error (fail-closed) so password change is blocked', async () => {
       // Service explicitly opts for fail-closed: if we cannot check history we
       // must not silently allow a possibly reused password.
-      mockPrisma.password_history.findMany.mockRejectedValue(new Error('DB error'));
-      await expect(service.isPasswordReused('user-123', 'Any1!')).rejects.toThrow('DB error');
+      mockPrisma.password_history.findMany.mockRejectedValue(
+        new Error('DB error'),
+      );
+      await expect(
+        service.isPasswordReused('user-123', 'Any1!'),
+      ).rejects.toThrow('DB error');
     });
   });
 
@@ -83,7 +101,10 @@ describe('PasswordHistoryService', () => {
 
       expect(mockPrisma.password_history.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ user_id: 'user-123', password_hash: 'hashed-pw' }),
+          data: expect.objectContaining({
+            user_id: 'user-123',
+            password_hash: 'hashed-pw',
+          }),
         }),
       );
       expect(mockPrisma.password_history.deleteMany).not.toHaveBeenCalled();
@@ -94,7 +115,11 @@ describe('PasswordHistoryService', () => {
       mockPrisma.password_history.count.mockResolvedValue(6);
       // cleanup findMany returns the 5 newest IDs (ordered desc by created_at)
       const keepIds = [
-        { id: 'ph-5' }, { id: 'ph-4' }, { id: 'ph-3' }, { id: 'ph-2' }, { id: 'ph-1' },
+        { id: 'ph-5' },
+        { id: 'ph-4' },
+        { id: 'ph-3' },
+        { id: 'ph-2' },
+        { id: 'ph-1' },
       ];
       mockPrisma.password_history.findMany.mockResolvedValue(keepIds);
 
@@ -105,21 +130,35 @@ describe('PasswordHistoryService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             user_id: 'user-123',
-            id: { notIn: expect.arrayContaining(['ph-5', 'ph-4', 'ph-3', 'ph-2', 'ph-1']) },
+            id: {
+              notIn: expect.arrayContaining([
+                'ph-5',
+                'ph-4',
+                'ph-3',
+                'ph-2',
+                'ph-1',
+              ]),
+            },
           }),
         }),
       );
     });
 
     it('does not throw when Prisma fails', async () => {
-      mockPrisma.password_history.create.mockRejectedValue(new Error('DB error'));
-      await expect(service.addPasswordToHistory('user-123', 'hash')).resolves.not.toThrow();
+      mockPrisma.password_history.create.mockRejectedValue(
+        new Error('DB error'),
+      );
+      await expect(
+        service.addPasswordToHistory('user-123', 'hash'),
+      ).resolves.not.toThrow();
     });
   });
 
   describe('getPasswordHistory', () => {
     it('returns history sorted by date descending, limited to HISTORY_LIMIT', async () => {
-      const history = [{ id: 'ph-1', password_hash: 'h1', created_at: new Date() }];
+      const history = [
+        { id: 'ph-1', password_hash: 'h1', created_at: new Date() },
+      ];
       mockPrisma.password_history.findMany.mockResolvedValue(history);
 
       const result = await service.getPasswordHistory('user-123');
@@ -135,8 +174,12 @@ describe('PasswordHistoryService', () => {
     });
 
     it('propagates DB error (no silent fallback) so callers can fail-closed', async () => {
-      mockPrisma.password_history.findMany.mockRejectedValue(new Error('DB error'));
-      await expect(service.getPasswordHistory('user-123')).rejects.toThrow('DB error');
+      mockPrisma.password_history.findMany.mockRejectedValue(
+        new Error('DB error'),
+      );
+      await expect(service.getPasswordHistory('user-123')).rejects.toThrow(
+        'DB error',
+      );
     });
   });
 
@@ -149,8 +192,12 @@ describe('PasswordHistoryService', () => {
     });
 
     it('does not throw when Prisma fails (clearPasswordHistory swallows error)', async () => {
-      mockPrisma.password_history.deleteMany.mockRejectedValue(new Error('DB error'));
-      await expect(service.clearPasswordHistory('user-123')).resolves.not.toThrow();
+      mockPrisma.password_history.deleteMany.mockRejectedValue(
+        new Error('DB error'),
+      );
+      await expect(
+        service.clearPasswordHistory('user-123'),
+      ).resolves.not.toThrow();
     });
   });
 });

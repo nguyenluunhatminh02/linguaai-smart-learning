@@ -49,8 +49,7 @@ export class Sm2Algorithm {
     // Compute the new ease factor first: the interval must use the value that
     // is persisted, not the pre-review one.
     let easeFactor =
-      prevEaseFactor +
-      (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+      prevEaseFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
     if (easeFactor < Sm2Algorithm.MIN_EASE_FACTOR) {
       easeFactor = Sm2Algorithm.MIN_EASE_FACTOR;
     }
@@ -88,7 +87,9 @@ export class Sm2Algorithm {
 
   static getNextReviewDate(intervalDays: number): Date {
     if (!Number.isFinite(intervalDays) || intervalDays < 0) {
-      throw new RangeError('intervalDays must be a finite, non-negative number');
+      throw new RangeError(
+        'intervalDays must be a finite, non-negative number',
+      );
     }
     // Normalize to a fixed UTC time so elapsed time does not depend on the
     // hour of the review or on local DST transitions.

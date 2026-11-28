@@ -4,25 +4,25 @@ import {
   BadRequestException,
   Inject,
   Optional,
-} from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import * as bcrypt from "bcrypt";
-import * as crypto from "crypto";
-import { Request } from "express";
-import { PrismaService } from "../../prisma/prisma.service";
-import { EmailService } from "../../email/email.service";
-import { PasswordHistoryService } from "./password-history.service";
-import { TokenService } from "./token.service";
-import { AuditLogService } from "../../common/services/audit-log.service";
-import { RateLimiterService } from "../../common/services/rate-limiter.service";
+} from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { Request } from 'express';
+import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../../email/email.service';
+import { PasswordHistoryService } from './password-history.service';
+import { TokenService } from './token.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
+import { RateLimiterService } from '../../common/services/rate-limiter.service';
 import {
   BCRYPT_ROUNDS,
   PASSWORD_RESET_EXPIRY_MS,
-} from "../../common/constants/auth.constants";
-import { extractRequestContext } from "../../common/utils/request-context.util";
-import { LoginAction } from "../../users/enums/login-action.enum";
-import { User } from "../../users/entities/user.entity";
-import { DateUtil } from "../../common/utils/date.util";
+} from '../../common/constants/auth.constants';
+import { extractRequestContext } from '../../common/utils/request-context.util';
+import { LoginAction } from '../../users/enums/login-action.enum';
+import { User } from '../../users/entities/user.entity';
+import { DateUtil } from '../../common/utils/date.util';
 
 /** Reset requests are throttled per account and per client IP. */
 const FORGOT_PASSWORD_LIMIT = 3;
@@ -30,7 +30,7 @@ const FORGOT_PASSWORD_WINDOW_SEC = 15 * 60;
 /** A new link is only issued once per account per cooldown window. */
 const FORGOT_PASSWORD_COOLDOWN_MS = 15 * 60 * 1000;
 const GENERIC_FORGOT_PASSWORD_MESSAGE =
-  "If that email exists, a reset link was sent.";
+  'If that email exists, a reset link was sent.';
 
 @Injectable()
 export class PasswordService {
@@ -50,7 +50,7 @@ export class PasswordService {
   ) {}
 
   private get ip(): string {
-    return this.request ? extractRequestContext(this.request).ip : "unknown";
+    return this.request ? extractRequestContext(this.request).ip : 'unknown';
   }
 
   async forgotPassword(dto: { email: string }): Promise<{ message: string }> {
@@ -62,12 +62,12 @@ export class PasswordService {
     await this.rateLimiterService.checkRateLimit(`email:${emailKey}`, {
       limit: FORGOT_PASSWORD_LIMIT,
       window: FORGOT_PASSWORD_WINDOW_SEC,
-      keyPrefix: "forgot_password",
+      keyPrefix: 'forgot_password',
     });
     await this.rateLimiterService.checkRateLimit(`ip:${this.ip}`, {
       limit: FORGOT_PASSWORD_LIMIT,
       window: FORGOT_PASSWORD_WINDOW_SEC,
-      keyPrefix: "forgot_password",
+      keyPrefix: 'forgot_password',
     });
 
     const user = await this.prisma.users.findFirst({
@@ -82,13 +82,16 @@ export class PasswordService {
     if (user.password_reset_token && user.password_reset_expiry) {
       const remainingMs =
         new Date(user.password_reset_expiry).getTime() - Date.now();
-      if (remainingMs > PASSWORD_RESET_EXPIRY_MS - FORGOT_PASSWORD_COOLDOWN_MS) {
+      if (
+        remainingMs >
+        PASSWORD_RESET_EXPIRY_MS - FORGOT_PASSWORD_COOLDOWN_MS
+      ) {
         return { message: GENERIC_FORGOT_PASSWORD_MESSAGE };
       }
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     await this.prisma.users.update({
       where: { id: user.id },
       data: {
@@ -115,9 +118,9 @@ export class PasswordService {
     newPassword: string;
   }): Promise<{ message: string }> {
     const tokenHash = crypto
-      .createHash("sha256")
+      .createHash('sha256')
       .update(dto.token)
-      .digest("hex");
+      .digest('hex');
     const user = await this.prisma.users.findFirst({
       where: { password_reset_token: tokenHash, is_deleted: false },
     });
@@ -126,7 +129,7 @@ export class PasswordService {
       !user.password_reset_expiry ||
       DateUtil.isExpired(user.password_reset_expiry)
     )
-      throw new BadRequestException("Invalid or expired reset token");
+      throw new BadRequestException('Invalid or expired reset token');
 
     const isReused = await this.passwordHistoryService.isPasswordReused(
       user.id,
@@ -134,7 +137,7 @@ export class PasswordService {
     );
     if (isReused)
       throw new BadRequestException(
-        "Cannot reuse a previous password. Please choose a different password.",
+        'Cannot reuse a previous password. Please choose a different password.',
       );
 
     const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
@@ -176,11 +179,11 @@ export class PasswordService {
       LoginAction.PASSWORD_CHANGED,
       this.request
         ? extractRequestContext(this.request)
-        : { ip: "", ua: "", device: "" },
+        : { ip: '', ua: '', device: '' },
       true,
     );
 
-    return { message: "Password reset successful" };
+    return { message: 'Password reset successful' };
   }
 
   async changePassword(
@@ -192,8 +195,8 @@ export class PasswordService {
       where: { id: user.id },
       select: { password: true },
     });
-    if (!(await bcrypt.compare(dto.currentPassword, stored?.password ?? "")))
-      throw new BadRequestException("Current password incorrect");
+    if (!(await bcrypt.compare(dto.currentPassword, stored?.password ?? '')))
+      throw new BadRequestException('Current password incorrect');
 
     const isReused = await this.passwordHistoryService.isPasswordReused(
       user.id,
@@ -201,7 +204,7 @@ export class PasswordService {
     );
     if (isReused)
       throw new BadRequestException(
-        "Cannot reuse a previous password. Please choose a different password.",
+        'Cannot reuse a previous password. Please choose a different password.',
       );
 
     const newPasswordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
@@ -231,6 +234,6 @@ export class PasswordService {
       .catch((e) =>
         this.logger.warn(`Password changed email failed: ${e.message}`),
       );
-    return { message: "Password changed successfully. Please log in again." };
+    return { message: 'Password changed successfully. Please log in again.' };
   }
 }

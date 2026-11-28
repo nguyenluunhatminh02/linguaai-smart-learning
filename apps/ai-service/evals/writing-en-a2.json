@@ -1,0 +1,1244 @@
+{
+  "schemaVersion": "1.0",
+  "feature": "writing_feedback",
+  "language": "english",
+  "level": "A2",
+  "promptVersion": "v1",
+  "description": "Synthetic golden cases for A2 English writing assessment. All text is invented for testing purposes.",
+  "cases": [
+    {
+      "id": "writing-en-a2-001",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "Yesterday I go to the park with my friend. We play football for two hours.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "go", "correction": "went"},
+          {"type": "grammar", "original": "play", "correction": "played"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "official exam", "IELTS band", "TOEFL score"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "Yesterday I went to the park with my friend. We played football for two hours.",
+          "feedback": "Good attempt at describing a past event. Remember to use past tense verbs when talking about yesterday.",
+          "errors": [
+            {"type": "grammar", "original": "go", "correction": "went", "explanation": "Use past tense 'went' for actions completed yesterday."},
+            {"type": "grammar", "original": "play", "correction": "played", "explanation": "Use past tense 'played' for completed past actions."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Practice past tense verbs regularly", "Use time markers like 'yesterday' with past tense"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-002",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My brother don't like vegetables. He prefer meat and potatoes.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "don't", "correction": "doesn't"},
+          {"type": "grammar", "original": "prefer", "correction": "prefers"}
+        ],
+        "mustNotClaim": ["pronunciation", "native speaker", "fluent"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My brother doesn't like vegetables. He prefers meat and potatoes.",
+          "feedback": "Subject-verb agreement needs attention. Third person singular requires 'doesn't' and verbs ending in -s.",
+          "errors": [
+            {"type": "grammar", "original": "don't", "correction": "doesn't", "explanation": "Use 'doesn't' with third person singular (he/she/it)."},
+            {"type": "grammar", "original": "prefer", "correction": "prefers", "explanation": "Add -s to verbs with third person singular subjects."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Review subject-verb agreement rules", "Practice with he/she/it subjects"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-003",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I need a book. Can you give me book about history?",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "book about history", "correction": "a book about history"}
+        ],
+        "mustNotClaim": ["accent", "speaking skills", "listening"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [5, 8], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I need a book. Can you give me a book about history?",
+          "feedback": "Articles (a/an/the) are important. Use 'a' before singular countable nouns when mentioning them for the first time.",
+          "errors": [
+            {"type": "grammar", "original": "book about history", "correction": "a book about history", "explanation": "Use 'a' before singular countable nouns mentioned for the first time."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 6, "task_achievement": 7, "overall": 6},
+          "tips": ["Review article usage (a/an/the)", "Practice with countable nouns"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-004",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I have two cat and three dog at home.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "cat", "correction": "cats"},
+          {"type": "grammar", "original": "dog", "correction": "dogs"}
+        ],
+        "mustNotClaim": ["pronunciation", "reading ability", "writing style"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I have two cats and three dogs at home.",
+          "feedback": "Remember to use plural forms after numbers greater than one.",
+          "errors": [
+            {"type": "grammar", "original": "cat", "correction": "cats", "explanation": "Use plural 'cats' after 'two'."},
+            {"type": "grammar", "original": "dog", "correction": "dogs", "explanation": "Use plural 'dogs' after 'three'."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Always use plural nouns after numbers > 1", "Review irregular plurals"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-005",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The meeting is at Monday at 3pm.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "at Monday", "correction": "on Monday"}
+        ],
+        "mustNotClaim": ["vocabulary range", "complex grammar", "academic writing"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The meeting is on Monday at 3pm.",
+          "feedback": "Use 'on' with days of the week, not 'at'.",
+          "errors": [
+            {"type": "grammar", "original": "at Monday", "correction": "on Monday", "explanation": "Use 'on' before days of the week."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Use 'on' with days: on Monday, on Friday", "Use 'at' with times: at 3pm, at noon"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-006",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "She very happy yesterday because she pass the exam.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "She very happy", "correction": "She was very happy"},
+          {"type": "grammar", "original": "pass", "correction": "passed"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex sentences", "native-like"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [5, 8], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "She was very happy yesterday because she passed the exam.",
+          "feedback": "Missing verb 'was' and past tense 'passed'. Remember complete sentences need a verb.",
+          "errors": [
+            {"type": "grammar", "original": "She very happy", "correction": "She was very happy", "explanation": "Include the verb 'was' for past tense descriptions."},
+            {"type": "grammar", "original": "pass", "correction": "passed", "explanation": "Use past tense 'passed' for completed actions."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 6, "task_achievement": 7, "overall": 5},
+          "tips": ["Every sentence needs a verb", "Use past tense for completed events"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-007",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I interested in learning English. It is very useful for my job.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "I interested", "correction": "I am interested"}
+        ],
+        "mustNotClaim": ["pronunciation", "listening skills", "speaking fluency"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I am interested in learning English. It is very useful for my job.",
+          "feedback": "Missing verb 'am'. Use 'I am interested' not 'I interested'.",
+          "errors": [
+            {"type": "grammar", "original": "I interested", "correction": "I am interested", "explanation": "Include the verb 'am' with adjectives like 'interested'."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Always include the verb 'be' with adjectives", "Practice: I am happy, She is tired"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-008",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My favorite color are blue. I like blue sky and ocean.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "are", "correction": "is"}
+        ],
+        "mustNotClaim": ["complex grammar", "advanced vocabulary", "academic style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My favorite color is blue. I like the blue sky and ocean.",
+          "feedback": "Subject-verb agreement: 'color' is singular, so use 'is' not 'are'.",
+          "errors": [
+            {"type": "grammar", "original": "are", "correction": "is", "explanation": "Use 'is' with singular subjects like 'color'."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Match singular subjects with 'is'", "Match plural subjects with 'are'"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-009",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "We goes to school every day. My friends goes too.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "goes", "correction": "go"},
+          {"type": "grammar", "original": "goes", "correction": "go"}
+        ],
+        "mustNotClaim": ["native speaker level", "perfect grammar", "advanced writing"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "We go to school every day. My friends go too.",
+          "feedback": "Subject-verb agreement: 'we' and 'friends' are plural, so use 'go' not 'goes'.",
+          "errors": [
+            {"type": "grammar", "original": "goes", "correction": "go", "explanation": "Use 'go' with plural subjects (we, they, friends)."},
+            {"type": "grammar", "original": "goes", "correction": "go", "explanation": "Use 'go' with plural subjects (we, they, friends)."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Use 'go' with I/you/we/they", "Use 'goes' with he/she/it"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-010",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I want buy a new phone. It cost too much money.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "want buy", "correction": "want to buy"},
+          {"type": "grammar", "original": "cost", "correction": "costs"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "speaking ability"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I want to buy a new phone. It costs too much money.",
+          "feedback": "Use 'to' after 'want' before another verb. Also, 'it' requires 'costs' (third person singular).",
+          "errors": [
+            {"type": "grammar", "original": "want buy", "correction": "want to buy", "explanation": "Use 'want to + verb' structure."},
+            {"type": "grammar", "original": "cost", "correction": "costs", "explanation": "Add -s for third person singular (it/he/she)."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Remember: want to + verb", "Third person singular needs -s"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-011",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "There is many people in the park today.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "is", "correction": "are"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "academic writing", "formal style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "There are many people in the park today.",
+          "feedback": "'People' is plural, so use 'are' not 'is'.",
+          "errors": [
+            {"type": "grammar", "original": "is", "correction": "are", "explanation": "Use 'are' with plural nouns like 'people'."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["'People' is always plural", "Use 'there are' with plural nouns"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-012",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "She don't has any brothers. She have only one sister.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "don't has", "correction": "doesn't have"},
+          {"type": "grammar", "original": "have", "correction": "has"}
+        ],
+        "mustNotClaim": ["pronunciation", "native-like fluency", "advanced grammar"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "She doesn't have any brothers. She has only one sister.",
+          "feedback": "Negative form: 'doesn't have' (not 'don't has'). Positive: 'she has' (not 'she have').",
+          "errors": [
+            {"type": "grammar", "original": "don't has", "correction": "doesn't have", "explanation": "Use 'doesn't have' for negative with third person singular."},
+            {"type": "grammar", "original": "have", "correction": "has", "explanation": "Use 'has' with third person singular (she/he/it)."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Negative: doesn't have", "Positive: has (she/he/it)"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-013",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I usually wake up at 7 oclock in the morning.",
+      "expected": {
+        "mustDetect": [
+          {"type": "punctuation", "original": "oclock", "correction": "o'clock"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex sentences", "academic style"],
+        "scoreRange": {"grammar": [6, 9], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 9]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I usually wake up at 7 o'clock in the morning.",
+          "feedback": "Good sentence structure. Just remember the apostrophe in 'o'clock'.",
+          "errors": [
+            {"type": "punctuation", "original": "oclock", "correction": "o'clock", "explanation": "Use apostrophe: o'clock (of the clock)."}
+          ],
+          "scores": {"grammar": 7, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Remember: o'clock = of the clock", "Use apostrophe in contractions"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-014",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My house is near the school. I walk there everyday.",
+      "expected": {
+        "mustDetect": [
+          {"type": "spelling", "original": "everyday", "correction": "every day"}
+        ],
+        "mustNotClaim": ["pronunciation", "speaking skills", "listening comprehension"],
+        "scoreRange": {"grammar": [6, 9], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 9]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My house is near the school. I walk there every day.",
+          "feedback": "Good! Just note: 'every day' (two words) means each day. 'Everyday' (one word) is an adjective meaning ordinary.",
+          "errors": [
+            {"type": "spelling", "original": "everyday", "correction": "every day", "explanation": "'Every day' (two words) = each day. 'Everyday' (one word) = ordinary."}
+          ],
+          "scores": {"grammar": 7, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["'Every day' = each day (adverb)", "'Everyday' = ordinary (adjective)"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-015",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "He can speaks three languages: English, Spanish, and French.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "speaks", "correction": "speak"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "native speaker"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "He can speak three languages: English, Spanish, and French.",
+          "feedback": "After modal verbs (can, could, will, etc.), use the base form without -s.",
+          "errors": [
+            {"type": "grammar", "original": "speaks", "correction": "speak", "explanation": "Use base form after 'can': can speak (not can speaks)."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Modal + base verb: can go, will eat, should study", "No -s after modals"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-016",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I am study English for two years now.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "am study", "correction": "have been studying"}
+        ],
+        "mustNotClaim": ["perfect grammar", "native-like", "advanced writing"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I have been studying English for two years now.",
+          "feedback": "For actions that started in the past and continue now, use present perfect continuous: 'have been studying'.",
+          "errors": [
+            {"type": "grammar", "original": "am study", "correction": "have been studying", "explanation": "Use present perfect continuous for ongoing actions: have been + verb-ing."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Present perfect continuous: have/has been + verb-ing", "Use for actions continuing from past to now"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-017",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The weather is very hot today. I think I will go swim in the pool.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "go swim", "correction": "go swimming"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "formal writing", "academic style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The weather is very hot today. I think I will go swimming in the pool.",
+          "feedback": "Good! Use 'go swimming' (go + verb-ing) for activities.",
+          "errors": [
+            {"type": "grammar", "original": "go swim", "correction": "go swimming", "explanation": "Use 'go + verb-ing' for activities: go swimming, go running, go shopping."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Go + activity-ing: go swimming, go shopping", "Common activities: running, fishing, hiking"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-018",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My mother cook dinner every evening. She is very good chef.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "cook", "correction": "cooks"},
+          {"type": "grammar", "original": "good chef", "correction": "a good chef"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "speaking fluency"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My mother cooks dinner every evening. She is a very good chef.",
+          "feedback": "Third person singular needs -s (cooks). Also, use 'a' before singular nouns (a chef).",
+          "errors": [
+            {"type": "grammar", "original": "cook", "correction": "cooks", "explanation": "Add -s for third person singular (she/he/it)."},
+            {"type": "grammar", "original": "good chef", "correction": "a good chef", "explanation": "Use 'a' before singular countable nouns."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Third person singular: verb + s", "Use articles (a/an) before singular nouns"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-019",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I dont like cold weather. I prefer hot climate.",
+      "expected": {
+        "mustDetect": [
+          {"type": "punctuation", "original": "dont", "correction": "don't"},
+          {"type": "grammar", "original": "hot climate", "correction": "a hot climate"}
+        ],
+        "mustNotClaim": ["advanced grammar", "complex sentences", "academic vocabulary"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I don't like cold weather. I prefer a hot climate.",
+          "feedback": "Remember the apostrophe in 'don't'. Also, use 'a' before singular countable nouns.",
+          "errors": [
+            {"type": "punctuation", "original": "dont", "correction": "don't", "explanation": "Use apostrophe in contractions: don't, can't, won't."},
+            {"type": "grammar", "original": "hot climate", "correction": "a hot climate", "explanation": "Use 'a' before singular countable nouns."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Always use apostrophes in contractions", "Use articles with singular countable nouns"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-020",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "Last summer we travel to Italy. The food was delicious and the people was friendly.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "travel", "correction": "traveled"},
+          {"type": "grammar", "original": "was", "correction": "were"}
+        ],
+        "mustNotClaim": ["pronunciation", "native speaker level", "perfect grammar"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "Last summer we traveled to Italy. The food was delicious and the people were friendly.",
+          "feedback": "Use past tense for completed events. 'People' is plural, so use 'were'.",
+          "errors": [
+            {"type": "grammar", "original": "travel", "correction": "traveled", "explanation": "Use past tense for completed past events."},
+            {"type": "grammar", "original": "was", "correction": "were", "explanation": "'People' is plural, use 'were' not 'was'."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Use past tense for 'last summer/yesterday'", "'People' always takes plural verbs"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-021",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I have a dog. His name is Max. He like to play in the park.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "like", "correction": "likes"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced writing", "formal style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I have a dog. His name is Max. He likes to play in the park.",
+          "feedback": "Good sentence structure! Just remember third person singular: 'he likes' (not 'he like').",
+          "errors": [
+            {"type": "grammar", "original": "like", "correction": "likes", "explanation": "Add -s for third person singular (he/she/it)."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["He/she/it + verb + s", "Practice with animals: The cat sleeps, The bird sings"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-022",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "She is teacher at my school. She teach mathematics.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "is teacher", "correction": "is a teacher"},
+          {"type": "grammar", "original": "teach", "correction": "teaches"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "speaking skills"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "She is a teacher at my school. She teaches mathematics.",
+          "feedback": "Use 'a' before singular professions. Also, 'she teaches' (not 'she teach').",
+          "errors": [
+            {"type": "grammar", "original": "is teacher", "correction": "is a teacher", "explanation": "Use 'a' before singular countable nouns (professions)."},
+            {"type": "grammar", "original": "teach", "correction": "teaches", "explanation": "Add -es for third person singular with verbs ending in -ch."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Use articles with professions: a teacher, a doctor", "Verbs ending in -ch: teaches, watches"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-023",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "We was very tired after the long journey. But we enjoy the trip.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "was", "correction": "were"},
+          {"type": "grammar", "original": "enjoy", "correction": "enjoyed"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex grammar", "academic style"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "We were very tired after the long journey. But we enjoyed the trip.",
+          "feedback": "'We' requires 'were' (not 'was'). Use past tense 'enjoyed' for completed events.",
+          "errors": [
+            {"type": "grammar", "original": "was", "correction": "were", "explanation": "Use 'were' with we/you/they."},
+            {"type": "grammar", "original": "enjoy", "correction": "enjoyed", "explanation": "Use past tense for completed past events."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["I/he/she/it + was", "We/you/they + were", "Past tense for completed events"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-024",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My favorite food are pizza and pasta. I eat they every week.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "are", "correction": "is"},
+          {"type": "grammar", "original": "they", "correction": "them"}
+        ],
+        "mustNotClaim": ["pronunciation", "native-like", "perfect grammar"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My favorite food is pizza and pasta. I eat them every week.",
+          "feedback": "'Food' is singular (use 'is'). Use object pronoun 'them' after verbs.",
+          "errors": [
+            {"type": "grammar", "original": "are", "correction": "is", "explanation": "'Food' is singular, use 'is'."},
+            {"type": "grammar", "original": "they", "correction": "them", "explanation": "Use object pronoun 'them' after verbs."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Subject pronouns: I, you, he, she, they", "Object pronouns: me, you, him, her, them"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-025",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I am very interesting in learning new languages. It is important for my career.",
+      "expected": {
+        "mustDetect": [
+          {"type": "vocabulary", "original": "interesting", "correction": "interested"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "speaking ability"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [5, 8], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I am very interested in learning new languages. It is important for my career.",
+          "feedback": "Use 'interested' (feeling) not 'interesting' (describing something). 'I am interested' = I feel interest.",
+          "errors": [
+            {"type": "vocabulary", "original": "interesting", "correction": "interested", "explanation": "'Interested' describes feelings. 'Interesting' describes things."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 6, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["-ed adjectives: feelings (interested, bored, tired)", "-ing adjectives: things (interesting, boring, tiring)"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-026",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The childrens are playing in the garden. They is very happy.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "childrens", "correction": "children"},
+          {"type": "grammar", "original": "is", "correction": "are"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced grammar", "formal writing"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The children are playing in the garden. They are very happy.",
+          "feedback": "'Children' is already plural (no -s needed). Use 'are' with 'they'.",
+          "errors": [
+            {"type": "grammar", "original": "childrens", "correction": "children", "explanation": "'Children' is the plural of 'child' (irregular plural)."},
+            {"type": "grammar", "original": "is", "correction": "are", "explanation": "Use 'are' with plural subjects (they)."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Irregular plurals: child-children, man-men, woman-women", "They/We/You + are"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-027",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I need to practice more. My English is not very good yet.",
+      "expected": {
+        "mustDetect": [],
+        "mustNotClaim": ["perfect grammar", "native speaker", "advanced level"],
+        "scoreRange": {"grammar": [7, 10], "vocabulary": [6, 9], "coherence": [7, 10], "task_achievement": [7, 10], "overall": [7, 9]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I need to practice more. My English is not very good yet.",
+          "feedback": "Excellent! Your sentences are grammatically correct and clear. Keep practicing!",
+          "errors": [],
+          "scores": {"grammar": 8, "vocabulary": 7, "coherence": 8, "task_achievement": 8, "overall": 8},
+          "tips": ["Continue reading in English", "Practice speaking daily", "Watch English movies with subtitles"],
+          "overall_score": 8.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-028",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "She dont likes coffee. She prefer tea with milk.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "dont likes", "correction": "doesn't like"},
+          {"type": "grammar", "original": "prefer", "correction": "prefers"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "fluent speaking"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "She doesn't like coffee. She prefers tea with milk.",
+          "feedback": "Negative: 'doesn't like' (not 'dont likes'). Positive: 'she prefers' (add -s).",
+          "errors": [
+            {"type": "grammar", "original": "dont likes", "correction": "doesn't like", "explanation": "Negative: doesn't + base verb (no -s)."},
+            {"type": "grammar", "original": "prefer", "correction": "prefers", "explanation": "Third person singular needs -s."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Negative: doesn't + base verb", "Positive: she/he/it + verb + s"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-029",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I have two brothers. They both study at university.",
+      "expected": {
+        "mustDetect": [],
+        "mustNotClaim": ["advanced vocabulary", "complex grammar", "academic writing"],
+        "scoreRange": {"grammar": [7, 10], "vocabulary": [6, 9], "coherence": [7, 10], "task_achievement": [7, 10], "overall": [7, 9]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I have two brothers. They both study at university.",
+          "feedback": "Perfect! Clear, correct sentences with good grammar.",
+          "errors": [],
+          "scores": {"grammar": 8, "vocabulary": 7, "coherence": 8, "task_achievement": 8, "overall": 8},
+          "tips": ["Keep practicing with different tenses", "Try using more adjectives to describe"],
+          "overall_score": 8.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-030",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The book is very interest. I read it last week.",
+      "expected": {
+        "mustDetect": [
+          {"type": "vocabulary", "original": "interest", "correction": "interesting"}
+        ],
+        "mustNotClaim": ["pronunciation", "speaking skills", "listening"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [5, 8], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The book is very interesting. I read it last week.",
+          "feedback": "Use adjective 'interesting' to describe things. 'Interest' is a noun or verb.",
+          "errors": [
+            {"type": "vocabulary", "original": "interest", "correction": "interesting", "explanation": "Use adjective form: interesting (not noun 'interest')."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 6, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Noun: interest", "Adjective: interesting", "Verb: to interest"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-031",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "We goes to the beach every summer. The water is always cold.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "goes", "correction": "go"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced grammar", "formal style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "We go to the beach every summer. The water is always cold.",
+          "feedback": "Good! Just remember: 'we go' (not 'we goes'). Use base form with we/you/they.",
+          "errors": [
+            {"type": "grammar", "original": "goes", "correction": "go", "explanation": "Use base form with plural subjects: we go, they go."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["I/you/we/they + go", "He/she/it + goes"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-032",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My sister want to become a doctor. She study very hard every day.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "want", "correction": "wants"},
+          {"type": "grammar", "original": "study", "correction": "studies"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "native speaker"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My sister wants to become a doctor. She studies very hard every day.",
+          "feedback": "Third person singular needs -s: 'wants' and 'studies'.",
+          "errors": [
+            {"type": "grammar", "original": "want", "correction": "wants", "explanation": "Add -s for third person singular."},
+            {"type": "grammar", "original": "study", "correction": "studies", "explanation": "Verbs ending in -y change to -ies: study-studies."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["She/he/it + verb + s/es", "Verbs ending in -y: study-studies, try-tries"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-033",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I am looking for a job. Do you know any company that hire new employees?",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "hire", "correction": "hires"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex grammar", "academic style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I am looking for a job. Do you know any company that hires new employees?",
+          "feedback": "Good question structure! 'Company' is singular, so use 'hires'.",
+          "errors": [
+            {"type": "grammar", "original": "hire", "correction": "hires", "explanation": "Singular subject 'company' needs 'hires'."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Singular subjects need verb + s", "Company hires, companies hire"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-034",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The movie was very bored. I sleep during the film.",
+      "expected": {
+        "mustDetect": [
+          {"type": "vocabulary", "original": "bored", "correction": "boring"},
+          {"type": "grammar", "original": "sleep", "correction": "slept"}
+        ],
+        "mustNotClaim": ["pronunciation", "speaking fluency", "listening skills"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [5, 8], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The movie was very boring. I slept during the film.",
+          "feedback": "Use 'boring' to describe things. Use past tense 'slept' for completed events.",
+          "errors": [
+            {"type": "vocabulary", "original": "bored", "correction": "boring", "explanation": "'Boring' describes things. 'Bored' describes feelings."},
+            {"type": "grammar", "original": "sleep", "correction": "slept", "explanation": "Use past tense for completed past events."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 6, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["-ing: describes things (boring, interesting)", "-ed: describes feelings (bored, interested)"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-035",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "There is a lot of traffic today. The cars move very slow.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "slow", "correction": "slowly"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced grammar", "formal writing"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "There is a lot of traffic today. The cars move very slowly.",
+          "feedback": "Use adverb 'slowly' to describe how something happens (verb + adverb).",
+          "errors": [
+            {"type": "grammar", "original": "slow", "correction": "slowly", "explanation": "Use adverb form to modify verbs: move slowly."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Adjective: slow (describes nouns)", "Adverb: slowly (describes verbs)"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-036",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I usually have breakfast at 8 am. Then I go to work by bus.",
+      "expected": {
+        "mustDetect": [],
+        "mustNotClaim": ["advanced vocabulary", "complex sentences", "academic style"],
+        "scoreRange": {"grammar": [7, 10], "vocabulary": [6, 9], "coherence": [7, 10], "task_achievement": [7, 10], "overall": [7, 9]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I usually have breakfast at 8 am. Then I go to work by bus.",
+          "feedback": "Excellent! Perfect grammar and clear sequence of actions.",
+          "errors": [],
+          "scores": {"grammar": 8, "vocabulary": 7, "coherence": 8, "task_achievement": 8, "overall": 8},
+          "tips": ["Keep using time markers: usually, then, after that", "Practice describing your daily routine"],
+          "overall_score": 8.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-037",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "He can to play the guitar very well. He practice every day.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "can to play", "correction": "can play"},
+          {"type": "grammar", "original": "practice", "correction": "practices"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "native speaker level"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "He can play the guitar very well. He practices every day.",
+          "feedback": "After 'can', use base verb without 'to'. Also, 'he practices' (third person singular).",
+          "errors": [
+            {"type": "grammar", "original": "can to play", "correction": "can play", "explanation": "Modal verbs (can, will, should) + base verb (no 'to')."},
+            {"type": "grammar", "original": "practice", "correction": "practices", "explanation": "Add -s for third person singular."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Can/will/should + base verb (no 'to')", "He/she/it + verb + s"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-038",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My parents lives in a small town. They has a nice house there.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "lives", "correction": "live"},
+          {"type": "grammar", "original": "has", "correction": "have"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced grammar", "formal style"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My parents live in a small town. They have a nice house there.",
+          "feedback": "'Parents' is plural, so use 'live' and 'have' (not 'lives' and 'has').",
+          "errors": [
+            {"type": "grammar", "original": "lives", "correction": "live", "explanation": "Plural subjects use base form: they live."},
+            {"type": "grammar", "original": "has", "correction": "have", "explanation": "Plural subjects use 'have': they have."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["Singular: lives, has", "Plural: live, have"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-039",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I am very tired today. I didnt sleep well last night.",
+      "expected": {
+        "mustDetect": [
+          {"type": "punctuation", "original": "didnt", "correction": "didn't"}
+        ],
+        "mustNotClaim": ["pronunciation", "speaking skills", "listening comprehension"],
+        "scoreRange": {"grammar": [6, 9], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 9]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I am very tired today. I didn't sleep well last night.",
+          "feedback": "Good! Just remember the apostrophe in 'didn't'.",
+          "errors": [
+            {"type": "punctuation", "original": "didnt", "correction": "didn't", "explanation": "Use apostrophe in contractions: didn't, wasn't, couldn't."}
+          ],
+          "scores": {"grammar": 7, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Always use apostrophes in contractions", "Common contractions: don't, can't, won't, didn't"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-040",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "She is more taller than her sister. They are both very tall.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "more taller", "correction": "taller"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex grammar", "academic writing"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "She is taller than her sister. They are both very tall.",
+          "feedback": "For short adjectives, use -er (taller), not 'more taller'.",
+          "errors": [
+            {"type": "grammar", "original": "more taller", "correction": "taller", "explanation": "Short adjectives: add -er (tall-taller). Don't use 'more' with -er."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Short adjectives: tall-taller, big-bigger", "Long adjectives: beautiful-more beautiful"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-041",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I have been to Paris last year. It was beautiful city.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "have been", "correction": "went"},
+          {"type": "grammar", "original": "beautiful city", "correction": "a beautiful city"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "native speaker"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I went to Paris last year. It was a beautiful city.",
+          "feedback": "Use simple past 'went' with specific time (last year). Use 'a' before singular nouns.",
+          "errors": [
+            {"type": "grammar", "original": "have been", "correction": "went", "explanation": "Use simple past with specific past time: last year, yesterday."},
+            {"type": "grammar", "original": "beautiful city", "correction": "a beautiful city", "explanation": "Use 'a' before singular countable nouns."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["Specific past time = simple past", "Use articles with singular nouns"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-042",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The test was very difficult. Many students dont pass it.",
+      "expected": {
+        "mustDetect": [
+          {"type": "punctuation", "original": "dont", "correction": "don't"},
+          {"type": "grammar", "original": "dont pass", "correction": "didn't pass"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced grammar", "formal style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The test was very difficult. Many students didn't pass it.",
+          "feedback": "Use past tense 'didn't pass' for completed events. Also, remember the apostrophe.",
+          "errors": [
+            {"type": "punctuation", "original": "dont", "correction": "don't", "explanation": "Use apostrophe in contractions."},
+            {"type": "grammar", "original": "dont pass", "correction": "didn't pass", "explanation": "Use past tense for completed past events."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Past events: didn't + base verb", "Always use apostrophes in contractions"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-043",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I like to read book before bed. It help me relax.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "book", "correction": "books"},
+          {"type": "grammar", "original": "help", "correction": "helps"}
+        ],
+        "mustNotClaim": ["pronunciation", "speaking fluency", "listening skills"],
+        "scoreRange": {"grammar": [4, 7], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [5, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I like to read books before bed. It helps me relax.",
+          "feedback": "Use plural 'books' for general statements. 'It helps' (third person singular).",
+          "errors": [
+            {"type": "grammar", "original": "book", "correction": "books", "explanation": "Use plural for general statements about activities."},
+            {"type": "grammar", "original": "help", "correction": "helps", "explanation": "Third person singular needs -s: it helps."}
+          ],
+          "scores": {"grammar": 5, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 6},
+          "tips": ["General activities: plural nouns (read books, watch movies)", "It/he/she + verb + s"],
+          "overall_score": 6.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-044",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "We was planning to go to the cinema, but we change our mind.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "was", "correction": "were"},
+          {"type": "grammar", "original": "change", "correction": "changed"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex grammar", "academic style"],
+        "scoreRange": {"grammar": [3, 6], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [4, 7]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "We were planning to go to the cinema, but we changed our mind.",
+          "feedback": "'We' requires 'were'. Use past tense 'changed' for completed events.",
+          "errors": [
+            {"type": "grammar", "original": "was", "correction": "were", "explanation": "Use 'were' with we/you/they."},
+            {"type": "grammar", "original": "change", "correction": "changed", "explanation": "Use past tense for completed past events."}
+          ],
+          "scores": {"grammar": 4, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 5},
+          "tips": ["I/he/she/it + was", "We/you/they + were", "Past tense for completed events"],
+          "overall_score": 5.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-045",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "My best friend live in London. I visit him every summer.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "live", "correction": "lives"}
+        ],
+        "mustNotClaim": ["pronunciation", "accent", "native speaker level"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "My best friend lives in London. I visit him every summer.",
+          "feedback": "Good! Just remember: 'friend' is singular, so 'lives' (not 'live').",
+          "errors": [
+            {"type": "grammar", "original": "live", "correction": "lives", "explanation": "Third person singular needs -s: he/she/it lives."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Singular subjects: verb + s", "My friend lives, my friends live"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-046",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I am study for my exam next week. I need to review all the lessons.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "am study", "correction": "am studying"}
+        ],
+        "mustNotClaim": ["complex vocabulary", "advanced grammar", "formal writing"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I am studying for my exam next week. I need to review all the lessons.",
+          "feedback": "Use present continuous 'am studying' for current ongoing actions.",
+          "errors": [
+            {"type": "grammar", "original": "am study", "correction": "am studying", "explanation": "Present continuous: am/is/are + verb-ing."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Present continuous: am/is/are + verb-ing", "Use for actions happening now"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-047",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "The restaurant serve delicious food. The waiter was very friendly.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "serve", "correction": "serves"}
+        ],
+        "mustNotClaim": ["pronunciation", "speaking skills", "listening"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "The restaurant serves delicious food. The waiter was very friendly.",
+          "feedback": "Good description! 'Restaurant' is singular, so 'serves' (not 'serve').",
+          "errors": [
+            {"type": "grammar", "original": "serve", "correction": "serves", "explanation": "Singular subjects need verb + s: the restaurant serves."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Singular nouns: verb + s", "The restaurant serves, restaurants serve"],
+          "overall_score": 7.0
+        }
+      }
+    },
+    {
+      "id": "writing-en-a2-048",
+      "feature": "writing_feedback",
+      "language": "english",
+      "level": "A2",
+      "input": "I enjoy to watch movies on weekends. My favorite genre is comedy.",
+      "expected": {
+        "mustDetect": [
+          {"type": "grammar", "original": "enjoy to watch", "correction": "enjoy watching"}
+        ],
+        "mustNotClaim": ["advanced vocabulary", "complex sentences", "academic style"],
+        "scoreRange": {"grammar": [5, 8], "vocabulary": [6, 9], "coherence": [6, 9], "task_achievement": [6, 9], "overall": [6, 8]},
+        "schemaValid": true,
+        "referenceResponse": {
+          "corrected_text": "I enjoy watching movies on weekends. My favorite genre is comedy.",
+          "feedback": "After 'enjoy', use verb-ing (enjoy watching), not 'to + verb'.",
+          "errors": [
+            {"type": "grammar", "original": "enjoy to watch", "correction": "enjoy watching", "explanation": "Verbs like enjoy, love, hate + verb-ing."}
+          ],
+          "scores": {"grammar": 6, "vocabulary": 7, "coherence": 7, "task_achievement": 7, "overall": 7},
+          "tips": ["Enjoy/love/hate + verb-ing", "I enjoy reading, She loves dancing"],
+          "overall_score": 7.0
+        }
+      }
+    }
+  ]
+}

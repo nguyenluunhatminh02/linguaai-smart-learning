@@ -30,6 +30,8 @@ export interface GrammarResult {
   examples: { sentence: string; translation: string }[];
   exercises: { question: string; answer: string }[];
   tips: string[];
+  balance?: number;
+  operationId?: string;
 }
 
 function cmsToGrammarLesson(lesson: Record<string, unknown>): GrammarLesson {
@@ -71,12 +73,22 @@ export function useGrammarLessons() {
 }
 
 export function useGrammarExplain() {
-  return useMutation<GrammarResult, Error, { grammarPoint: string; language: string }>({
-    mutationFn: async ({ grammarPoint, language }) => {
-      const res = await apiClient.post("/grammar/explain", {
-        grammarPoint,
-        language,
-      });
+  return useMutation<
+    GrammarResult,
+    Error,
+    { grammarPoint: string; language: string; operationKey: string }
+  >({
+    mutationFn: async ({ grammarPoint, language, operationKey }) => {
+      const res = await apiClient.post(
+        "/grammar/explain",
+        {
+          grammarPoint,
+          language,
+        },
+        {
+          headers: { "Idempotency-Key": operationKey },
+        },
+      );
       const raw = res.data as Record<string, unknown>;
       const examples = Array.isArray(raw.examples)
         ? (raw.examples as (string | Record<string, string>)[]).map((ex) =>
@@ -100,6 +112,8 @@ export function useGrammarExplain() {
         examples,
         exercises,
         tips: Array.isArray(raw.tips) ? (raw.tips as string[]) : [],
+        balance: typeof raw.balance === "number" ? raw.balance : undefined,
+        operationId: typeof raw.operationId === "string" ? raw.operationId : undefined,
       };
     },
   });

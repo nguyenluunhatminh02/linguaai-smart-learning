@@ -6,7 +6,9 @@ import { RateLimiterService } from './rate-limiter.service';
 // ioredis must be mocked before the service is imported: the service creates
 // the client in onModuleInit and attaches event handlers to it.
 jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => ({
+  // tsconfig has allowSyntheticDefaultImports without esModuleInterop, so the
+  // compiled service reads `ioredis_1.default`; expose the ctor as default.
+  const ctor = jest.fn().mockImplementation(() => ({
     on: jest.fn().mockReturnThis(),
     ping: jest.fn().mockResolvedValue('PONG'),
     set: jest.fn().mockResolvedValue('OK'),
@@ -23,9 +25,10 @@ jest.mock('ioredis', () => {
     keys: jest.fn().mockResolvedValue([]),
     disconnect: jest.fn().mockResolvedValue(undefined),
   }));
+  return { __esModule: true, default: ctor };
 });
 
-const Redis = require('ioredis') as jest.Mock;
+const Redis = (require('ioredis') as { default: jest.Mock }).default;
 const { HttpException, HttpStatus } = require('@nestjs/common');
 const { DateUtil } = require('../utils/date.util');
 
@@ -202,11 +205,11 @@ describe('RedisService', () => {
 
     expect(await service.incrWithExpiry('k', 30)).toBe(1);
     expect(await service.incrWithExpiry('k', 30)).toBe(2);
+    expect(await service.incrWithExpiry('k', 30)).toBe(1);
     // Every EVAL carries the TTL script, but Redis only applies EXPIRE when
     // the counter is new (current == 1).
     expect(client.eval).toHaveBeenCalledTimes(3);
     expect(client.eval.mock.calls[2][3]).toBe('30');
-    expect(await service.incrWithExpiry('k', 30)).toBe(1);
   });
 });
 
@@ -239,7 +242,9 @@ describe('RateLimiterService', () => {
     );
     expect(result.success).toBe(true);
     expect(result.remaining).toBe(2);
-    expect(result.resetTime).toEqual(DateUtil.addSeconds(900, new Date(1_700_000_000_000)));
+    expect(result.resetTime).toEqual(
+      DateUtil.addSeconds(900, new Date(1_700_000_000_000)),
+    );
     nowSpy.mockRestore();
   });
 
@@ -248,10 +253,12 @@ describe('RateLimiterService', () => {
     redis.incrWithExpiry.mockResolvedValueOnce(3).mockResolvedValueOnce(4);
     redis.ttl.mockResolvedValue(240);
 
-    await expect(limiter.checkRateLimit('ip:1', config)).resolves.toMatchObject({
-      remaining: 0,
-      success: true,
-    });
+    await expect(limiter.checkRateLimit('ip:1', config)).resolves.toMatchObject(
+      {
+        remaining: 0,
+        success: true,
+      },
+    );
 
     let error: any;
     try {
@@ -263,7 +270,10 @@ describe('RateLimiterService', () => {
     expect(error.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
     expect(error.getResponse()).toMatchObject({
       remaining: 0,
-      resetTime: DateUtil.addSeconds(240, new Date(1_700_000_000_000)).toISOString(),
+      resetTime: DateUtil.addSeconds(
+        240,
+        new Date(1_700_000_000_000),
+      ).toISOString(),
     });
     nowSpy.mockRestore();
   });

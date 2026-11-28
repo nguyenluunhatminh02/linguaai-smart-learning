@@ -1,8 +1,8 @@
-import { IsString, IsOptional, IsBoolean } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDeckDto {
-  @ApiProperty({ example: "IELTS Vocabulary" })
+  @ApiProperty({ example: 'IELTS Vocabulary' })
   @IsString()
   title: string;
 
@@ -11,12 +11,12 @@ export class CreateDeckDto {
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ example: "english" })
+  @ApiPropertyOptional({ example: 'english' })
   @IsString()
   @IsOptional()
   language?: string;
 
-  @ApiPropertyOptional({ example: "B1" })
+  @ApiPropertyOptional({ example: 'B1' })
   @IsString()
   @IsOptional()
   level?: string;

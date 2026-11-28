@@ -6,6 +6,128 @@ import { verifyAuthHeader, isAdmin } from "@/lib/auth/jwt-verify";
 const BACKEND = process.env.CMS_BACKEND_URL || "http://localhost:4000/api/v1";
 const IS_PROD = process.env.NODE_ENV === "production";
 
+interface DbLessonData {
+  language?: string;
+  slug?: string;
+  categoryVi?: string;
+  description?: string;
+  thumbnail?: string;
+  images?: string[];
+  source?: string;
+  isUserUploaded?: boolean;
+  userId?: string | null;
+  vocabulary?: unknown[];
+  formula?: string;
+  examples?: unknown[];
+  tips?: unknown[];
+  commonMistakes?: unknown[];
+  color?: string;
+  words?: unknown[];
+  sentences?: unknown[];
+}
+
+interface DbLessonRow {
+  id: string;
+  type: string;
+  level: string;
+  title: string;
+  title_vi?: string;
+  titleVi?: string;
+  slug?: string;
+  category: string;
+  content?: string;
+  duration?: string;
+  word_count?: number;
+  wordCount?: number;
+  audio_url?: string;
+  audioUrl?: string;
+  questions?: unknown[];
+  published?: boolean;
+  sort_order?: number;
+  sortOrder?: number;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  data?: DbLessonData;
+}
+
+export interface CmsLessonView {
+  id: string;
+  type: string;
+  language: string;
+  level: string;
+  title: string;
+  titleVi: string;
+  slug: string;
+  category: string;
+  categoryVi: string;
+  description: string;
+  thumbnail: string;
+  images: string[];
+  source: string;
+  isPublished: boolean;
+  sortOrder: number;
+  content: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+  isUserUploaded: boolean;
+  userId: string | null;
+}
+
+interface CmsLessonInput {
+  type?: string;
+  language?: string;
+  level?: string;
+  title?: string;
+  titleVi?: string;
+  slug?: string;
+  category?: string;
+  categoryVi?: string;
+  description?: string;
+  thumbnail?: string;
+  images?: string[];
+  source?: string;
+  isPublished?: boolean;
+  sortOrder?: number;
+  isUserUploaded?: boolean;
+  userId?: string | null;
+  content?: {
+    transcript?: string;
+    audioUrl?: string;
+    duration?: string;
+    text?: string;
+    wordCount?: number;
+    explanation?: string;
+    formula?: string;
+    color?: string;
+    questions?: unknown[];
+    exercises?: unknown[];
+    vocabulary?: unknown[];
+    examples?: unknown[];
+    tips?: unknown[];
+    commonMistakes?: unknown[];
+    words?: unknown[];
+    sentences?: unknown[];
+  };
+}
+
+interface DbLessonPayload {
+  type?: string;
+  title?: string;
+  titleVi?: string;
+  level?: string;
+  category?: string;
+  content: string;
+  audioUrl: string;
+  duration: string;
+  wordCount: number;
+  published: boolean;
+  sortOrder: number;
+  questions: unknown[];
+  data: Record<string, unknown>;
+}
+
 function inferLanguageFromLevel(level: string): string {
   if (!level) return "english";
   const lvl = level.toUpperCase();
@@ -15,12 +137,12 @@ function inferLanguageFromLevel(level: string): string {
   return "english";
 }
 
-export function dbToCms(row: any): any {
+export function dbToCms(row: DbLessonRow | null): CmsLessonView | null {
   if (!row) return null;
   const data = row.data || {};
   const language = data.language || inferLanguageFromLevel(row.level) || "english";
   
-  let content: any = {};
+  let content: Record<string, unknown> = {};
   if (row.type === "listening") {
     content = {
       duration: row.duration || "",
@@ -80,14 +202,14 @@ export function dbToCms(row: any): any {
   };
 }
 
-export function cmsToDb(lesson: any): any {
+export function cmsToDb(lesson: CmsLessonInput): DbLessonPayload {
   let dbContent = "";
   let dbAudioUrl = "";
   let dbDuration = "";
   let dbWordCount = 0;
-  let dbQuestions: any[] = [];
+  let dbQuestions: unknown[] = [];
   
-  const extraData: Record<string, any> = {
+  const extraData: Record<string, unknown> = {
     language: lesson.language,
     slug: lesson.slug,
     categoryVi: lesson.categoryVi,
@@ -100,20 +222,20 @@ export function cmsToDb(lesson: any): any {
   };
 
   if (lesson.type === "listening") {
-    const c = lesson.content || {};
+    const c: NonNullable<CmsLessonInput["content"]> = lesson.content || {};
     dbContent = c.transcript || "";
     dbAudioUrl = c.audioUrl || "";
     dbDuration = c.duration || "";
     dbQuestions = c.questions || [];
     extraData.vocabulary = c.vocabulary || [];
   } else if (lesson.type === "reading") {
-    const c = lesson.content || {};
+    const c: NonNullable<CmsLessonInput["content"]> = lesson.content || {};
     dbContent = c.text || "";
     dbWordCount = c.wordCount || 0;
     dbQuestions = c.questions || [];
     extraData.vocabulary = c.vocabulary || [];
   } else if (lesson.type === "grammar") {
-    const c = lesson.content || {};
+    const c: NonNullable<CmsLessonInput["content"]> = lesson.content || {};
     dbContent = c.explanation || "";
     dbQuestions = c.exercises || [];
     extraData.formula = c.formula || "";
@@ -121,12 +243,12 @@ export function cmsToDb(lesson: any): any {
     extraData.tips = c.tips || [];
     extraData.commonMistakes = c.commonMistakes || [];
   } else if (lesson.type === "vocabulary") {
-    const c = lesson.content || {};
+    const c: NonNullable<CmsLessonInput["content"]> = lesson.content || {};
     dbContent = "";
     extraData.color = c.color || "";
     extraData.words = c.words || [];
   } else if (lesson.type === "translation") {
-    const c = lesson.content || {};
+    const c: NonNullable<CmsLessonInput["content"]> = lesson.content || {};
     dbContent = "";
     extraData.sentences = c.sentences || [];
   }
@@ -193,7 +315,10 @@ export async function GET(req: NextRequest) {
   );
 
   if (ok) {
-    let lessons = (data || []).map(dbToCms);
+    const rows: DbLessonRow[] = Array.isArray(data) ? data : [];
+    let lessons: CmsLessonView[] = rows
+      .map(dbToCms)
+      .filter((l): l is CmsLessonView => l !== null);
 
     // Apply query filters
     const { searchParams } = req.nextUrl;
@@ -201,36 +326,36 @@ export async function GET(req: NextRequest) {
     
     // Filter by isUserUploaded
     if (userUploaded) {
-      lessons = lessons.filter((l: any) => l.isUserUploaded === true);
+      lessons = lessons.filter((l) => l.isUserUploaded === true);
     } else {
-      lessons = lessons.filter((l: any) => !l.isUserUploaded);
+      lessons = lessons.filter((l) => !l.isUserUploaded);
     }
 
     const type = searchParams.get("type");
     if (type) {
-      lessons = lessons.filter((l: any) => l.type === type);
+      lessons = lessons.filter((l) => l.type === type);
     }
 
     const language = searchParams.get("language");
     if (language) {
-      lessons = lessons.filter((l: any) => l.language === language);
+      lessons = lessons.filter((l) => l.language === language);
     }
 
     const level = searchParams.get("level");
     if (level) {
-      lessons = lessons.filter((l: any) => l.level === level);
+      lessons = lessons.filter((l) => l.level === level);
     }
 
     const published = searchParams.get("published");
     if (published !== null) {
-      lessons = lessons.filter((l: any) => l.isPublished === (published === "true"));
+      lessons = lessons.filter((l) => l.isPublished === (published === "true"));
     }
 
     const search = searchParams.get("search");
     if (search) {
       const q = search.toLowerCase();
       lessons = lessons.filter(
-        (l: any) =>
+        (l) =>
           (l.title || "").toLowerCase().includes(q) ||
           (l.titleVi || "").toLowerCase().includes(q) ||
           (l.source || "").toLowerCase().includes(q),

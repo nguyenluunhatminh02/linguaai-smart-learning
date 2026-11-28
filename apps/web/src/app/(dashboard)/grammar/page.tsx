@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,8 +13,6 @@ import {
   Search,
   GraduationCap,
   Pencil,
-  ChevronLeft,
-  ChevronRight,
   CheckCircle,
   XCircle,
   ArrowLeft,
@@ -22,8 +20,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguageStore } from "@/stores/language-store";
-import { TokenCost, useTokenGate } from "@/components/ui/token-cost";
+import { TokenCost } from "@/components/ui/token-cost";
 import { FlagIcon } from "@/components/ui/flag-icon";
+import { useTokenStore } from "@/stores/token-store";
+import { toAppError, type AppError } from "@/lib/errors";
 
 export interface GrammarExercise {
   question: string;
@@ -73,6 +73,54 @@ interface GrammarResult {
   examples: { sentence: string; translation: string }[];
   exercises: { question: string; answer: string }[];
   tips: string[];
+  operationId?: string;
+  balance?: number;
+}
+
+interface ExplainMutationInput {
+  grammarPoint: string;
+  language: string;
+  operationKey: string;
+}
+
+/** Stable per-intent key: retries reuse it so the server can replay/settle once. */
+function createOperationKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `grammar-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Typed, user-facing messages; raw transport/provider text is never shown. */
+const EXPLAIN_ERROR_MESSAGES: Record<string, string> = {
+  VALIDATION_ERROR: "Please check your question and try again.",
+  INSUFFICIENT_CREDITS: "Insufficient token balance",
+  OPERATION_CONFLICT: "This explanation is already being processed. Please wait for its result.",
+  RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  PROVIDER_UNAVAILABLE: "The AI service is temporarily unavailable. Please try again.",
+  PROVIDER_TIMEOUT: "The AI service took too long to respond. Please try again.",
+  INVALID_AI_OUTPUT: "The AI returned an invalid response. Please try again.",
+  DATABASE_UNAVAILABLE: "Could not save the result. Please try again.",
+  INTERNAL_ERROR: "Something went wrong. Please try again.",
+};
+
+function explainErrorMessage(error: unknown, insufficientTokensLabel: string): string {
+  const appError: AppError = toAppError(error);
+  // Status-based fallback for servers whose error envelope omits a typed code.
+  if (
+    appError.code === "INTERNAL_ERROR" &&
+    (appError.httpStatus === 400 || appError.httpStatus === 402 || appError.httpStatus === 409 || appError.httpStatus === 429)
+  ) {
+    const byStatus: Record<number, string> = {
+      400: EXPLAIN_ERROR_MESSAGES.VALIDATION_ERROR,
+      402: insufficientTokensLabel,
+      409: EXPLAIN_ERROR_MESSAGES.OPERATION_CONFLICT,
+      429: EXPLAIN_ERROR_MESSAGES.RATE_LIMITED,
+    };
+    return byStatus[appError.httpStatus];
+  }
+  if (appError.code === "INSUFFICIENT_CREDITS") return insufficientTokensLabel;
+  return EXPLAIN_ERROR_MESSAGES[appError.code] ?? EXPLAIN_ERROR_MESSAGES.INTERNAL_ERROR;
 }
 
 export default function GrammarPage() {
@@ -98,29 +146,39 @@ export default function GrammarPage() {
   const [showExerciseAnswers, setShowExerciseAnswers] = useState<
     Record<number, boolean>
   >({});
-  const { consumeAndRun, canAfford: canAffordGrammar } =
-    useTokenGate("grammar_explain");
+  const { syncBalance } = useTokenStore();
+  const insufficientTokensLabel =
+    t.common.insufficientTokens || "Insufficient token balance";
+  // One key per Explain intent. It stays unchanged across retries of that
+  // intent so a timeout/refund/settle cannot result in a second debit.
+  const operationKeyRef = useRef(createOperationKey());
 
   const loading = explainMutation.isPending;
 
   const handleSearch = async () => {
-    if (!query.trim()) return;
-    if (!canAffordGrammar) {
-      toast.error(t.common.insufficientTokens || "Insufficient token balance");
-      return;
-    }
+    if (!query.trim() || loading) return;
+    const grammarPoint = query.trim();
     setResult(null);
     setShowExerciseAnswers({});
     try {
-      await consumeAndRun(async () => {
-        const data = await explainMutation.mutateAsync({
-          grammarPoint: query,
-          language: targetLanguage,
-        });
-        setResult(data);
-      });
-    } catch {
-      // silently handle
+      const data = await explainMutation.mutateAsync({
+        grammarPoint,
+        language: targetLanguage,
+        operationKey: operationKeyRef.current,
+      } as ExplainMutationInput);
+      const explanation = data as GrammarResult;
+      setResult(explanation);
+      // The response carries the authoritative post-settlement balance.
+      if (typeof explanation.balance === "number") {
+        syncBalance(explanation.balance);
+      }
+      // The intent completed; a later click is a new operation and must get a
+      // fresh key. On failure we keep the key for a safe retry.
+      operationKeyRef.current = createOperationKey();
+    } catch (error) {
+      // Server-side reserve/settle/refund is authoritative. Surface the typed
+      // 400/402/409/429 (and provider) failures instead of failing silently.
+      toast.error(explainErrorMessage(error, insufficientTokensLabel));
     }
   };
 

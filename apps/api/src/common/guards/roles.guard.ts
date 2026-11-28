@@ -11,12 +11,12 @@ import { Role } from '../../users/enums/role.enum';
 
 /**
  * Roles Guard
- * 
+ *
  * Enforces role-based access control (RBAC) on routes decorated with @Roles().
  * User must have at least one of the required roles to access the route.
- * 
+ *
  * Routes decorated with @Public() are exempt from role checking.
- * 
+ *
  * @example
  * // In controller
  * @Get('admin-only')
@@ -54,7 +54,9 @@ export class RolesGuard implements CanActivate {
       this.logger.warn(
         `No role requirements configured for ${context.getClass().name}.${context.getHandler().name}`,
       );
-      throw new ForbiddenException('Access denied: no role requirements configured');
+      throw new ForbiddenException(
+        'Access denied: no role requirements configured',
+      );
     }
 
     // Get user from request

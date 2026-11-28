@@ -68,15 +68,35 @@ describe('UsersService privacy (SEC-11)', () => {
 
     tx = {} as Record<string, { deleteMany: jest.Mock }>;
     for (const model of [
-      'user_badges', 'user_streaks', 'quiz_attempts', 'quizzes',
-      'chat_conversations', 'reading_passages', 'speaking_submissions',
-      'writing_submissions', 'review_sessions', 'learning_completions',
-      'srs_review_events', 'user_card_progress', 'decks', 'ai_operations',
-      'daily_credit_grants', 'token_transactions', 'user_token_balance',
-      'notifications', 'login_history', 'login_attempts', 'audit_logs',
-      'security_questions', 'user_devices', 'mfa_secrets',
-      'verification_tokens', 'oauth_accounts', 'password_history',
-      'refresh_tokens', 'user_roles',
+      'user_badges',
+      'user_streaks',
+      'quiz_attempts',
+      'quizzes',
+      'chat_conversations',
+      'reading_passages',
+      'speaking_submissions',
+      'writing_submissions',
+      'review_sessions',
+      'learning_completions',
+      'srs_review_events',
+      'user_card_progress',
+      'decks',
+      'ai_operations',
+      'daily_credit_grants',
+      'token_transactions',
+      'user_token_balance',
+      'notifications',
+      'login_history',
+      'login_attempts',
+      'audit_logs',
+      'security_questions',
+      'user_devices',
+      'mfa_secrets',
+      'verification_tokens',
+      'oauth_accounts',
+      'password_history',
+      'refresh_tokens',
+      'user_roles',
     ]) {
       tx[model] = { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) };
     }
@@ -104,16 +124,32 @@ describe('UsersService privacy (SEC-11)', () => {
     };
 
     for (const model of [
-      'user_devices', 'security_questions', 'login_history', 'notifications',
-      'user_token_balance', 'token_transactions', 'decks',
-      'learning_completions', 'srs_review_events', 'user_card_progress',
-      'review_sessions', 'writing_submissions', 'speaking_submissions',
-      'reading_passages', 'chat_conversations', 'quiz_attempts',
-      'user_streaks', 'user_badges', 'ai_operations', 'daily_credit_grants',
+      'user_devices',
+      'security_questions',
+      'login_history',
+      'notifications',
+      'user_token_balance',
+      'token_transactions',
+      'decks',
+      'learning_completions',
+      'srs_review_events',
+      'user_card_progress',
+      'review_sessions',
+      'writing_submissions',
+      'speaking_submissions',
+      'reading_passages',
+      'chat_conversations',
+      'quiz_attempts',
+      'user_streaks',
+      'user_badges',
+      'ai_operations',
+      'daily_credit_grants',
     ]) {
       prisma[model] = { findMany: jest.fn().mockResolvedValue([]) };
     }
-    prisma.user_token_balance.findUnique = jest.fn().mockResolvedValue({ balance: 7 });
+    prisma.user_token_balance.findUnique = jest
+      .fn()
+      .mockResolvedValue({ balance: 7 });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -145,7 +181,11 @@ describe('UsersService privacy (SEC-11)', () => {
         },
       ]);
       prisma.speaking_submissions.findMany.mockResolvedValue([
-        { id: 'sp-1', transcript: 'my audio transcript', audio_url: '/uploads/a.wav' },
+        {
+          id: 'sp-1',
+          transcript: 'my audio transcript',
+          audio_url: '/uploads/a.wav',
+        },
       ]);
       prisma.token_transactions.findMany.mockResolvedValue([
         { id: 'tx-1', amount: -1, feature: 'ai_chat' },
@@ -165,11 +205,15 @@ describe('UsersService privacy (SEC-11)', () => {
       expect(prisma.reading_passages.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { generated_by_user_id: USER_ID } }),
       );
-      expect(data.conversations[0].chat_messages[0].content).toBe('my transcript');
+      expect(data.conversations[0].chat_messages[0].content).toBe(
+        'my transcript',
+      );
       expect(data.decks[0].cards).toHaveLength(1);
       expect(data.tokens.balance).toEqual({ balance: 7 });
       expect(data.tokens.transactions).toHaveLength(1);
-      expect(data.speakingSubmissions[0].transcript).toBe('my audio transcript');
+      expect(data.speakingSubmissions[0].transcript).toBe(
+        'my audio transcript',
+      );
       expect(data.learningPreferences.dailyWordGoal).toBe(10);
     });
 
@@ -205,18 +249,30 @@ describe('UsersService privacy (SEC-11)', () => {
       expect(tx.chat_conversations.deleteMany).toHaveBeenCalledWith({
         where: { user_id: USER_ID },
       });
-      expect(tx.decks.deleteMany).toHaveBeenCalledWith({ where: { creator_id: USER_ID } });
+      expect(tx.decks.deleteMany).toHaveBeenCalledWith({
+        where: { creator_id: USER_ID },
+      });
       expect(tx.reading_passages.deleteMany).toHaveBeenCalledWith({
         where: { generated_by_user_id: USER_ID },
       });
-      expect(tx.quizzes.deleteMany).toHaveBeenCalledWith({ where: { creator_id: USER_ID } });
-      expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({ where: { user_id: USER_ID } });
-      expect(tx.oauth_accounts.deleteMany).toHaveBeenCalledWith({ where: { user_id: USER_ID } });
-      expect(tx.user_roles.deleteMany).toHaveBeenCalledWith({ where: { users_id: USER_ID } });
+      expect(tx.quizzes.deleteMany).toHaveBeenCalledWith({
+        where: { creator_id: USER_ID },
+      });
+      expect(tx.refresh_tokens.deleteMany).toHaveBeenCalledWith({
+        where: { user_id: USER_ID },
+      });
+      expect(tx.oauth_accounts.deleteMany).toHaveBeenCalledWith({
+        where: { user_id: USER_ID },
+      });
+      expect(tx.user_roles.deleteMany).toHaveBeenCalledWith({
+        where: { users_id: USER_ID },
+      });
       expect(tx.token_transactions.deleteMany).toHaveBeenCalledWith({
         where: { user_id: USER_ID },
       });
-      expect(tx.ai_operations.deleteMany).toHaveBeenCalledWith({ where: { user_id: USER_ID } });
+      expect(tx.ai_operations.deleteMany).toHaveBeenCalledWith({
+        where: { user_id: USER_ID },
+      });
       for (const [model, delegate] of Object.entries(tx)) {
         const fn = (delegate as any).deleteMany as jest.Mock;
         const arg = fn.mock.calls[0]?.[0];
@@ -226,7 +282,9 @@ describe('UsersService privacy (SEC-11)', () => {
     });
 
     it('removes the avatar file and clears identifying tokens on the user row', async () => {
-      const unlink = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
+      const unlink = jest
+        .spyOn(fs, 'unlinkSync')
+        .mockImplementation(() => undefined);
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
 
       await service.purgeUserData(USER_ID);
@@ -247,7 +305,9 @@ describe('UsersService privacy (SEC-11)', () => {
         ...profile,
         avatar_url: '/uploads/../../etc/passwd',
       });
-      const unlink = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
+      const unlink = jest
+        .spyOn(fs, 'unlinkSync')
+        .mockImplementation(() => undefined);
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
 
       await service.purgeUserData(USER_ID);

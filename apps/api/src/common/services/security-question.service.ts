@@ -1,13 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { timingSafeEqual } from 'crypto';
 
 /**
  * Predefined security questions
  */
 export const PREDEFINED_SECURITY_QUESTIONS = [
   'What was the name of your first pet?',
-  'What is your mother\'s maiden name?',
+  "What is your mother's maiden name?",
   'What was the name of your elementary school?',
   'What city were you born in?',
   'What is your favorite movie?',
@@ -32,7 +31,7 @@ export interface SecurityQuestionData {
 
 /**
  * Security Question Service
- * 
+ *
  * Manages security questions for account recovery and verification.
  * Provides predefined questions and answer hashing.
  */
@@ -42,7 +41,7 @@ export class SecurityQuestionService {
 
   /**
    * Get all predefined security questions
-   * 
+   *
    * @returns Array of predefined security questions
    */
   getPredefinedQuestions(): string[] {
@@ -51,7 +50,7 @@ export class SecurityQuestionService {
 
   /**
    * Get a random security question
-   * 
+   *
    * @returns A random security question
    */
   getRandomQuestion(): string {
@@ -62,7 +61,7 @@ export class SecurityQuestionService {
 
   /**
    * Get multiple random security questions
-   * 
+   *
    * @param count - Number of questions to return
    * @returns Array of random security questions
    */
@@ -74,7 +73,7 @@ export class SecurityQuestionService {
 
   /**
    * Hash a security question answer
-   * 
+   *
    * @param answer - The answer to hash
    * @param salt - Optional salt for hashing (default: empty)
    * @returns The hashed answer
@@ -95,7 +94,7 @@ export class SecurityQuestionService {
 
   /**
    * Check if a question is valid
-   * 
+   *
    * @param question - The question to validate
    * @returns True if the question is valid
    */
@@ -116,7 +115,7 @@ export class SecurityQuestionService {
 
   /**
    * Check if an answer is valid
-   * 
+   *
    * @param answer - The answer to validate
    * @returns True if the answer is valid
    */
@@ -134,7 +133,7 @@ export class SecurityQuestionService {
 
   /**
    * Normalize a question
-   * 
+   *
    * @param question - The question to normalize
    * @returns The normalized question
    */
@@ -144,7 +143,7 @@ export class SecurityQuestionService {
 
   /**
    * Normalize an answer
-   * 
+   *
    * @param answer - The answer to normalize
    * @returns The normalized answer
    */
@@ -154,17 +153,18 @@ export class SecurityQuestionService {
 
   /**
    * Generate a salt for answer hashing
-   * 
+   *
    * @returns A random salt
    */
   generateSalt(): string {
-    return Math.random().toString(36).substring(2, 15) +
-           Date.now().toString(36);
+    return (
+      Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+    );
   }
 
   /**
    * Create security question data with hashed answer
-   * 
+   *
    * @param question - The question
    * @param answer - The answer
    * @param sortOrder - Optional sort order
@@ -195,7 +195,7 @@ export class SecurityQuestionService {
 
   /**
    * Compare two answers for similarity
-   * 
+   *
    * @param answer1 - First answer
    * @param answer2 - Second answer
    * @returns True if answers are similar (case-insensitive)
@@ -208,7 +208,7 @@ export class SecurityQuestionService {
 
   /**
    * Get recommended number of security questions
-   * 
+   *
    * @returns Recommended number of questions
    */
   getRecommendedQuestionCount(): number {
@@ -217,7 +217,7 @@ export class SecurityQuestionService {
 
   /**
    * Get minimum number of security questions required
-   * 
+   *
    * @returns Minimum required questions
    */
   getMinimumQuestionCount(): number {
@@ -226,7 +226,7 @@ export class SecurityQuestionService {
 
   /**
    * Get maximum number of security questions allowed
-   * 
+   *
    * @returns Maximum allowed questions
    */
   getMaximumQuestionCount(): number {

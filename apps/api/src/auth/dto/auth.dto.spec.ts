@@ -1,11 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
-import {
-  ForgotPasswordDto,
-  MfaVerifyDto,
-  ResetPasswordDto,
-} from './auth.dto';
+import { ForgotPasswordDto, MfaVerifyDto, ResetPasswordDto } from './auth.dto';
 import { LoginDto } from './login.dto';
 
 describe('auth DTO input limits', () => {
@@ -21,7 +17,9 @@ describe('auth DTO input limits', () => {
       email: 'alice@example.com',
       password: 'x'.repeat(129),
     });
-    expect((await validate(longPassword)).map((e) => e.property)).toContain('password');
+    expect((await validate(longPassword)).map((e) => e.property)).toContain(
+      'password',
+    );
   });
 
   it('accepts a valid login payload', async () => {
@@ -53,9 +51,14 @@ describe('auth DTO input limits', () => {
       deviceType: 't'.repeat(51),
     });
     const properties = (await validate(mfa)).map((e) => e.property);
-    expect(properties).toEqual(expect.arrayContaining([
-      'mfaToken', 'deviceId', 'deviceName', 'deviceType',
-    ]));
+    expect(properties).toEqual(
+      expect.arrayContaining([
+        'mfaToken',
+        'deviceId',
+        'deviceName',
+        'deviceType',
+      ]),
+    );
   });
 
   it('accepts boundary-valid auth payloads', async () => {

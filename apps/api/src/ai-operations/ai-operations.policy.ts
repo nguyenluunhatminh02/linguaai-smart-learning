@@ -136,7 +136,10 @@ export class AiOperationsPolicy {
     return randomBytes(24).toString('hex');
   }
 
-  getLeaseDeadline(now: Date = new Date(), ttlMs = AI_OPERATION_POLICY_TTL): Date {
+  getLeaseDeadline(
+    now: Date = new Date(),
+    ttlMs = AI_OPERATION_POLICY_TTL,
+  ): Date {
     return new Date(now.getTime() + ttlMs);
   }
 
@@ -163,8 +166,13 @@ export class AiOperationsPolicy {
     now: Date = new Date(),
   ): boolean {
     if (this.isTerminal(operation.status)) return false;
-    if (operation.lease_token !== leaseToken || !operation.lease_token) return false;
-    if (!operation.lease_until || operation.lease_until.getTime() <= now.getTime()) return false;
+    if (operation.lease_token !== leaseToken || !operation.lease_token)
+      return false;
+    if (
+      !operation.lease_until ||
+      operation.lease_until.getTime() <= now.getTime()
+    )
+      return false;
     return operation.attempt_count <= AI_OPERATION_POLICY_MAX_ATTEMPTS + 1;
   }
 
@@ -173,7 +181,10 @@ export class AiOperationsPolicy {
    * receive exactly one refund (enforced by the deterministic ledger key in
    * the service). UNKNOWN operations need reconciliation before a refund.
    */
-  getRefundDecision(status: AiOperationStatus, errorCode?: string | null): RefundDecision {
+  getRefundDecision(
+    status: AiOperationStatus,
+    errorCode?: string | null,
+  ): RefundDecision {
     // A refund is decided at the moment of transition, when the new status
     // may already be terminal (FAILED/CANCELLED). Replaying the same hook must
     // still be safe: the ledger key makes the second credit a no-op.
@@ -199,7 +210,8 @@ export class AiOperationsPolicy {
 
 /** Module-level defaults kept as constants so policy calls stay pure. */
 const AI_OPERATION_POLICY_TTL = AiOperationsPolicy.DEFAULT_LEASE_TTL_MS;
-const AI_OPERATION_POLICY_MAX_ATTEMPTS = AiOperationsPolicy.DEFAULT_MAX_ATTEMPTS;
+const AI_OPERATION_POLICY_MAX_ATTEMPTS =
+  AiOperationsPolicy.DEFAULT_MAX_ATTEMPTS;
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);

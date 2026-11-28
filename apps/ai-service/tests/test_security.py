@@ -255,22 +255,44 @@ def patch_missing_app_functions():
 def test_all_protected_endpoints_reject_missing_or_wrong_key(path, payload, _response, headers):
     response = client.post(path, json=payload, headers=headers)
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid API key"
+    # Auth failures use the same bounded envelope as every other error; the
+    # status code remains 401 and validation is never relaxed.
+    error = response.json()["error"]
+    assert error["code"] == "UNAUTHORIZED"
+    assert error["message"] == "Invalid or missing API key"
+    assert error["retryable"] is False
 
 
 async def _token_stream(*args, **kwargs):
     yield "Hello"
 
 
+@pytest.fixture(autouse=True)
+def disable_cache(monkeypatch):
+    """Force fresh LLM calls so the mock-target assertions are meaningful."""
+    from app.services.cache import cache_service
+
+    async def _miss(*args, **kwargs):
+        return None
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(cache_service, "get_cached", _miss)
+    monkeypatch.setattr(cache_service, "set_cached", _noop)
+
+
 @pytest.mark.parametrize("path,payload,mock_response", PROTECTED_ENDPOINTS)
 def test_all_protected_endpoints_accept_configured_key(path, payload, mock_response):
-    with patch.object(
-        LLMClient, "generate", new_callable=AsyncMock,
+    # Routers call the module-level singleton (app.utils.llm_client /
+    # app.routers.chat.llm_client), not the class used to construct it.
+    with patch(
+        "app.utils.llm_client.generate", new_callable=AsyncMock,
         return_value=json.dumps(mock_response),
-    ) as generate, patch.object(
-        LLMClient, "chat", new_callable=AsyncMock, return_value="Hi"
-    ) as chat, patch.object(
-        LLMClient, "chat_stream", side_effect=_token_stream
+    ) as generate, patch(
+        "app.routers.chat.llm_client.chat", new_callable=AsyncMock, return_value="Hi"
+    ) as chat, patch(
+        "app.routers.chat.llm_client.chat_stream", side_effect=_token_stream
     ) as stream:
         headers = {"X-API-Key": "key2"}
         if path in CHAT_PATHS:

@@ -1,10 +1,14 @@
-import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
-import { v4 as uuidv4 } from "uuid";
-import { RedisService } from "../../common/services/redis.service";
-import { PrismaService } from "../../prisma/prisma.service";
-import { DateUtil } from "../../common/utils/date.util";
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { v4 as uuidv4 } from 'uuid';
+import { RedisService } from '../../common/services/redis.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { DateUtil } from '../../common/utils/date.util';
 
 export interface TokenUser {
   id: string;
@@ -26,15 +30,15 @@ export class TokenService {
     private readonly prisma: PrismaService,
   ) {
     this.accessTtlMs = DateUtil.parseDurationMs(
-      config.get<string>("JWT_ACCESS_EXPIRY", "15m"),
+      config.get<string>('JWT_ACCESS_EXPIRY', '15m'),
       900_000,
     );
     this.refreshTtlMs = DateUtil.parseDurationMs(
-      config.get<string>("JWT_REFRESH_EXPIRY", "7d"),
+      config.get<string>('JWT_REFRESH_EXPIRY', '7d'),
       604_800_000,
     );
     this.failClosedOnRedisOutage =
-      config.get<string>("NODE_ENV") === "production";
+      config.get<string>('NODE_ENV') === 'production';
   }
 
   getAccessTtlMs(): number {
@@ -52,7 +56,7 @@ export class TokenService {
         email: user.email,
         roles: user.roles,
         deviceId,
-        type: "ACCESS",
+        type: 'ACCESS',
         jti,
         // Second-granularity `iat` cannot distinguish tokens minted just
         // before a revocation from those minted just after it. This claim is
@@ -81,7 +85,7 @@ export class TokenService {
         email: user.email,
         roles: user.roles,
         deviceId,
-        type: "REFRESH",
+        type: 'REFRESH',
         jti,
       },
       { expiresIn: ttlSec },
@@ -94,7 +98,7 @@ export class TokenService {
   generateMfaToken(userId: string): string {
     const jti = uuidv4();
     return this.jwtService.sign(
-      { sub: userId, type: "MFA_PENDING", jti },
+      { sub: userId, type: 'MFA_PENDING', jti },
       { expiresIn: 300 },
     );
   }
@@ -102,7 +106,7 @@ export class TokenService {
   decodeMfaToken(token: string): { userId: string } | null {
     try {
       const payload = this.jwtService.verify(token) as any;
-      if (payload.type !== "MFA_PENDING") return null;
+      if (payload.type !== 'MFA_PENDING') return null;
       return { userId: payload.sub };
     } catch {
       return null;
@@ -135,14 +139,16 @@ export class TokenService {
   ): Promise<{ userId: string; deviceId: string; roles: string[] } | null> {
     try {
       const payload = this.jwtService.verify(token) as any;
-      if (payload.type !== "REFRESH") return null;
+      if (payload.type !== 'REFRESH') return null;
 
       // A refresh token is only valid while its server-side session key exists.
       // Never fall back to signature-only validation: revocation (logout,
       // password reset, device removal) works by deleting that key, so a
       // fail-open check would resurrect revoked sessions in any environment.
       if (!this.redis.isAvailable()) {
-        this.logger.error("Redis unavailable - failing closed on refresh token validation");
+        this.logger.error(
+          'Redis unavailable - failing closed on refresh token validation',
+        );
         return null;
       }
 
@@ -179,11 +185,11 @@ export class TokenService {
       payload = this.jwtService.verify(token) as any;
     } catch (err: any) {
       // An already-expired token cannot be used again; no revocation needed.
-      if (err?.name === "TokenExpiredError") return;
-      throw new ServiceUnavailableException("Could not revoke access token");
+      if (err?.name === 'TokenExpiredError') return;
+      throw new ServiceUnavailableException('Could not revoke access token');
     }
     if (!payload?.jti || !payload?.exp) {
-      throw new ServiceUnavailableException("Could not revoke access token");
+      throw new ServiceUnavailableException('Could not revoke access token');
     }
     const ttl = payload.exp - Math.floor(Date.now() / 1000);
     if (ttl <= 0) return; // already expired — nothing to revoke
@@ -192,19 +198,19 @@ export class TokenService {
       // Checked again after the write so a connection lost mid-request cannot
       // silently drop the marker. Dev/test fail-open only for this single JTI.
       if (this.failClosedOnRedisOutage) {
-        this.logger.error("Redis unavailable - cannot blacklist access token");
-        throw new ServiceUnavailableException("Could not revoke access token");
+        this.logger.error('Redis unavailable - cannot blacklist access token');
+        throw new ServiceUnavailableException('Could not revoke access token');
       }
       this.logger.warn(
-        "Redis unavailable - access token blacklist not persisted (non-production)",
+        'Redis unavailable - access token blacklist not persisted (non-production)',
       );
       return;
     }
     const key = `blacklist:${payload.jti}`;
-    await this.redis.set(key, "1", ttl);
+    await this.redis.set(key, '1', ttl);
     if (this.failClosedOnRedisOutage && !this.redis.isAvailable()) {
-      this.logger.error("Redis disconnected while blacklisting access token");
-      throw new ServiceUnavailableException("Could not revoke access token");
+      this.logger.error('Redis disconnected while blacklisting access token');
+      throw new ServiceUnavailableException('Could not revoke access token');
     }
   }
 
@@ -227,12 +233,12 @@ export class TokenService {
     if (!this.redis.isAvailable()) {
       if (this.failClosedOnRedisOutage) {
         this.logger.error(
-          "Redis unavailable - failing closed on token blacklist check",
+          'Redis unavailable - failing closed on token blacklist check',
         );
         return true;
       }
       this.logger.warn(
-        "Redis unavailable - failing open on token blacklist check (non-production)",
+        'Redis unavailable - failing open on token blacklist check (non-production)',
       );
       return false;
     }
@@ -242,9 +248,10 @@ export class TokenService {
     // before the device session was revoked. Tokens issued after a re-login
     // remain valid. Prefer the millisecond issue time; fall back to standard
     // `iat` for tokens minted before this claim existed.
-    const issuedAt = typeof payload.iatMs === "number"
-      ? payload.iatMs
-      : (payload.iat ?? 0) * 1000;
+    const issuedAt =
+      typeof payload.iatMs === 'number'
+        ? payload.iatMs
+        : (payload.iat ?? 0) * 1000;
     if (await this.isUserSessionRevoked(payload.sub, issuedAt)) {
       return true;
     }
@@ -276,12 +283,17 @@ export class TokenService {
    * Only pre-revocation tokens are rejected, so logging in again after a
    * logout-all keeps working.
    */
-  private async isRevokedSince(key: string, tokenIssuedAt: number): Promise<boolean> {
+  private async isRevokedSince(
+    key: string,
+    tokenIssuedAt: number,
+  ): Promise<boolean> {
     let raw: string | null;
     try {
       raw = await this.redis.get(key);
     } catch (error: any) {
-      this.logger.debug(`Revocation lookup failed for ${key}: ${error.message}`);
+      this.logger.debug(
+        `Revocation lookup failed for ${key}: ${error.message}`,
+      );
       return this.failClosedOnRedisOutage;
     }
     if (!raw) return false;
@@ -289,7 +301,10 @@ export class TokenService {
     return Number.isFinite(revokedAt) && tokenIssuedAt <= revokedAt;
   }
 
-  private isUserSessionRevoked(userId: string, tokenIssuedAt: number): Promise<boolean> {
+  private isUserSessionRevoked(
+    userId: string,
+    tokenIssuedAt: number,
+  ): Promise<boolean> {
     return this.isRevokedSince(`revoked-user:${userId}`, tokenIssuedAt);
   }
 
@@ -320,7 +335,7 @@ export class TokenService {
         Math.ceil(this.accessTtlMs / 1000),
       );
     } else if (this.failClosedOnRedisOutage) {
-      throw new ServiceUnavailableException("Could not revoke device session");
+      throw new ServiceUnavailableException('Could not revoke device session');
     }
     await this.prisma.user_devices.updateMany({
       where: { user_id: userId, device_id: deviceId },
@@ -342,7 +357,7 @@ export class TokenService {
         Math.ceil(this.accessTtlMs / 1000) + 60,
       );
     } else if (this.failClosedOnRedisOutage) {
-      throw new ServiceUnavailableException("Could not revoke sessions");
+      throw new ServiceUnavailableException('Could not revoke sessions');
     }
     await this.prisma.user_devices.updateMany({
       where: { user_id: userId },
@@ -366,9 +381,15 @@ export class TokenService {
       const deviceId = key.slice(`refresh:${userId}:`.length);
       if (!deviceId) continue;
       if (this.redis.isAvailable()) {
-        await this.redis.set(`revoked-device:${userId}:${deviceId}`, revokedAt, ttl);
+        await this.redis.set(
+          `revoked-device:${userId}:${deviceId}`,
+          revokedAt,
+          ttl,
+        );
       } else if (this.failClosedOnRedisOutage) {
-        throw new ServiceUnavailableException("Could not revoke other sessions");
+        throw new ServiceUnavailableException(
+          'Could not revoke other sessions',
+        );
       }
     }
     await this.prisma.user_devices.updateMany({

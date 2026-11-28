@@ -265,7 +265,12 @@ async def test_stream_client_role_validation(extra_headers, expected_status):
         )
     assert response.status_code == expected_status
     if expected_status == 403:
-        assert response.json() == {"detail": "Forbidden"}
+        # Invalid/missing gateway identity stays a 403; the wire body is the
+        # shared structured error envelope, never a flat "detail" string.
+        error = response.json()["error"]
+        assert error["code"] == "UNAUTHORIZED"
+        assert error["retryable"] is False
+        assert error["message"] == "Invalid or missing API key"
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,6 @@ import { AuditLogService } from '../../common/services/audit-log.service';
 import { toAppUser, mapToUserResponse } from '../../common/mappers/user.mapper';
 import { extractRequestContext } from '../../common/utils/request-context.util';
 import { AuthProvider } from '../../users/enums/auth-provider.enum';
-import { LoginAction } from '../../users/enums/login-action.enum';
 import { User } from '../../users/entities/user.entity';
 import {
   BCRYPT_ROUNDS,
@@ -59,7 +58,7 @@ export class AuthService {
 
   // â”€â”€â”€ Registration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async register(dto: RegisterDto, req: Request) {
+  async register(dto: RegisterDto, _req: Request) {
     const hashed = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationTokenHash = crypto
@@ -84,7 +83,8 @@ export class AuthService {
         include: { user_roles: { include: { roles: true } } },
       });
     } catch (e: any) {
-      if (e?.code === 'P2002') throw new ConflictException('Email already in use');
+      if (e?.code === 'P2002')
+        throw new ConflictException('Email already in use');
       throw e;
     }
 
@@ -100,11 +100,17 @@ export class AuthService {
 
     const appUser = toAppUser(user);
     this.emailService
-      .sendVerificationEmail(appUser.email, appUser.firstName, verificationToken)
-      .catch(e => this.logger.warn(`Verification email failed: ${e.message}`));
+      .sendVerificationEmail(
+        appUser.email,
+        appUser.firstName,
+        verificationToken,
+      )
+      .catch((e) =>
+        this.logger.warn(`Verification email failed: ${e.message}`),
+      );
     this.emailService
       .sendWelcomeEmail(appUser.email, appUser.firstName)
-      .catch(e => this.logger.warn(`Welcome email failed: ${e.message}`));
+      .catch((e) => this.logger.warn(`Welcome email failed: ${e.message}`));
 
     // KhÃ´ng issue tokens khi register (pháº£i verify email trÆ°á»›c)
     return { message: 'Registration successful. Please verify your email.' };
@@ -124,7 +130,8 @@ export class AuthService {
 
   async login(dto: LoginDto, req: Request) {
     const { ip } = extractRequestContext(req);
-    const { email, password, deviceId, deviceName, deviceType, rememberMe } = dto;
+    const { email, password, deviceId, deviceName, deviceType, rememberMe } =
+      dto;
 
     // 1. Brute force check (Redis)
     await this.loginAttemptService.checkBruteForce(email, ip);
@@ -135,7 +142,12 @@ export class AuthService {
       include: { user_roles: { include: { roles: true } } },
     });
     if (!userRecord) {
-      await this.loginAttemptService.recordFailedLogin(email, ip, undefined, 'User not found');
+      await this.loginAttemptService.recordFailedLogin(
+        email,
+        ip,
+        undefined,
+        'User not found',
+      );
       throw new BadCredentialsException();
     }
     const user = toAppUser(userRecord);
@@ -143,7 +155,12 @@ export class AuthService {
     // 3. Verify password
     const isValid = await bcrypt.compare(password, user.password ?? '');
     if (!isValid) {
-      await this.loginAttemptService.recordFailedLogin(email, ip, user.id, 'Wrong password');
+      await this.loginAttemptService.recordFailedLogin(
+        email,
+        ip,
+        user.id,
+        'Wrong password',
+      );
       throw new BadCredentialsException();
     }
 
@@ -179,13 +196,25 @@ export class AuthService {
     const roles = userRecord.user_roles.map((ur: any) => ur.roles.name);
     const tokenUser = { id: user.id, email: user.email, roles };
 
-    const accessToken = this.tokenService.generateAccessToken(tokenUser, device.device_id);
-    const { token: refreshToken, jti, ttlSec } = this.tokenService.generateRefreshToken(
+    const accessToken = this.tokenService.generateAccessToken(
+      tokenUser,
+      device.device_id,
+    );
+    const {
+      token: refreshToken,
+      jti,
+      ttlSec,
+    } = this.tokenService.generateRefreshToken(
       tokenUser,
       device.device_id,
       rememberMe ?? false,
     );
-    await this.tokenService.storeRefreshToken(user.id, device.device_id, jti, ttlSec);
+    await this.tokenService.storeRefreshToken(
+      user.id,
+      device.device_id,
+      jti,
+      ttlSec,
+    );
 
     // 7. Update DB + ghi lá»‹ch sá»­
     await this.prisma.users.update({
@@ -212,7 +241,8 @@ export class AuthService {
 
     // Verify MFA JWT
     const decoded = this.tokenService.decodeMfaToken(mfaToken);
-    if (!decoded) throw new UnauthorizedException('MFA session expired or invalid');
+    if (!decoded)
+      throw new UnauthorizedException('MFA session expired or invalid');
 
     const userRecord = await this.prisma.users.findFirst({
       where: { id: decoded.userId, is_deleted: false },
@@ -260,12 +290,21 @@ export class AuthService {
     const roles = userRecord.user_roles.map((ur: any) => ur.roles.name);
     const tokenUser = { id: user.id, email: user.email, roles };
 
-    const accessToken = this.tokenService.generateAccessToken(tokenUser, device.device_id);
-    const { token: refreshToken, jti, ttlSec } = this.tokenService.generateRefreshToken(
+    const accessToken = this.tokenService.generateAccessToken(
       tokenUser,
       device.device_id,
     );
-    await this.tokenService.storeRefreshToken(user.id, device.device_id, jti, ttlSec);
+    const {
+      token: refreshToken,
+      jti,
+      ttlSec,
+    } = this.tokenService.generateRefreshToken(tokenUser, device.device_id);
+    await this.tokenService.storeRefreshToken(
+      user.id,
+      device.device_id,
+      jti,
+      ttlSec,
+    );
 
     await this.prisma.users.update({
       where: { id: user.id },
@@ -280,7 +319,8 @@ export class AuthService {
 
   async refreshToken(token: string, _req: Request) {
     const payload = await this.tokenService.validateRefreshToken(token);
-    if (!payload) throw new UnauthorizedException('Refresh token invalid or expired');
+    if (!payload)
+      throw new UnauthorizedException('Refresh token invalid or expired');
 
     const userRecord = await this.prisma.users.findFirst({
       where: { id: payload.userId, is_deleted: false, is_active: true },
@@ -298,30 +338,47 @@ export class AuthService {
     await this.tokenService.blacklistToken(token);
 
     // Issue token má»›i
-    const newAccess = this.tokenService.generateAccessToken(tokenUser, payload.deviceId);
-    const { token: newRefresh, jti, ttlSec } = this.tokenService.generateRefreshToken(
+    const newAccess = this.tokenService.generateAccessToken(
       tokenUser,
       payload.deviceId,
     );
-    await this.tokenService.storeRefreshToken(user.id, payload.deviceId, jti, ttlSec);
+    const {
+      token: newRefresh,
+      jti,
+      ttlSec,
+    } = this.tokenService.generateRefreshToken(tokenUser, payload.deviceId);
+    await this.tokenService.storeRefreshToken(
+      user.id,
+      payload.deviceId,
+      jti,
+      ttlSec,
+    );
 
     return this.buildAuthResponse(newAccess, newRefresh, user, roles);
   }
 
   // â”€â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async logout(accessToken: string, refreshToken: string, user: User, req: Request) {
+  async logout(
+    accessToken: string,
+    refreshToken: string,
+    user: User,
+    req: Request,
+  ) {
     const { ip } = extractRequestContext(req);
     // Blacklist access token
     await this.tokenService.blacklistToken(accessToken);
     // Decode refresh token Ä‘á»ƒ láº¥y deviceId
     try {
-      const payload = await this.tokenService.validateRefreshToken(refreshToken);
+      const payload =
+        await this.tokenService.validateRefreshToken(refreshToken);
       if (payload) {
         await this.tokenService.revokeDeviceSession(user.id, payload.deviceId);
       }
     } catch (error: any) {
-      this.logger.warn(`Failed to validate refresh token during logout: ${error.message}`);
+      this.logger.warn(
+        `Failed to validate refresh token during logout: ${error.message}`,
+      );
     }
     await this.auditLogService.recordAuditLog(user.id, 'LOGOUT', ip);
   }
@@ -333,7 +390,12 @@ export class AuthService {
     await this.auditLogService.recordAuditLog(user.id, 'LOGOUT_ALL', ip);
   }
 
-  async logoutSession(accessToken: string, deviceId: string, user: User, req: Request) {
+  async logoutSession(
+    accessToken: string,
+    deviceId: string,
+    user: User,
+    req: Request,
+  ) {
     const { ip } = extractRequestContext(req);
     // The device revocation alone leaves the calling access token usable until
     // its natural expiry; blacklist it just like logout()/logoutAll() do.
@@ -353,7 +415,11 @@ export class AuthService {
   }
 
   async changePassword(
-    dto: { currentPassword: string; newPassword: string; logoutAllDevices?: boolean },
+    dto: {
+      currentPassword: string;
+      newPassword: string;
+      logoutAllDevices?: boolean;
+    },
     user: User,
     req: Request,
   ) {
@@ -390,21 +456,25 @@ export class AuthService {
     const { ip } = extractRequestContext(req);
 
     // TÃ¬m hoáº·c táº¡o oauth_accounts record
-    let oauthAccount = await this.prisma.oauth_accounts.findUnique({
+    const oauthAccount = await this.prisma.oauth_accounts.findUnique({
       where: {
         provider_provider_user_id: {
           provider: profile.provider as string,
           provider_user_id: profile.providerId,
         },
       },
-      include: { users: { include: { user_roles: { include: { roles: true } } } } },
+      include: {
+        users: { include: { user_roles: { include: { roles: true } } } },
+      },
     });
 
     let userRecord: any;
 
     if (!oauthAccount) {
       // TÃ¬m user theo email
-      userRecord = await this.prisma.users.findUnique({ where: { email: profile.email } });
+      userRecord = await this.prisma.users.findUnique({
+        where: { email: profile.email },
+      });
 
       if (!userRecord) {
         // Táº¡o user má»›i
@@ -451,21 +521,38 @@ export class AuthService {
       userRecord = oauthAccount.users;
     }
 
-    if (!userRecord.is_active || userRecord.is_deleted || userRecord.is_locked) {
-      throw new UnauthorizedException('Account is disabled, deleted, or locked');
+    if (
+      !userRecord.is_active ||
+      userRecord.is_deleted ||
+      userRecord.is_locked
+    ) {
+      throw new UnauthorizedException(
+        'Account is disabled, deleted, or locked',
+      );
     }
 
     const user = toAppUser(userRecord);
-    const roles = (userRecord as any).user_roles.map((ur: any) => ur.roles.name);
+    const roles = (userRecord as any).user_roles.map(
+      (ur: any) => ur.roles.name,
+    );
     const tokenUser = { id: user.id, email: user.email, roles };
 
     const device = await this.deviceService.registerDevice(user.id, req);
-    const accessToken = this.tokenService.generateAccessToken(tokenUser, device.device_id);
-    const { token: refreshToken, jti, ttlSec } = this.tokenService.generateRefreshToken(
+    const accessToken = this.tokenService.generateAccessToken(
       tokenUser,
       device.device_id,
     );
-    await this.tokenService.storeRefreshToken(user.id, device.device_id, jti, ttlSec);
+    const {
+      token: refreshToken,
+      jti,
+      ttlSec,
+    } = this.tokenService.generateRefreshToken(tokenUser, device.device_id);
+    await this.tokenService.storeRefreshToken(
+      user.id,
+      device.device_id,
+      jti,
+      ttlSec,
+    );
 
     await this.prisma.users.update({
       where: { id: user.id },

@@ -1,10 +1,11 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
+
 from app.config import settings
 from app.core.deps import verify_key
-from app.core.security import wrap_user_input
+from app.core.security import wrap_data_recursive_filtered, wrap_user_input
 from app.models.schemas import ErrorAnalysisRequest, ErrorAnalysisResponse
 from app.prompts.errors_prompts import ERRORS_PROMPT, ERRORS_SYSTEM
 from app.rate_limit import limiter
@@ -13,33 +14,42 @@ from app.utils import ai_json_request
 router = APIRouter(prefix="/ai/errors", tags=["Error Analysis"])
 logger = logging.getLogger(__name__)
 
+# Only schema-allowlisted keys survive. Any arbitrary key (or nested key) is
+# dropped so caller-controlled field names never become part of the prompt.
+_ALLOWED_ERROR_KEYS = ("type", "data", "text", "original", "category")
+
+
+def _contained_errors(errors) -> list[dict]:
+    """Return error entries whose every string leaf is wrapped as data."""
+    contained: list[dict] = []
+    for entry in errors:
+        if isinstance(entry, dict):
+            wrapped = wrap_data_recursive_filtered(entry, _ALLOWED_ERROR_KEYS)
+            raw_type = wrapped.get("type", "general")
+            # `type` is a server-side category label (used for exercise
+            # counting), so strip the data envelope after sanitising it.
+            if isinstance(raw_type, str):
+                wrapped["type"] = (
+                    raw_type.removeprefix("<user_input>").removesuffix("</user_input>")
+                    or "general"
+                )
+            elif raw_type is None:
+                wrapped["type"] = "general"
+            else:
+                wrapped["type"] = str(raw_type)
+            contained.append(wrapped)
+        else:
+            contained.append({
+                "type": "general",
+                "data": wrap_user_input(str(entry)),
+            })
+    return contained
+
 
 @router.post("/analyze", response_model=ErrorAnalysisResponse, dependencies=[Depends(verify_key)])
 @limiter.limit("20/minute")
 async def analyze_errors(request: Request, req: ErrorAnalysisRequest):
-    validated_errors = []
-    for e in req.errors:
-        if isinstance(e, dict):
-            sanitized = {
-                str(k): wrap_user_input(str(v)) if isinstance(v, str) else v
-                for k, v in e.items()
-            }
-            # Normalise the type so it is always a safe, hashable string: the
-            # request schema accepts arbitrary values in each error entry.
-            raw_type = sanitized.get("type", "general")
-            if isinstance(raw_type, str):
-                error_type = raw_type.removeprefix("<user_input>").removesuffix("</user_input>")
-            elif raw_type is not None:
-                error_type = str(raw_type)
-            else:
-                error_type = "general"
-            sanitized["type"] = error_type or "general"
-            validated_errors.append(sanitized)
-        else:
-            validated_errors.append({
-                "type": "general",
-                "data": wrap_user_input(str(e)),
-            })
+    validated_errors = _contained_errors(req.errors)
 
     # The prompt asks for one exercise per distinct pattern, capped at 5.
     # Do not inflate the count to 3 when fewer patterns were supplied.

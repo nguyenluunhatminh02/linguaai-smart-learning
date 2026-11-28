@@ -47,7 +47,7 @@ export class CsrfService {
 
   /**
    * Generate a new CSRF token
-   * 
+   *
    * @param sessionId - The session ID to associate with the token
    * @param ttlSeconds - Time to live in seconds (default: 1 hour)
    * @returns The generated CSRF token
@@ -72,7 +72,7 @@ export class CsrfService {
 
   /**
    * Validate a CSRF token
-   * 
+   *
    * @param token - The token to validate
    * @param sessionId - The session ID to check against
    * @returns True if the token is valid, false otherwise
@@ -115,7 +115,7 @@ export class CsrfService {
 
   /**
    * Generate a hash for CSRF token comparison
-   * 
+   *
    * @param token - The token to hash
    * @returns The hashed token
    */
@@ -129,7 +129,11 @@ export class CsrfService {
    * The session ID is part of the signed material: a token issued for one
    * session cannot be replayed with another session's identifier.
    */
-  private computeHmac(token: string, timestamp: string, sessionId: string): string {
+  private computeHmac(
+    token: string,
+    timestamp: string,
+    sessionId: string,
+  ): string {
     return createHmac('sha256', this.getSecret())
       .update(`${token}:${timestamp}:${sessionId}`)
       .digest('hex');
@@ -168,7 +172,7 @@ export class CsrfService {
 
   /**
    * Verify a signed CSRF token
-   * 
+   *
    * @param signedToken - The signed token to verify
    * @param sessionId - The session ID
    * @param maxAge - Maximum age in milliseconds (default: 1 hour)
@@ -221,13 +225,20 @@ export class CsrfService {
     const key = `${this.PREFIX}signed:${sessionId}`;
     try {
       const storedHash = await this.redis.get(key);
-      if (!storedHash || !this.constantTimeCompare(this.hashToken(token), storedHash)) {
-        this.logger.warn('CSRF signed token not found or mismatched for session');
+      if (
+        !storedHash ||
+        !this.constantTimeCompare(this.hashToken(token), storedHash)
+      ) {
+        this.logger.warn(
+          'CSRF signed token not found or mismatched for session',
+        );
         return false;
       }
       await this.redis.del(key);
     } catch (error) {
-      this.logger.error(`CSRF signed token verification error: ${error.message}`);
+      this.logger.error(
+        `CSRF signed token verification error: ${error.message}`,
+      );
       return false;
     }
 

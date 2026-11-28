@@ -1,0 +1,748 @@
+{
+  "dataset_version": "1.0.0",
+  "feature": "reading_generation",
+  "language": "english",
+  "source": "synthetic/hand-authored",
+  "cases": [
+    {
+      "id": "reading-en-a1-answerable-001",
+      "level": "A1",
+      "kind": "answerable",
+      "input": {
+        "language": "english",
+        "level": "A1",
+        "topic": "a shared apartment",
+        "word_count": 60
+      },
+      "passage": "Mina shares a small apartment with her brother. Every morning she makes coffee in the kitchen. Her brother takes the bus to work. On Saturday they clean the living room together. Mina likes her apartment because it is quiet and bright.",
+      "questions": [
+        {
+          "question": "Who does Mina share the apartment with?",
+          "type": "mcq",
+          "options": [
+            "Her brother",
+            "Her friend",
+            "Her neighbour"
+          ],
+          "correct_answer": "A",
+          "explanation": "The passage says Mina shares the apartment with her brother."
+        },
+        {
+          "question": "Mina makes coffee in the kitchen every morning.",
+          "type": "true_false",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "The passage states this directly."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "apartment",
+          "definition": "a place to live",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": true,
+        "evidenceSpans": [
+          "Mina shares a small apartment with her brother",
+          "Every morning she makes coffee in the kitchen"
+        ],
+        "mustNotClaim": [
+          "Mina lives alone",
+          "Mina takes the bus to work"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-a2-answerable-002",
+      "level": "A2",
+      "kind": "answerable",
+      "input": {
+        "language": "english",
+        "level": "A2",
+        "topic": "a first day at a new school",
+        "word_count": 75
+      },
+      "passage": "On his first day at a new school, Leo felt nervous. He could not find the science room, so a girl showed him the way. At lunch he sat with three classmates. They talked about football and music. By the end of the day Leo felt happy and less nervous.",
+      "questions": [
+        {
+          "question": "Why was Leo nervous at first?",
+          "type": "mcq",
+          "options": [
+            "He was late for the exam",
+            "He did not know the school",
+            "He forgot his books"
+          ],
+          "correct_answer": "He did not know the school",
+          "explanation": "He could not find the science room on his first day."
+        },
+        {
+          "question": "Who helped Leo find the science room?",
+          "type": "mcq",
+          "options": [
+            "A teacher",
+            "His brother",
+            "A girl"
+          ],
+          "correct_answer": "C",
+          "explanation": "A girl showed him the way."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "nervous",
+          "definition": "worried or afraid",
+          "part_of_speech": "adjective"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": true,
+        "evidenceSpans": [
+          "He could not find the science room",
+          "a girl showed him the way"
+        ],
+        "mustNotClaim": [
+          "Leo knew every room",
+          "Leo was late for an exam"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-b1-answerable-003",
+      "level": "B1",
+      "kind": "answerable",
+      "input": {
+        "language": "english",
+        "level": "B1",
+        "topic": "a community garden",
+        "word_count": 100
+      },
+      "passage": "Last spring the neighbours turned an empty lot into a community garden. They planted tomatoes, beans and herbs in raised beds. Every Saturday a small group meets to water the plants and remove weeds. The garden supplies vegetables for the local food bank, and children from the nearby school come to learn how seeds grow.",
+      "questions": [
+        {
+          "question": "What did the neighbours do with the empty lot?",
+          "type": "mcq",
+          "options": [
+            "They built a car park",
+            "They created a community garden",
+            "They sold it"
+          ],
+          "correct_answer": "B",
+          "explanation": "The first sentence states the lot became a community garden."
+        },
+        {
+          "question": "The garden supplies vegetables for the local food bank.",
+          "type": "true_false",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "This is stated in the passage."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "raised bed",
+          "definition": "a garden bed built above ground level",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": true,
+        "evidenceSpans": [
+          "turned an empty lot into a community garden",
+          "The garden supplies vegetables for the local food bank"
+        ],
+        "mustNotClaim": [
+          "the garden sells vegetables",
+          "the children built the garden"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-b2-answerable-004",
+      "level": "B2",
+      "kind": "answerable",
+      "input": {
+        "language": "english",
+        "level": "B2",
+        "topic": "a city cycling scheme",
+        "word_count": 120
+      },
+      "passage": "The city introduced a public cycling scheme to reduce short car journeys. Residents can borrow a bike from any of the 50 stations and return it to a different station. A study by the transport department found that 30 per cent of users walked or cycled more after joining. However, the scheme is less used in the hills, where stations are few and the climb is steep.",
+      "questions": [
+        {
+          "question": "Why did the city introduce the cycling scheme?",
+          "type": "mcq",
+          "options": [
+            "To make money from tourists",
+            "To reduce short car journeys",
+            "To replace the buses"
+          ],
+          "correct_answer": "To reduce short car journeys",
+          "explanation": "The stated purpose is reducing short car journeys."
+        },
+        {
+          "question": "What does the study report about users?",
+          "type": "mcq",
+          "options": [
+            "Most users sold their cars",
+            "30 per cent walked or cycled more",
+            "Nobody used the stations"
+          ],
+          "correct_answer": "B",
+          "explanation": "The transport department study gives this figure."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "resident",
+          "definition": "a person who lives in a place",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": true,
+        "evidenceSpans": [
+          "to reduce short car journeys",
+          "30 per cent of users walked or cycled more"
+        ],
+        "mustNotClaim": [
+          "the scheme was profitable",
+          "every station is on a hill"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-c1-answerable-005",
+      "level": "C1",
+      "kind": "answerable",
+      "input": {
+        "language": "english",
+        "level": "C1",
+        "topic": "a library archive project",
+        "word_count": 140
+      },
+      "passage": "The library digitised its archive of local newspapers after funding from a regional trust. Volunteers checked each page for legibility before scanning it. Although the original microfilm was fragile, the team preserved the images at high resolution and indexed every issue by date. Researchers can now search names and places without handling the originals.",
+      "questions": [
+        {
+          "question": "Where did the funding for digitisation come from?",
+          "type": "mcq",
+          "options": [
+            "A regional trust",
+            "A commercial publisher",
+            "The volunteers"
+          ],
+          "correct_answer": "A",
+          "explanation": "The passage names the regional trust as the funder."
+        },
+        {
+          "question": "Volunteers checked each page for legibility.",
+          "type": "true_false",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "The text explicitly says this."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "legibility",
+          "definition": "the quality of being clear enough to read",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": true,
+        "evidenceSpans": [
+          "funding from a regional trust",
+          "Volunteers checked each page for legibility"
+        ],
+        "mustNotClaim": [
+          "the library sold the microfilm",
+          "the archive contains only magazines"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-c2-answerable-006",
+      "level": "C2",
+      "kind": "answerable",
+      "input": {
+        "language": "english",
+        "level": "C2",
+        "topic": "a scientific peer review dispute",
+        "word_count": 160
+      },
+      "passage": "The journal retracted the paper after two independent laboratories failed to reproduce its central result. The authors disputed the replication protocol but did not provide raw data within the editorial deadline. The reviewer who had approved the original submission later resigned, citing undisclosed funding from the manufacturer of the tested device.",
+      "questions": [
+        {
+          "question": "What led to the retraction?",
+          "type": "mcq",
+          "options": [
+            "A formatting error",
+            "Failed reproduction by two laboratories",
+            "A delayed subscription payment"
+          ],
+          "correct_answer": "B",
+          "explanation": "Two independent laboratories could not reproduce the central result."
+        },
+        {
+          "question": "The reviewer resigned after disclosing a conflict of interest.",
+          "type": "true_false",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "The funding was undisclosed; the reviewer resigned citing it."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "retract",
+          "definition": "to withdraw a published paper",
+          "part_of_speech": "verb"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": true,
+        "evidenceSpans": [
+          "two independent laboratories failed to reproduce its central result",
+          "undisclosed funding from the manufacturer of the tested device"
+        ],
+        "mustNotClaim": [
+          "the authors admitted fraud",
+          "the journal never reviewed the paper"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-b1-unanswerable-007",
+      "level": "B1",
+      "kind": "unanswerable",
+      "input": {
+        "language": "english",
+        "level": "B1",
+        "topic": "a hotel booking",
+        "word_count": 80
+      },
+      "passage": "Emma booked a room at the Riverside Hotel for three nights. She arrived on Friday evening and received a room on the second floor. The receptionist gave her a map of the town. Emma had breakfast at the hotel every morning and checked out on Monday.",
+      "questions": [
+        {
+          "question": "How much did Emma pay for the room?",
+          "type": "mcq",
+          "options": [
+            "50 dollars",
+            "120 dollars",
+            "200 dollars"
+          ],
+          "correct_answer": "A",
+          "explanation": "The passage does not state the price; this question is not grounded."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "receptionist",
+          "definition": "a person who welcomes guests at a hotel",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": false,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "Emma paid 50 dollars",
+          "the hotel room had a sea view"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-b2-unanswerable-008",
+      "level": "B2",
+      "kind": "unanswerable",
+      "input": {
+        "language": "english",
+        "level": "B2",
+        "topic": "an office relocation",
+        "word_count": 90
+      },
+      "passage": "The design team moved to a new office in March. The new building has larger meeting rooms and a shared kitchen. Managers hope the move will help teams from different departments work together. A survey next month will ask employees about the new space.",
+      "questions": [
+        {
+          "question": "Which company designed the new office?",
+          "type": "mcq",
+          "options": [
+            "A local studio",
+            "The managers",
+            "The employees"
+          ],
+          "correct_answer": "A",
+          "explanation": "The passage never names the designer."
+        },
+        {
+          "question": "The survey was completed in March.",
+          "type": "true_false",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "The survey is planned for next month, so this claim is unsupported."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "relocation",
+          "definition": "the act of moving to a new location",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": false,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "a local studio designed the office",
+          "the survey was completed in March"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-a2-unanswerable-009",
+      "level": "A2",
+      "kind": "unanswerable",
+      "input": {
+        "language": "english",
+        "level": "A2",
+        "topic": "a birthday gift",
+        "word_count": 65
+      },
+      "passage": "Tom bought a blue bicycle for his sister's birthday. He wrapped it in green paper. His sister was very surprised when she opened the box. They rode the bicycle in the park that afternoon.",
+      "questions": [
+        {
+          "question": "Where did Tom buy the bicycle?",
+          "type": "mcq",
+          "options": [
+            "In a shop",
+            "Online",
+            "From a friend"
+          ],
+          "correct_answer": "B",
+          "explanation": "The passage does not say where the bicycle was bought."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "surprised",
+          "definition": "having a feeling of unexpected wonder",
+          "part_of_speech": "adjective"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": false,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "Tom bought the bicycle online",
+          "the box contained a book"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-c2-unanswerable-010",
+      "level": "C2",
+      "kind": "unanswerable",
+      "input": {
+        "language": "english",
+        "level": "C2",
+        "topic": "an archaeological dating dispute",
+        "word_count": 150
+      },
+      "passage": "The museum announced that the bronze figurine would be dated by thermoluminescence after a conservator raised doubts about its patina. The auction house maintained that the object came from a private collection in Zurich. Neither institution has published the laboratory results, and the acquisition records remain sealed.",
+      "questions": [
+        {
+          "question": "What was the final date given by thermoluminescence?",
+          "type": "mcq",
+          "options": [
+            "Second century BCE",
+            "Fourth century BCE",
+            "First century CE"
+          ],
+          "correct_answer": "A",
+          "explanation": "The results are unpublished; no date is given."
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "patina",
+          "definition": "a surface layer formed as metal ages",
+          "part_of_speech": "noun"
+        }
+      ],
+      "expected": {
+        "schemaValid": true,
+        "answerable": false,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "the figurine dates to the second century BCE",
+          "the laboratory published its results"
+        ],
+        "errorCodes": []
+      }
+    },
+    {
+      "id": "reading-en-a1-schema-invalid-011",
+      "level": "A1",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "A1",
+        "topic": "a morning routine",
+        "word_count": 55
+      },
+      "raw": "{\"passage\": \"Sam brushes his teeth. Then he eats toast.\", \"vocabulary\": [], \"questions\": []}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "an empty vocabulary list is valid"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-a2-schema-invalid-012",
+      "level": "A2",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "A2",
+        "topic": "a school lunch",
+        "word_count": 70
+      },
+      "raw": "{\"passage\": \"Lunch starts at noon.\", \"vocabulary\": [{\"word\": \"lunch\"}], \"questions\": [{\"question\": \"When does lunch start?\", \"type\": \"mcq\", \"options\": [\"Noon\", \"Midnight\"], \"correct_answer\": \"A\", \"score\": 5}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "unknown fields are accepted"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-b1-schema-invalid-013",
+      "level": "B1",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "B1",
+        "topic": "a railway journey",
+        "word_count": 85
+      },
+      "raw": "{\"passage\": \"The train leaves at six.\", \"vocabulary\": [{\"word\": \"train\", \"definition\": \"a vehicle on rails\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"When does the train leave?\", \"type\": \"mcq\", \"options\": [\"Six\", \"Seven\"], \"correct_answer\": \"C\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "a label outside the option range is valid"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-b1-schema-invalid-014",
+      "level": "B1",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "B1",
+        "topic": "a market visit",
+        "word_count": 80
+      },
+      "raw": "{\"passage\": \"Nina buys apples at the market.\", \"vocabulary\": [{\"word\": \"apple\", \"definition\": \"a fruit\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"What does Nina buy?\", \"type\": \"mcq\", \"options\": \"Apples, pears\", \"correct_answer\": \"Apples\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "a comma-separated string is a valid option list"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-b2-schema-invalid-015",
+      "level": "B2",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "B2",
+        "topic": "a museum visit",
+        "word_count": 100
+      },
+      "raw": "{\"passage\": \"The museum opens at nine.\", \"vocabulary\": [{\"word\": \"museum\", \"definition\": \"a place showing collections\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"When does it open?\", \"type\": \"true_false\", \"options\": [\"True\", \"False\"], \"correct_answer\": \"TRUE\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "a free-text answer is valid for true_false"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-c1-schema-invalid-016",
+      "level": "C1",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "C1",
+        "topic": "a science report",
+        "word_count": 130
+      },
+      "raw": "{\"passage\": \"The team published its findings in June.\", \"vocabulary\": [{\"word\": \"findings\", \"definition\": \"results of research\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"\", \"type\": \"mcq\", \"options\": [\"June\", \"July\"], \"correct_answer\": \"A\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "an empty question is valid"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-c2-schema-invalid-017",
+      "level": "C2",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "C2",
+        "topic": "a translation conference",
+        "word_count": 150
+      },
+      "raw": "{\"passage\": \"The conference discussed machine translation.\", \"vocabulary\": [{\"word\": \"conference\", \"definition\": \"a formal meeting\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"What was discussed?\", \"type\": \"fill_blank\", \"options\": [\"Machine translation\", \"Speech recognition\"], \"correct_answer\": \"A\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "fill_blank is a supported reading question type"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-a2-schema-invalid-018",
+      "level": "A2",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "A2",
+        "topic": "a weather forecast",
+        "word_count": 70
+      },
+      "raw": "```json\n{\"passage\": \"Tomorrow will be rainy.\", \"vocabulary\": [{\"word\": \"rainy\", \"definition\": \"with rain\", \"part_of_speech\": \"adjective\"}], \"questions\": [{\"question\": \"What will the weather be?\", \"type\": \"mcq\", \"options\": [\"Rainy\", \"Sunny\"], \"correct_answer\": \"Rainy\"}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "truncated JSON can be parsed"
+        ],
+        "errorCodes": [
+          "JSONDecodeError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-b2-schema-invalid-019",
+      "level": "B2",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "B2",
+        "topic": "a city festival",
+        "word_count": 110
+      },
+      "raw": "{\"passage\": \"The festival attracted many visitors.\", \"vocabulary\": [{\"word\": \"festival\", \"definition\": \"a public celebration\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"Who attended?\", \"type\": \"mcq\", \"options\": [\"Visitors\", \"Locals\"], \"correct_answer\": \"Visitors\", \"locale\": \"en_US\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "locale is a permitted field"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    },
+    {
+      "id": "reading-en-b2-schema-invalid-020",
+      "level": "B2",
+      "kind": "schema_invalid",
+      "input": {
+        "language": "english",
+        "level": "B2",
+        "topic": "a coastal walk",
+        "word_count": 105
+      },
+      "raw": "{\"passage\": \"The path follows the coast.\", \"vocabulary\": [{\"word\": \"coast\", \"definition\": \"land beside the sea\", \"part_of_speech\": \"noun\"}], \"questions\": [{\"question\": \"Does the path follow the coast?\", \"type\": \"true_false\", \"options\": [\"True\", \"False\"], \"correct_answer\": \"True\", \"explanation\": \"\", \"hint\": \"look at the first sentence\"}]}",
+      "expected": {
+        "schemaValid": false,
+        "answerable": null,
+        "evidenceSpans": [],
+        "mustNotClaim": [
+          "unknown question fields are ignored"
+        ],
+        "errorCodes": [
+          "ValidationError"
+        ]
+      }
+    }
+  ]
+}

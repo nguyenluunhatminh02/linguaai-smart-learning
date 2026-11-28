@@ -128,7 +128,9 @@ export class RefundAiOperationDto {
   @MaxLength(128)
   errorCode?: string;
 
-  @ApiPropertyOptional({ description: 'Override the failure policy for a verified cancellation' })
+  @ApiPropertyOptional({
+    description: 'Override the failure policy for a verified cancellation',
+  })
   @IsOptional()
   @IsBoolean()
   forceRefund?: boolean;

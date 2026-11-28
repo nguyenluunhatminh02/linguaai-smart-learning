@@ -1,22 +1,62 @@
+/* User listening upload — validate locally, then proxy storage to the backend.
+ *
+ * Storage adapter and ownership live in apps/api/src/files/. This route never
+ * writes to public/uploads: doing so from the web process would bypass the
+ * backend's JWT guard, signature checks and owner-scoped object keys.
+ *
+ * Validation happens before /tokens/consume so malformed requests are not
+ * charged. The backend is the source of truth for the upload (and for token
+ * consumption); its resource URL is used for the lesson's audioUrl.
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuthHeader } from "@/lib/auth/jwt-verify";
-import { createLesson } from "@/lib/cms-storage";
-import { verifyListeningQuestions, youtubeListeningSource } from "@/lib/listening-source";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
+import crypto from 'crypto';
+import { verifyAuthHeader } from '@/lib/auth/jwt-verify';
+import { createLesson } from '@/lib/cms-storage';
+import { verifyListeningQuestions, youtubeListeningSource } from '@/lib/listening-source';
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const WHISPER_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "audio");
-const MAX_SIZE = 15 * 1024 * 1024; // 15MB limit for users
-const ALLOWED_EXTENSIONS = [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"];
+/**
+ * Decoded-byte budget. Keep in lockstep with MAX_UPLOAD_BYTES in
+ * apps/api/src/files/file-validation.ts (the backend rejects anything larger).
+ */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MiB
+const MAX_TRANSCRIPT_CHARS = 20_000;
+const TIMEOUT_MS = 30_000;
+
+// Keep in sync with LessonLanguage in apps/web/src/lib/types/cms.ts. The UI
+// currently offers more languages, which cannot be stored by cms-storage;
+// reject them here instead of persisting an invalid record.
+const ALLOWED_LANGUAGES = ['english', 'japanese', 'chinese'] as const;
+const ALLOWED_LEVELS = [
+  'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'N5', 'N4', 'N3', 'N2', 'N1',
+  'HSK1', 'HSK2', 'HSK3', 'HSK4', 'HSK5', 'HSK6',
+] as const;
+const ALLOWED_CATEGORIES = [
+  'conversation', 'announcement', 'lecture', 'interview', 'news',
+  'academic', 'business', 'daily-life',
+] as const;
+
+const AUDIO_MIME_TYPES: readonly string[] = [
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave',
+  'audio/ogg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac',
+  'audio/flac', 'audio/x-flac',
+];
+const MIME_TO_FORMAT: Record<string, string> = {
+  'audio/mpeg': 'mp3', 'audio/mp3': 'mp3',
+  'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'm4a', 'audio/m4a': 'm4a', 'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac',
+  'audio/flac': 'flac', 'audio/x-flac': 'flac',
+};
 
 function getLangCode(language: string): string {
-  switch (language.toLowerCase()) {
+  switch (language) {
     case 'japanese': return 'ja';
     case 'chinese': return 'zh';
     case 'korean': return 'ko';
@@ -24,6 +64,81 @@ function getLangCode(language: string): string {
     case 'spanish': return 'es';
     case 'vietnamese': return 'vi';
     default: return 'en';
+  }
+}
+
+function normalizeMimeType(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.split(';')[0].trim().toLowerCase();
+}
+
+function startsWith(buffer: Uint8Array, offset: number, ascii: string): boolean {
+  const bytes = Buffer.from(ascii, 'ascii');
+  return buffer.length >= offset + bytes.length &&
+    bytes.every((byte, i) => buffer[offset + i] === byte);
+}
+
+/**
+ * Verify that the payload really is the format the client declared.
+ * MIME headers are attacker-controlled; the leading bytes are not.
+ * Keep these signatures in sync with hasAudioSignature() in
+ * apps/api/src/files/file-validation.ts (the backend re-checks them).
+ */
+function matchesAudioFormat(buffer: Buffer, format: string): boolean {
+  switch (format) {
+    case 'mp3':
+      return startsWith(buffer, 0, 'ID3') ||
+        (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0 &&
+          (buffer[1] & 0x06) !== 0x00 && (buffer[1] & 0x18) !== 0x08);
+    case 'wav':
+      return startsWith(buffer, 0, 'RIFF') && startsWith(buffer, 8, 'WAVE');
+    case 'ogg':
+      return startsWith(buffer, 0, 'OggS');
+    case 'm4a':
+      return buffer.length >= 12 && startsWith(buffer, 4, 'ftyp') &&
+        ['isom', 'iso2', 'mp41', 'mp42', 'M4A ', 'M4B ', 'dash']
+          .includes(buffer.subarray(8, 12).toString('ascii'));
+    case 'aac':
+      return startsWith(buffer, 0, 'ADIF') ||
+        (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0);
+    case 'flac':
+      return startsWith(buffer, 0, 'fLaC');
+    default:
+      return false;
+  }
+}
+
+function readField(formData: FormData | undefined, key: string): string | undefined {
+  const value = formData?.get(key);
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function bounded(
+  value: string | undefined,
+  fallback: string,
+  max: number,
+): string | undefined {
+  if (value === undefined) return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= max ? trimmed : undefined;
+}
+
+function fromAllowlist<T extends string>(
+  value: string | undefined,
+  fallback: T,
+  allowed: readonly T[],
+): T | undefined {
+  if (value === undefined) return fallback;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
+}
+
+/** Extract the owner-scoped object key from the backend's upload URL. */
+function keyFromUploadUrl(url: string): string | undefined {
+  try {
+    const match = new URL(url).pathname.match(/\/uploads\/([^/]+\/[^/]+\.[a-z0-9]+)$/);
+    return match?.[1];
+  } catch {
+    return undefined;
   }
 }
 
@@ -39,39 +154,96 @@ export async function POST(req: NextRequest) {
   const youtube = isYouTube
     ? youtubeListeningSource.safeParse(await req.json().catch(() => undefined))
     : undefined;
-  if (youtube && !youtube.success) {
+  if (isYouTube && (!youtube || !youtube.success)) {
     return NextResponse.json({
       error: 'Hãy nhập link video YouTube và bản chép lời của video (tối đa 20.000 ký tự).',
     }, { status: 400 });
   }
 
-  const formData = isYouTube ? undefined : await req.formData().catch(() => undefined);
-  const audio = formData?.get('file');
-  const file = audio instanceof File ? audio : undefined;
-  const ext = file ? path.extname(file.name).toLowerCase() : '';
-  if (!isYouTube && (!file || file.size === 0 || file.size > MAX_SIZE || !ALLOWED_EXTENSIONS.includes(ext))) {
+  let formData: FormData | undefined;
+  let file: File | undefined;
+  let bytes: Buffer | undefined;
+  let format: string | undefined;
+
+  if (!isYouTube) {
+    // Bound Content-Length before Next.js buffers the multipart body.
+    const declaredLength = Number.parseInt(req.headers.get('content-length') || '', 10);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: `Chọn tệp âm thanh tối đa ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.` }, { status: 400 });
+    }
+    formData = await req.formData().catch(() => undefined);
+    const audio = formData?.get('file');
+    file = audio instanceof File ? audio : undefined;
+    if (!file || file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({
+        error: `Chọn tệp âm thanh từ 1 byte đến ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`,
+      }, { status: 400 });
+    }
+
+    // Trust the MIME + leading bytes, never the client filename. The backend
+    // generates the object key from the authenticated owner id.
+    const mimeType = normalizeMimeType(file.type);
+    format = MIME_TO_FORMAT[mimeType];
+    if (!format || !AUDIO_MIME_TYPES.includes(mimeType)) {
+      return NextResponse.json({
+        error: 'Định dạng âm thanh không được hỗ trợ (MP3, WAV, OGG, M4A, AAC, FLAC).',
+      }, { status: 400 });
+    }
+    bytes = Buffer.from(await file.arrayBuffer());
+    if (!matchesAudioFormat(bytes, format)) {
+      return NextResponse.json({ error: 'Nội dung tệp không khớp định dạng âm thanh đã khai báo.' }, { status: 400 });
+    }
+  }
+
+  // Validate every field BEFORE charging tokens or calling any provider.
+  const source = youtube?.data;
+  const language = fromAllowlist(
+    source?.language ?? readField(formData, 'language') ?? 'english',
+    'english',
+    ALLOWED_LANGUAGES,
+  );
+  const level = fromAllowlist(
+    source?.level ?? readField(formData, 'level') ?? 'B1',
+    'B1',
+    ALLOWED_LEVELS,
+  );
+  const category = fromAllowlist(
+    source?.category ?? readField(formData, 'category') ?? 'conversation',
+    'conversation',
+    ALLOWED_CATEGORIES,
+  );
+  const rawTranscript = source?.transcript ?? readField(formData, 'transcript') ?? '';
+  let title = bounded(
+    source?.title ?? readField(formData, 'title'),
+    isYouTube ? 'YouTube Listening Practice' : 'Uploaded Audio Practice',
+    200,
+  );
+
+  if (!language || !level || !category || !title ||
+      rawTranscript.length > MAX_TRANSCRIPT_CHARS) {
     return NextResponse.json({
-      error: `Chọn tệp âm thanh từ 1 byte đến 15 MB (${ALLOWED_EXTENSIONS.join(', ')}).`,
+      error: `Thông tin bài học không hợp lệ (ngôn ngữ, trình độ, thể loại, tiêu đề tối đa 200 ký tự, lời thoại tối đa ${MAX_TRANSCRIPT_CHARS} ký tự).`,
     }, { status: 400 });
   }
   if (!GROQ_API_KEY) {
     return NextResponse.json({ error: 'Dịch vụ tạo bài nghe đang tạm thời gián đoạn.' }, { status: 503 });
   }
 
+  // Forward the caller's idempotency key to both side-effecting calls so a
+  // retry cannot consume tokens twice or create duplicate uploads.
+  const idempotencyKey = req.headers.get('idempotency-key') || crypto.randomUUID();
+  const authHeaders: Record<string, string> = { Authorization: authHeader! };
+
   try {
-    const consumeRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/tokens/consume`, {
+    const consumeRes = await fetch(`${API_URL}/tokens/consume`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader!,
-        ...(req.headers.get('idempotency-key')
-          ? { 'Idempotency-Key': req.headers.get('idempotency-key')! }
-          : {}),
+        ...authHeaders,
+        'Idempotency-Key': idempotencyKey,
       },
-      body: JSON.stringify({
-        feature: 'listening_generate',
-        cost: 8,
-      }),
+      body: JSON.stringify({ feature: 'listening_generate', cost: 8 }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
     if (!consumeRes.ok) {
@@ -85,28 +257,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to connect to token service' }, { status: 500 });
   }
 
+  let audioUrl = source?.youtubeUrl ?? '';
+  let uploadedKey: string | undefined;
+  let transcriptText = source?.transcript.trim() ?? '';
+  // title was checked above; pin the narrowed value for the DTO below.
+  const validatedTitle: string = title;
+
   try {
-    const source = youtube?.data;
-    const language = source?.language || String(formData?.get('language') || 'english');
-    const level = source?.level || String(formData?.get('level') || 'B1');
-    const category = source?.category || String(formData?.get('category') || 'conversation');
-    let title = source?.title || String(formData?.get('title') || '');
-    let transcriptText = source?.transcript ?? '';
-    let audioUrl = source?.youtubeUrl ?? '';
-    if (file) {
-      // Transcribe via Groq Whisper API
+    if (file && bytes && format) {
+      // Transcribe via Groq Whisper using the exact validated bytes.
       try {
         const groqFormData = new FormData();
-        groqFormData.append('file', file, file.name);
+        groqFormData.append('file', new File(
+          [new Uint8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)],
+          `${crypto.randomUUID()}.${format}`,
+          { type: normalizeMimeType(file.type) },
+        ));
         groqFormData.append('model', 'whisper-large-v3');
         groqFormData.append('language', getLangCode(language));
 
         const transcribeRes = await fetch(WHISPER_URL, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${GROQ_API_KEY}`,
-          },
+          headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
           body: groqFormData,
+          signal: AbortSignal.timeout(TIMEOUT_MS),
         });
 
         if (!transcribeRes.ok) {
@@ -117,7 +291,13 @@ export async function POST(req: NextRequest) {
 
         const transJson = await transcribeRes.json();
         transcriptText = typeof transJson.text === 'string' ? transJson.text.trim() : '';
+        if (transcriptText.length > MAX_TRANSCRIPT_CHARS) {
+          return NextResponse.json({
+            error: `Lời thoại quá dài (tối đa ${MAX_TRANSCRIPT_CHARS} ký tự).`,
+          }, { status: 422 });
+        }
       } catch (err) {
+        if (err instanceof NextResponse) return err;
         console.error('[Listening User Upload API] Transcribing error:', err);
         return NextResponse.json({ error: 'Failed to transcribe audio. Please make sure the audio is clear and in the selected language.' }, { status: 502 });
       }
@@ -139,9 +319,6 @@ export async function POST(req: NextRequest) {
 
     if (!transcriptText) {
       return NextResponse.json({ error: 'Không nhận được lời thoại từ tệp âm thanh.' }, { status: 422 });
-    }
-    if (!title) {
-      title = isYouTube ? 'YouTube Listening Practice' : 'Uploaded Audio Practice';
     }
 
     // The original transcript remains the lesson source.
@@ -184,7 +361,7 @@ Return ONLY the raw JSON, without markdown fences or other text.`;
     const response = await fetch(GROQ_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -196,6 +373,7 @@ Return ONLY the raw JSON, without markdown fences or other text.`;
         temperature: 0.3,
         max_tokens: 2548,
       }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -215,22 +393,50 @@ Return ONLY the raw JSON, without markdown fences or other text.`;
       return NextResponse.json({ error: 'Chưa tạo được câu hỏi có căn cứ từ lời thoại.' }, { status: 502 });
     }
 
-    let localFile: string | undefined;
-    if (file) {
-      const safeName = `user-${user.id}-${crypto.randomBytes(8).toString("hex")}${ext}`;
-      await fs.promises.mkdir(UPLOAD_DIR, { recursive: true });
-      localFile = path.join(UPLOAD_DIR, safeName);
-      await fs.promises.writeFile(localFile, Buffer.from(await file.arrayBuffer()));
-      audioUrl = `/uploads/audio/${safeName}`;
+    if (file && bytes && format) {
+      // The backend owns storage: it validates the signature again and derives
+      // an owner-scoped key from the authenticated user id.
+      try {
+        const uploadFd = new FormData();
+        uploadFd.append('file', new File(
+          [new Uint8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)],
+          `${crypto.randomUUID()}.${format}`,
+          { type: normalizeMimeType(file.type) },
+        ));
+        const uploadRes = await fetch(`${API_URL}/files/upload`, {
+          method: 'POST',
+          headers: {
+            ...authHeaders,
+            'Idempotency-Key': idempotencyKey,
+          },
+          body: uploadFd,
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!uploadRes.ok) {
+          const status = uploadRes.status === 401 || uploadRes.status === 403 ? 401 : 502;
+          return NextResponse.json({
+            error: status === 401 ? 'Unauthorized' : 'Upload service unavailable',
+          }, { status });
+        }
+        const json = await uploadRes.json();
+        audioUrl = typeof json?.url === 'string' ? json.url : typeof json?.data?.url === 'string' ? json.data.url : '';
+        if (!audioUrl) {
+          return NextResponse.json({ error: 'Upload service unavailable' }, { status: 502 });
+        }
+        uploadedKey = keyFromUploadUrl(audioUrl);
+      } catch (err) {
+        console.error('[Listening User Upload API] Upload error:', err);
+        return NextResponse.json({ error: 'Upload service unavailable' }, { status: 502 });
+      }
     }
-    // Save lesson to local fallback cms-storage
+
     const slug = `user-listening-${crypto.randomBytes(4).toString('hex')}`;
     const lessonDto = {
-      type: 'listening' as any,
-      language: language.toLowerCase() as any,
+      type: 'listening' as const,
+      language,
       level,
-      title: title,
-      titleVi: aiResult.titleVi || title,
+      title: validatedTitle,
+      titleVi: aiResult.titleVi || validatedTitle,
       slug,
       category,
       categoryVi: category === 'conversation' ? 'Hội thoại' : 'Tổng quát',
@@ -251,16 +457,23 @@ Return ONLY the raw JSON, without markdown fences or other text.`;
       userId: user.id,
     };
 
-    try {
-      const createdLesson = await createLesson(lessonDto);
-      return NextResponse.json({ data: createdLesson });
-    } catch (error) {
-      if (localFile) await fs.promises.unlink(localFile).catch(() => undefined);
-      throw error;
-    }
-
+    const createdLesson = await createLesson(lessonDto);
+    return NextResponse.json({ data: createdLesson });
   } catch (error) {
     console.error('[Listening User Upload API] Error:', error);
+    // Remove the backend-stored file if lesson creation failed, so a failed
+    // request does not leave an orphaned, owner-scoped audio object behind.
+    if (uploadedKey) {
+      try {
+        await fetch(`${API_URL}/files/${encodeURIComponent(uploadedKey)}`, {
+          method: 'DELETE',
+          headers: authHeaders,
+          signal: AbortSignal.timeout(5_000),
+        });
+      } catch (cleanupError) {
+        console.error('[Listening User Upload API] Orphan cleanup failed:', cleanupError);
+      }
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,4 +1,11 @@
-import { Controller, Post, Body, UseGuards, Headers, Inject } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Headers,
+  Inject,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -33,11 +40,18 @@ export class GrammarController {
     // secret keeps the key opaque and stable across retries for the same user.
     const scopedKey = idempotencyKey
       ? createHash('sha256')
-          .update(`${this.config.get<string>('JWT_SECRET') || ''}:${userId}:grammar_explain:${idempotencyKey}`)
+          .update(
+            `${this.config.get<string>('JWT_SECRET') || ''}:${userId}:grammar_explain:${idempotencyKey}`,
+          )
           .digest('hex')
       : undefined;
 
-    await this.tokensService.consumeTokens(userId, 'grammar_explain', undefined, scopedKey);
+    await this.tokensService.consumeTokens(
+      userId,
+      'grammar_explain',
+      undefined,
+      scopedKey,
+    );
     return this.grammarService.explain(dto);
   }
 }

@@ -71,7 +71,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       return NextResponse.json(dbToCms(json.data ?? json));
     }
     // Any backend error (including 404) is authoritative — surface it.
-    let errorBody: any = { error: "Backend update failed" };
+    let errorBody: unknown = { error: "Backend update failed" };
     try {
       errorBody = await res.json();
     } catch {
@@ -123,7 +123,7 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
       return NextResponse.json(json.data ?? json);
     }
     // Any backend error (including 404) is authoritative — surface it.
-    let errorBody: any = { error: "Backend delete failed" };
+    let errorBody: unknown = { error: "Backend delete failed" };
     try {
       errorBody = await res.json();
     } catch {
